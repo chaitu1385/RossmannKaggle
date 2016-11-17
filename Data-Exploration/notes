@@ -1,1 +1,10 @@
+Test the below models
 
+ARIMA
+ETS
+STL
+
+Hierarchital time series forecasting
+baselineforecast
+
+https://notebooks.azure.com/n/GXRA9Rw8VUs/notebooks/Part%201.%20Introduction%20to%20Time%20Series%20Forecasting.ipynb
