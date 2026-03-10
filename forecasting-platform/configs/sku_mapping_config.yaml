@@ -1,0 +1,62 @@
+# SKU Mapping Discovery Pipeline — Configuration
+# Phase 1 (MVP): Attribute Matching + Naming Convention Parsing
+
+pipeline:
+  phase: 1
+  min_confidence: "Low"        # discard Very Low candidates from output
+
+methods:
+  attribute_matching:
+    enabled: true
+    launch_window_days: 180    # max days between old-SKU and new-SKU launch dates
+    base_score: 0.30
+    weights:
+      price_tier: 0.20
+      form_factor: 0.20
+      product_category: 0.10
+      launch_gap_lt_90d: 0.10
+
+  naming_parsing:
+    enabled: true
+    min_base_similarity: 0.70  # minimum rapidfuzz WRatio on base names (0–1)
+    use_description: true       # parse sku_description field
+    use_sku_id: true            # parse sku_id field
+
+  # Phase 2 placeholders (not yet implemented)
+  temporal_overlap:
+    enabled: false
+    min_overlap_weeks: 8
+    anti_correlation_threshold: -0.50
+    category_cv_threshold: 0.15
+
+  sales_curve_similarity:
+    enabled: false
+    min_history_weeks: 8
+    window_weeks: 16
+    dtw_threshold: 0.30
+
+fusion:
+  # Phase 1 normalised weights (attribute=0.667, naming=0.333)
+  # Set to null to use the default Phase 1 normalised weights.
+  weights: ~
+
+  # Bonus added when ≥2 methods agree
+  multi_method_bonus: 0.10
+
+  # Confidence thresholds
+  confidence_levels:
+    High:      0.75
+    Medium:    0.50
+    Low:       0.30
+    Very_Low:  0.00
+
+  # Actions per confidence level (for planners)
+  recommended_actions:
+    High:      "Auto-accept, planner reviews for confirmation"
+    Medium:    "Planner must review and confirm or reject"
+    Low:       "Flag for investigation"
+    Very_Low:  "Discard unless planner specifically requests review"
+
+output:
+  format: csv                  # csv | excel
+  include_metadata: true
