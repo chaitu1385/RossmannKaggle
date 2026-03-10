@@ -1,16 +1,12 @@
-# Rossmann Store Sales Forecasting
+# Sales Forecasting
 
-Capstone project for the [Rossmann Store Sales](https://www.kaggle.com/c/rossmann-store-sales) Kaggle competition. Predicts daily sales for 1,115 Rossmann drug stores across Germany, 6 weeks into the future.
+A time series forecasting project for predicting daily store sales.
 
 ## Project Structure
 
 ```
 ├── Data-Exploration/
-│   ├── Capstone Project.ipynb          # Main modeling notebook (XGBoost + LightGBM)
-│   ├── Rossmann Stores Forecasting.ipynb  # Exploratory data analysis
-│   ├── Capstone Project Report.pdf     # Written report
-│   ├── Capstone Project Deck.pdf       # Presentation slides
-│   └── Rossmann.zip                    # Competition data
+│   └── notes                          # Research notes
 ├── Problem Sets/                       # ML coursework exercises
 ├── Inferential-Stats/                  # Statistical inference exercises
 ├── requirements.txt                    # Python dependencies
@@ -22,8 +18,6 @@ Capstone project for the [Rossmann Store Sales](https://www.kaggle.com/c/rossman
 ```bash
 pip install -r requirements.txt
 ```
-
-Extract `Data-Exploration/Rossmann.zip` into the `Data-Exploration/` directory so that `train.csv`, `test.csv`, and `store.csv` are available.
 
 ## Approach
 
