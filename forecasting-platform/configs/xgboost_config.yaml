@@ -1,0 +1,15 @@
+defaults:
+  - base_config
+
+model:
+  type: xgboost
+  name: xgboost_v1
+  params:
+    n_estimators: 1000
+    max_depth: 6
+    learning_rate: 0.05
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_child_weight: 5
+    early_stopping_rounds: 50
+    random_state: 42

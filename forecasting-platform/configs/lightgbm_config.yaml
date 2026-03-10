@@ -1,0 +1,16 @@
+defaults:
+  - base_config
+
+model:
+  type: lightgbm
+  name: lightgbm_v1
+  params:
+    n_estimators: 1000
+    max_depth: 6
+    learning_rate: 0.05
+    num_leaves: 63
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_child_samples: 20
+    early_stopping_rounds: 50
+    random_state: 42
