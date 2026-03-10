@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name="forecasting-platform",
     version="0.1.0",
-    description="Modular time series forecasting platform for Rossmann store sales",
+    description="Modular time series forecasting platform for store sales",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     python_requires=">=3.8",

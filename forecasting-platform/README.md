@@ -1,6 +1,6 @@
 # Forecasting Platform
 
-A modular time series forecasting platform built for scalable, production-ready sales forecasting. Originally developed for the Rossmann Store Sales Kaggle competition, this platform supports multiple forecasting approaches including classical statistical models, machine learning, and deep learning methods.
+A modular time series forecasting platform built for scalable, production-ready sales forecasting. This platform supports multiple forecasting approaches including classical statistical models, machine learning, and deep learning methods.
 
 ## Features
 
@@ -45,7 +45,7 @@ Models are configured via YAML files in the `configs/` directory. See `configs/b
 
 ## Evaluation
 
-The platform uses RMSPE (Root Mean Square Percentage Error) as the primary metric, consistent with the Rossmann Kaggle competition scoring.
+The platform uses RMSPE (Root Mean Square Percentage Error) as the primary metric.
 
 ```
 RMSPE = sqrt(mean(((y_true - y_pred) / y_true)^2))
