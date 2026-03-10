@@ -1,16 +1,28 @@
+# ── Core ──────────────────────────────────────────────────────────────────────
 numpy>=1.21.0
 pandas>=1.3.0
 polars>=0.20.0
-rapidfuzz>=3.0.0
-scikit-learn>=1.0.0
-xgboost>=1.5.0
+pyyaml>=5.4.0
+
+# ── Forecasting (Nixtla stack) ───────────────────────────────────────────────
+statsforecast>=1.6.0
+mlforecast>=0.12.0
+# hierarchicalforecast>=0.4.0    # Phase 2: MinT, OLS, WLS reconciliation
+
+# ── ML models ────────────────────────────────────────────────────────────────
 lightgbm>=3.3.0
-prophet>=1.1.0
-statsmodels>=0.13.0
-torch>=1.10.0
+xgboost>=1.5.0
+scikit-learn>=1.0.0
+
+# ── String matching (SKU mapping) ────────────────────────────────────────────
+rapidfuzz>=3.0.0
+
+# ── Override store ───────────────────────────────────────────────────────────
+duckdb>=0.9.0
+
+# ── Visualization ────────────────────────────────────────────────────────────
 matplotlib>=3.4.0
 seaborn>=0.11.0
-pyyaml>=5.4.0
-joblib>=1.1.0
-tqdm>=4.62.0
+
+# ── Testing ──────────────────────────────────────────────────────────────────
 pytest>=7.0.0
