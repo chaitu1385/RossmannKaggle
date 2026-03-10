@@ -1,0 +1,27 @@
+data:
+  data_dir: "data/"
+  train_file: "train.csv"
+  test_file: "test.csv"
+  store_file: "store.csv"
+  target_col: "Sales"
+  date_col: "Date"
+
+features:
+  lag_periods: [1, 7, 14, 30]
+  rolling_windows: [7, 14, 30]
+  categorical_cols:
+    - StoreType
+    - Assortment
+    - PromoInterval
+
+training:
+  val_size: 0.2
+  random_state: 42
+  output_dir: "models/"
+
+evaluation:
+  metrics:
+    - rmspe
+    - rmse
+    - mae
+    - mape
