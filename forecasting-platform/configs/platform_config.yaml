@@ -1,0 +1,83 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Forecasting Platform — Base Configuration
+# ═══════════════════════════════════════════════════════════════════════════════
+# This is the shared baseline.  LOB-specific configs (configs/lob/*.yaml)
+# inherit from this file and override only the sections that differ.
+
+lob: default
+description: "Base forecasting platform configuration"
+
+# ── Hierarchy definitions ─────────────────────────────────────────────────────
+# Levels are ordered root → leaf.  'id_column' is the DataFrame column that
+# holds the leaf-level identifier.  'fixed: true' means the pipeline runs
+# separately for each value (e.g. Consumer vs Commercial — never reconciled).
+
+hierarchies:
+  - name: product
+    levels: [product_group, product, product_unit]
+    id_column: product_unit
+    fixed: false
+    reconciliation_level: product_unit  # middle-out home grain
+
+  - name: geography
+    levels: [global, region, subregion, country]
+    id_column: country
+    fixed: false
+    reconciliation_level: subregion     # CDS subregion
+
+  - name: channel
+    levels: [channel]
+    id_column: channel
+    fixed: true                          # Consumer / Commercial run separately
+
+# ── Reconciliation ────────────────────────────────────────────────────────────
+reconciliation:
+  method: middle_out                     # bottom_up | top_down | middle_out | mint
+  product_level: product_unit
+  geography_level: subregion
+
+# ── Forecasting ───────────────────────────────────────────────────────────────
+forecast:
+  horizon_weeks: 39                      # 9 months
+  frequency: W
+  target_column: quantity
+  time_column: week
+  series_id_column: series_id
+  forecasters:
+    - naive_seasonal
+    - auto_arima
+    - auto_ets
+    - lgbm_direct
+    - xgboost_direct
+
+# ── Backtesting ───────────────────────────────────────────────────────────────
+backtest:
+  n_folds: 3
+  val_weeks: 13                          # 3 months per fold
+  gap_weeks: 0
+  champion_granularity: lob              # one winner per LOB to start
+  primary_metric: wmape
+  secondary_metric: normalized_bias
+
+# ── Product transition ────────────────────────────────────────────────────────
+transition:
+  transition_window_weeks: 13            # 3-month overlap
+  ramp_shape: linear                     # linear | scurve | step
+  enable_overrides: true
+  override_store_path: data/overrides.duckdb
+
+# ── Output ────────────────────────────────────────────────────────────────────
+output:
+  grain:
+    product: product_unit                # SKU
+    geography: country
+    channel: channel
+  forecast_path: data/forecasts/
+  metrics_path: data/metrics/
+  bi_export_path: data/bi_exports/
+  format: parquet
+
+# ── Metrics ───────────────────────────────────────────────────────────────────
+metrics:
+  - wmape
+  - normalized_bias

@@ -1,0 +1,45 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# LOB Override — Walmart (example showing platform genericity)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Same engine, completely different hierarchy.  Demonstrates that the platform
+# is not hard-coded to any specific business.
+
+lob: walmart
+description: "Walmart SKU/Store demand forecasting"
+
+hierarchies:
+  - name: product
+    levels: [department, category, subcategory, sku]
+    id_column: sku
+    fixed: false
+    reconciliation_level: subcategory
+
+  - name: geography
+    levels: [national, region, state, store]
+    id_column: store
+    fixed: false
+    reconciliation_level: state
+
+  - name: channel
+    levels: [channel]
+    id_column: channel
+    fixed: true
+
+reconciliation:
+  method: middle_out
+  product_level: subcategory
+  geography_level: state
+
+forecast:
+  horizon_weeks: 26                      # 6 months for retail
+  target_column: units_sold
+  forecasters:
+    - naive_seasonal
+    - auto_ets
+    - lgbm_direct
+
+output:
+  grain:
+    product: sku
+    geography: store
+    channel: channel

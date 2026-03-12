@@ -1,0 +1,34 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# LOB Override — Microsoft Surface
+# ═══════════════════════════════════════════════════════════════════════════════
+# Inherits from configs/platform_config.yaml.  Only overrides Surface-specific
+# settings; everything else falls through to the base.
+
+lob: surface
+description: "Surface devices forecasting (Laptop, Pro, Go, etc.)"
+
+# Surface product hierarchy
+hierarchies:
+  - name: product
+    levels: [product_group, product, product_unit]
+    id_column: product_unit
+    fixed: false
+    reconciliation_level: product_unit
+
+  - name: geography
+    levels: [global, region, subregion, country]
+    id_column: country
+    fixed: false
+    reconciliation_level: subregion
+
+  - name: channel
+    levels: [channel]
+    id_column: channel
+    fixed: true
+
+forecast:
+  forecasters:
+    - naive_seasonal
+    - auto_arima
+    - lgbm_direct
+    - xgboost_direct
