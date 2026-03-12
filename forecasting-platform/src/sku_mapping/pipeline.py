@@ -1,25 +1,72 @@
 """
-SKUMappingPipeline — top-level orchestrator for Phase 1 (MVP).
+SKUMappingPipeline — top-level orchestrator.
 
 Wires together:
-  ProductMasterLoader → [AttributeMatchingMethod, NamingConventionMethod]
-                     → CandidateFusion → MappingWriter
+  ProductMasterLoader → [methods...]  → CandidateFusion → MappingWriter
+
+Phase 1 methods : AttributeMatchingMethod, NamingConventionMethod
+Phase 2 methods : + CurveFittingMethod, TemporalCovementMethod
 """
 
 import logging
-from pathlib import Path
 from typing import List, Optional
 
 import polars as pl
 
 from .data.loader import ProductMasterLoader
-from .fusion.scorer import CandidateFusion
+from .fusion.scorer import CandidateFusion, _FULL_WEIGHTS
 from .methods.base import BaseMethod
 from .methods.attribute_matching import AttributeMatchingMethod
 from .methods.naming_parsing import NamingConventionMethod
+from .methods.curve_fitting import CurveFittingMethod
+from .methods.temporal_comovement import TemporalCovementMethod
 from .output.writer import MappingWriter
 
 logger = logging.getLogger(__name__)
+
+
+def build_phase2_pipeline(
+    sales_df: Optional[pl.DataFrame] = None,
+    launch_window_days: int = 180,
+    min_base_similarity: float = 0.70,
+    min_confidence: str = "Low",
+    window_weeks: int = 13,
+) -> "SKUMappingPipeline":
+    """
+    Phase 2 pipeline: all four methods (attribute + naming + curve + temporal).
+
+    Both ``CurveFittingMethod`` and ``TemporalCovementMethod`` require sales
+    history data.  If ``sales_df`` is None they silently return no candidates
+    and the pipeline degrades to Phase 1 behaviour.
+
+    Parameters
+    ----------
+    sales_df:
+        Weekly sales history DataFrame with columns
+        ``[sku_id, week, quantity]``.
+    launch_window_days, min_base_similarity, min_confidence:
+        Same as ``build_phase1_pipeline``.
+    window_weeks:
+        Half-width of the transition window for curve and temporal methods.
+    """
+    methods: List[BaseMethod] = [
+        AttributeMatchingMethod(launch_window_days=launch_window_days),
+        NamingConventionMethod(min_base_similarity=min_base_similarity),
+        CurveFittingMethod(
+            sales_df=sales_df,
+            window_weeks=window_weeks,
+            launch_window_days=launch_window_days,
+        ),
+        TemporalCovementMethod(
+            sales_df=sales_df,
+            window_weeks=window_weeks,
+            launch_window_days=launch_window_days,
+        ),
+    ]
+    # _FULL_WEIGHTS covers all 4 methods; fusion auto-normalises to whichever
+    # returned candidates for each specific pair.
+    fusion = CandidateFusion(weights=_FULL_WEIGHTS, min_confidence=min_confidence, bayesian_proportions=True)
+    return SKUMappingPipeline(methods=methods, fusion=fusion)
 
 
 def build_phase1_pipeline(

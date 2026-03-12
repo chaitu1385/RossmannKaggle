@@ -29,6 +29,9 @@ import polars as pl
 from ..config.schema import TransitionConfig
 
 
+VALID_RAMP_SHAPES = frozenset({"linear", "scurve", "step"})
+
+
 class TransitionScenario(str, Enum):
     """Which transition scenario applies to a given (old, new) SKU pair."""
     A_LAUNCHED = "A"          # new SKU already launched
@@ -64,6 +67,11 @@ class TransitionEngine:
     def __init__(self, config: TransitionConfig):
         self.window_weeks = config.transition_window_weeks
         self.ramp_shape = config.ramp_shape
+        if self.ramp_shape not in VALID_RAMP_SHAPES:
+            raise ValueError(
+                f"Unknown ramp_shape {self.ramp_shape!r}. "
+                f"Supported: {sorted(VALID_RAMP_SHAPES)}"
+            )
 
     def compute_plans(
         self,
