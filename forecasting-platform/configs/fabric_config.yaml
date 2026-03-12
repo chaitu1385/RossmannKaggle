@@ -78,3 +78,22 @@ data:
   actuals_path:        "raw/actuals"
   product_master_path: "raw/product_master"
   format: "parquet"    # delta | parquet | csv
+
+# ── Series builder ────────────────────────────────────────────────────────────
+# Controls how raw source columns are mapped to the canonical series schema
+# expected by the forecasting pipeline:
+#   series_id  — unique key per time series
+#   week       — truncated weekly date
+#   quantity   — forecast target
+#
+# source_id_cols:   one or more columns concatenated (with '_') to form series_id
+# date_col:         date column in the raw actuals table
+# target_col:       numeric column summed to produce quantity
+# filter_expr:      optional Spark SQL WHERE expression applied before aggregation
+#                   (e.g. exclude closed stores, cancelled orders, etc.)
+series_builder:
+  source_id_cols: ["Store"]            # for Rossmann; use ["product_unit", "country"] for Surface
+  date_col:       "Date"
+  target_col:     "Sales"
+  filter_expr:    "Open = 1"           # exclude closed-store days
+  frequency:      "week"               # Spark date_trunc argument: "week" | "month"

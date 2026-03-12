@@ -14,16 +14,21 @@
 # %%
 import os
 import sys
+import yaml
 
 PLATFORM_ROOT = "/lakehouse/default/Files/forecasting-platform"
 if PLATFORM_ROOT not in sys.path:
     sys.path.insert(0, PLATFORM_ROOT)
 
-WORKSPACE   = os.environ.get("FABRIC_WORKSPACE", "my-workspace")
-LAKEHOUSE   = os.environ.get("FABRIC_LAKEHOUSE", "my-lakehouse")
-LOB         = os.environ.get("FORECAST_LOB", "rossmann")
-CONFIG_PATH = os.environ.get("FORECAST_CONFIG", "configs/platform_config.yaml")
-ENVIRONMENT = os.environ.get("FABRIC_ENVIRONMENT", "development")
+WORKSPACE       = os.environ.get("FABRIC_WORKSPACE", "my-workspace")
+LAKEHOUSE       = os.environ.get("FABRIC_LAKEHOUSE", "my-lakehouse")
+LOB             = os.environ.get("FORECAST_LOB", "rossmann")
+CONFIG_PATH     = os.environ.get("FORECAST_CONFIG", "configs/platform_config.yaml")
+ENVIRONMENT     = os.environ.get("FABRIC_ENVIRONMENT", "development")
+FABRIC_CFG_PATH = os.environ.get("FABRIC_CONFIG", "configs/fabric_config.yaml")
+
+with open(FABRIC_CFG_PATH) as _f:
+    fabric_yaml = yaml.safe_load(_f)
 
 print(f"Workspace  : {WORKSPACE}")
 print(f"LOB        : {LOB}")
@@ -66,29 +71,17 @@ print(f"Actuals loaded: {actuals_sdf.count():,} rows")
 actuals_sdf.printSchema()
 
 # %% [markdown]
-# ## 4 — Prepare series-level data
+# ## 4 — Build canonical series panel
 #
-# The SparkForecastPipeline expects:
-#   - A ``series_id`` column (Store + product key).
-#   - A ``week`` column (weekly period date).
-#   - A ``quantity`` column (target).
+# Column mapping is read from fabric_config.yaml → series_builder.
+# No LOB-specific column names appear in this cell.
 
 # %%
-from pyspark.sql import functions as F
+from src.spark.series_builder import SparkSeriesBuilder
 
-# For Rossmann: series_id = Store, week = truncated Date, quantity = Sales
-actuals_series_sdf = (
-    actuals_sdf
-    .filter(F.col("Open") == 1)             # exclude closed days
-    .withColumn("series_id", F.col("Store").cast("string"))
-    .withColumn("week", F.date_trunc("week", F.col("Date")))
-    .groupby("series_id", "week")
-    .agg(F.sum("Sales").alias("quantity"))
-    .orderBy("series_id", "week")
-)
+builder = SparkSeriesBuilder.from_config(fabric_yaml["series_builder"])
+actuals_series_sdf = builder.build(actuals_sdf)
 
-print(f"Series rows: {actuals_series_sdf.count():,}")
-print(f"Series count: {actuals_series_sdf.select('series_id').distinct().count():,}")
 actuals_series_sdf.show(5)
 
 # %% [markdown]
@@ -111,32 +104,31 @@ backtest_results_sdf.show(20)
 # ## 6 — Select champion model
 
 # %%
+from pyspark.sql import functions as F
+
 leaderboard_sdf = pipeline.select_champion(
     backtest_results_sdf,
     primary_metric=config.backtest.primary_metric,
 )
 leaderboard_sdf.show(truncate=False)
 
-champion_model = leaderboard_sdf.filter(F.col("rank") == 1).select("model").collect()[0][0]
+champion_model = leaderboard_sdf.filter(F.col("rank") == 1).select("model").first()[0]
 print(f"\nChampion model: {champion_model}")
 
 # %% [markdown]
 # ## 7 — Write results to Lakehouse
 
 # %%
+from datetime import date
 from src.fabric.delta_writer import DeltaWriter
-from pyspark.sql import functions as F as _F
 
 writer = DeltaWriter(spark, fabric_cfg)
-
-# Backtest results
-from datetime import date
 run_date = date.today().isoformat()
 
 backtest_results_sdf_out = (
     backtest_results_sdf
-    .withColumn("lob", _F.lit(LOB))
-    .withColumn("run_date", _F.lit(run_date))
+    .withColumn("lob", F.lit(LOB))
+    .withColumn("run_date", F.lit(run_date))
 )
 writer.append(
     backtest_results_sdf_out,
@@ -145,12 +137,11 @@ writer.append(
 )
 print("Backtest results written.")
 
-# Leaderboard
 leaderboard_out = (
     leaderboard_sdf
-    .withColumn("lob", _F.lit(LOB))
-    .withColumn("run_date", _F.lit(run_date))
-    .withColumn("champion_model", _F.lit(champion_model))
+    .withColumn("lob", F.lit(LOB))
+    .withColumn("run_date", F.lit(run_date))
+    .withColumn("champion_model", F.lit(champion_model))
 )
 writer.upsert(
     leaderboard_out,

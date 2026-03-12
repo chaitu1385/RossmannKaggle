@@ -59,6 +59,8 @@ def parse_args():
                    help="Model names to backtest (default: from config)")
     p.add_argument("--write-lakehouse", action="store_true",
                    help="Write results to Fabric Lakehouse (requires --workspace/--lakehouse)")
+    p.add_argument("--fabric-config", default="configs/fabric_config.yaml",
+                   help="Path to fabric_config.yaml (drives series_builder mapping)")
     p.add_argument("--output-dir", default="data/backtest_results/",
                    help="Local output directory for backtest results (non-Fabric mode)")
     return p.parse_args()
@@ -72,16 +74,20 @@ def main():
     spark = get_or_create_spark(app_name=f"BacktestPipeline-{args.lob}")
     logger.info("SparkSession ready (version=%s)", spark.version)
 
-    # ── 2. Platform config ────────────────────────────────────────────────────
+    # ── 2. Platform config + fabric config ───────────────────────────────────
+    import yaml
     from src.config.loader import load_config
+    from src.spark.series_builder import SparkSeriesBuilder
+
     config = load_config(args.config)
     config.lob = args.lob
     model_names = args.models or config.forecast.forecasters
     logger.info("Models: %s | Folds: %d", model_names, config.backtest.n_folds)
 
-    # ── 3. Load actuals ───────────────────────────────────────────────────────
-    from pyspark.sql import functions as F
+    with open(args.fabric_config) as _f:
+        fabric_yaml = yaml.safe_load(_f)
 
+    # ── 3. Load actuals ───────────────────────────────────────────────────────
     if args.write_lakehouse and (args.workspace or args.lakehouse):
         import os
         ws = args.workspace or os.environ.get("FABRIC_WORKSPACE", "")
@@ -97,22 +103,14 @@ def main():
         train_sdf, _, store_sdf = loader.read_rossmann_all()
         actuals_raw = train_sdf.join(store_sdf, on="Store", how="left")
 
-    # Build series-level weekly aggregation
-    actuals_sdf = (
-        actuals_raw
-        .filter(F.col("Open") == 1)
-        .withColumn("series_id", F.col("Store").cast("string"))
-        .withColumn("week", F.date_trunc("week", F.col("Date")))
-        .groupby("series_id", "week")
-        .agg(F.sum("Sales").alias("quantity"))
-        .orderBy("series_id", "week")
+    # Build canonical series panel via config — no hard-coded column names
+    builder = SparkSeriesBuilder.from_config(fabric_yaml["series_builder"])
+    actuals_sdf = builder.build(actuals_raw)
+    logger.info(
+        "Series rows: %d | Series: %d",
+        actuals_sdf.count(),
+        actuals_sdf.select("series_id").distinct().count(),
     )
-    logger.info("Series rows: %d | Series: %d",
-                actuals_sdf.count(),
-                actuals_sdf.select("series_id").distinct().count())
-
-    # ── 4. Feature engineering ────────────────────────────────────────────────
-    # (Series pipeline uses the polars-based models — no Spark features needed here)
 
     # ── 5. Run backtest ───────────────────────────────────────────────────────
     from src.spark.pipeline import SparkForecastPipeline
