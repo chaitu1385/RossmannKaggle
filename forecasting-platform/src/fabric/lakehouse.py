@@ -48,9 +48,17 @@ class FabricLakehouse:
         table_name: str,
         version: Optional[int] = None,
         timestamp: Optional[str] = None,
+        date_col: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        partition_filter: Optional[str] = None,
     ):
         """
-        Read a Delta table from the Lakehouse.
+        Read a Delta table from the Lakehouse with optional partition pruning.
+
+        Partition filters are pushed down to the Delta scan — only the
+        matching files are read, which dramatically reduces I/O for large
+        tables with years of history.
 
         Parameters
         ----------
@@ -60,11 +68,37 @@ class FabricLakehouse:
             Time-travel to a specific Delta version number.
         timestamp:
             Time-travel to a specific timestamp string (ISO-8601).
+        date_col:
+            Name of the date/timestamp partition column.  Required when
+            ``start_date`` or ``end_date`` is supplied.
+        start_date:
+            Inclusive lower bound (ISO-8601 string, e.g. ``"2022-01-01"``).
+            Generates a ``date_col >= 'start_date'`` predicate.
+        end_date:
+            Exclusive upper bound (ISO-8601 string, e.g. ``"2024-01-01"``).
+            Generates a ``date_col < 'end_date'`` predicate.
+        partition_filter:
+            Arbitrary Spark SQL WHERE predicate for additional partition
+            pruning (e.g. ``"lob = 'surface' AND region = 'EMEA'"``).
+            Applied in addition to any date bounds above.
 
         Returns
         -------
         pyspark.sql.DataFrame
+
+        Examples
+        --------
+        Read only the last two years of actuals:
+
+        >>> lh.read_table("actuals", date_col="Date",
+        ...               start_date="2022-01-01", end_date="2024-01-01")
+
+        Read a specific LOB partition:
+
+        >>> lh.read_table("forecasts", partition_filter="lob = 'surface'")
         """
+        from pyspark.sql import functions as F
+
         path = self.config.table_path(table_name)
         reader = self.spark.read.format("delta")
 
@@ -77,7 +111,30 @@ class FabricLakehouse:
         else:
             logger.info("Reading Delta table '%s' (latest)", table_name)
 
-        return reader.load(path)
+        df = reader.load(path)
+
+        # ── apply partition / date filters ────────────────────────────────────
+        filters_applied = []
+
+        if date_col and start_date:
+            df = df.filter(F.col(date_col) >= start_date)
+            filters_applied.append(f"{date_col} >= {start_date!r}")
+
+        if date_col and end_date:
+            df = df.filter(F.col(date_col) < end_date)
+            filters_applied.append(f"{date_col} < {end_date!r}")
+
+        if partition_filter:
+            df = df.filter(partition_filter)
+            filters_applied.append(partition_filter)
+
+        if filters_applied:
+            logger.info(
+                "Partition filters applied to '%s': %s",
+                table_name, " AND ".join(filters_applied),
+            )
+
+        return df
 
     def read_file(self, subpath: str, format: str = "parquet", **options):
         """

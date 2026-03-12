@@ -64,34 +64,41 @@ def parse_args():
     p.add_argument("--write-mode", default="upsert",
                    choices=["upsert", "overwrite_partition", "append"],
                    help="Write strategy for the forecasts Delta table")
+    p.add_argument("--fabric-config", default="configs/fabric_config.yaml",
+                   help="Path to fabric_config.yaml (drives series_builder mapping)")
     p.add_argument("--output-dir", default="data/forecasts/",
                    help="Local output directory (non-Fabric mode)")
     return p.parse_args()
 
 
 def _resolve_champion(args, spark, lh):
-    """Read champion model from leaderboard or use CLI override."""
+    """
+    Return the champion model name as a Python string.
+
+    Aggregation and ranking stay on Spark executors; only the single
+    winning model name (one string) is collected to the driver via
+    ``.first()``.  Raises clearly if no backtest results exist yet.
+    """
     from pyspark.sql import functions as F
 
     if args.model:
         logger.info("Using CLI-supplied champion model: %s", args.model)
         return args.model
 
-    leaderboard_sdf = lh.read_table("leaderboard")
-    champion = (
-        leaderboard_sdf
+    row = (
+        lh.read_table("leaderboard")
         .filter(F.col("lob") == args.lob)
         .orderBy(F.col("run_date").desc(), F.col("rank").asc())
         .select("champion_model")
         .limit(1)
-        .collect()
+        .first()
     )
-    if not champion:
+    if row is None:
         raise RuntimeError(
             f"No champion model found for lob='{args.lob}' in leaderboard table.  "
             "Run spark_backtest.py first, or supply --model."
         )
-    return champion[0][0]
+    return row[0]
 
 
 def main():
@@ -102,12 +109,18 @@ def main():
     spark = get_or_create_spark(app_name=f"ForecastPipeline-{args.lob}")
     logger.info("SparkSession ready (version=%s)", spark.version)
 
-    # ── 2. Platform config ────────────────────────────────────────────────────
+    # ── 2. Platform config + fabric config ───────────────────────────────────
+    import yaml
     from src.config.loader import load_config
+    from src.spark.series_builder import SparkSeriesBuilder
+
     config = load_config(args.config)
     config.lob = args.lob
     horizon = args.horizon or config.forecast.horizon_weeks
     logger.info("Horizon: %d weeks", horizon)
+
+    with open(args.fabric_config) as _f:
+        fabric_yaml = yaml.safe_load(_f)
 
     # ── 3. Fabric / Lakehouse client (optional) ───────────────────────────────
     import os
@@ -135,15 +148,9 @@ def main():
         train_sdf, _, store_sdf = loader.read_rossmann_all()
         actuals_raw = train_sdf.join(store_sdf, on="Store", how="left")
 
-    actuals_sdf = (
-        actuals_raw
-        .filter(F.col("Open") == 1)
-        .withColumn("series_id", F.col("Store").cast("string"))
-        .withColumn("week", F.date_trunc("week", F.col("Date")))
-        .groupby("series_id", "week")
-        .agg(F.sum("Sales").alias("quantity"))
-        .orderBy("series_id", "week")
-    )
+    # Build canonical series panel via config — no hard-coded column names
+    builder = SparkSeriesBuilder.from_config(fabric_yaml["series_builder"])
+    actuals_sdf = builder.build(actuals_raw)
     logger.info(
         "Actuals: %d rows, %d series",
         actuals_sdf.count(),

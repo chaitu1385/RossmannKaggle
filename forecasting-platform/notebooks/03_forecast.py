@@ -15,19 +15,24 @@
 # %%
 import os
 import sys
+import yaml
 from datetime import date
 
 PLATFORM_ROOT = "/lakehouse/default/Files/forecasting-platform"
 if PLATFORM_ROOT not in sys.path:
     sys.path.insert(0, PLATFORM_ROOT)
 
-WORKSPACE       = os.environ.get("FABRIC_WORKSPACE", "my-workspace")
-LAKEHOUSE       = os.environ.get("FABRIC_LAKEHOUSE", "my-lakehouse")
-LOB             = os.environ.get("FORECAST_LOB", "rossmann")
-CONFIG_PATH     = os.environ.get("FORECAST_CONFIG", "configs/platform_config.yaml")
-ENVIRONMENT     = os.environ.get("FABRIC_ENVIRONMENT", "development")
+WORKSPACE         = os.environ.get("FABRIC_WORKSPACE", "my-workspace")
+LAKEHOUSE         = os.environ.get("FABRIC_LAKEHOUSE", "my-lakehouse")
+LOB               = os.environ.get("FORECAST_LOB", "rossmann")
+CONFIG_PATH       = os.environ.get("FORECAST_CONFIG", "configs/platform_config.yaml")
+ENVIRONMENT       = os.environ.get("FABRIC_ENVIRONMENT", "development")
+FABRIC_CFG_PATH   = os.environ.get("FABRIC_CONFIG", "configs/fabric_config.yaml")
 # Override champion model (empty = read from leaderboard table)
 CHAMPION_OVERRIDE = os.environ.get("CHAMPION_MODEL", "")
+
+with open(FABRIC_CFG_PATH) as _f:
+    fabric_yaml = yaml.safe_load(_f)
 
 FORECAST_ORIGIN = date.today().isoformat()
 
@@ -88,20 +93,17 @@ else:
     print(f"Champion model from leaderboard: {champion_model}")
 
 # %% [markdown]
-# ## 5 — Load actuals
+# ## 5 — Load actuals and build canonical series panel
+#
+# Column mapping is read from fabric_config.yaml → series_builder.
 
 # %%
+from src.spark.series_builder import SparkSeriesBuilder
+
 actuals_raw_sdf = lh.read_table("actuals")
 
-actuals_series_sdf = (
-    actuals_raw_sdf
-    .filter(F.col("Open") == 1)
-    .withColumn("series_id", F.col("Store").cast("string"))
-    .withColumn("week", F.date_trunc("week", F.col("Date")))
-    .groupby("series_id", "week")
-    .agg(F.sum("Sales").alias("quantity"))
-    .orderBy("series_id", "week")
-)
+builder = SparkSeriesBuilder.from_config(fabric_yaml["series_builder"])
+actuals_series_sdf = builder.build(actuals_raw_sdf)
 
 print(f"Actuals rows   : {actuals_series_sdf.count():,}")
 print(f"Series count   : {actuals_series_sdf.select('series_id').distinct().count():,}")
