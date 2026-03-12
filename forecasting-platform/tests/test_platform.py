@@ -1374,3 +1374,140 @@ class TestForecastDriftDetector:
         warn_indices = [i for i, s in enumerate(severities) if s == "warning"]
         if crit_indices and warn_indices:
             assert max(crit_indices) < min(warn_indices)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# REST API tests (Phase 2 item 8)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestRestApi:
+    """
+    Tests for the FastAPI serving layer using the TestClient (no network I/O).
+    """
+
+    def _make_app(self, tmpdir: str):
+        """Create a test app pointing at a temp directory."""
+        from src.api.app import create_app
+        return create_app(data_dir=tmpdir, metrics_dir=os.path.join(tmpdir, "metrics"))
+
+    def _write_forecast_parquet(self, tmpdir: str, lob: str):
+        """Write a minimal forecast Parquet to the expected location."""
+        import polars as pl
+        from datetime import date, timedelta
+
+        forecast_dir = Path(tmpdir) / "forecasts" / lob
+        forecast_dir.mkdir(parents=True, exist_ok=True)
+
+        rows = []
+        for i in range(4):
+            rows.append({
+                "series_id": "S1",
+                "week": date(2026, 1, 1) + timedelta(weeks=i),
+                "forecast": 100.0 + i * 5,
+                "model": "naive_seasonal",
+            })
+        df = pl.DataFrame(rows)
+        df.write_parquet(str(forecast_dir / f"forecast_{lob}_2026-01-01.parquet"))
+
+    def test_health_endpoint_returns_ok(self):
+        """GET /health should return status='ok' and a version string."""
+        from fastapi.testclient import TestClient
+        app = self._make_app("/tmp/test_api_health")
+        client = TestClient(app)
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert "version" in data
+
+    def test_forecast_endpoint_returns_200(self):
+        """GET /forecast/{lob} should return forecast points when data exists."""
+        from fastapi.testclient import TestClient
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_forecast_parquet(tmpdir, "rossmann")
+            app = self._make_app(tmpdir)
+            client = TestClient(app)
+            resp = client.get("/forecast/rossmann")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["lob"] == "rossmann"
+        assert data["series_count"] == 1
+        assert len(data["points"]) == 4
+
+    def test_forecast_endpoint_404_when_no_data(self):
+        """GET /forecast/{lob} should return 404 when no forecast data exists."""
+        from fastapi.testclient import TestClient
+        with tempfile.TemporaryDirectory() as tmpdir:
+            app = self._make_app(tmpdir)
+            client = TestClient(app)
+            resp = client.get("/forecast/unknown_lob")
+        assert resp.status_code == 404
+
+    def test_forecast_series_filter(self):
+        """GET /forecast/{lob}?series_id=S1 should filter to that series."""
+        from fastapi.testclient import TestClient
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_forecast_parquet(tmpdir, "rossmann")
+            app = self._make_app(tmpdir)
+            client = TestClient(app)
+            resp = client.get("/forecast/rossmann?series_id=S1")
+        assert resp.status_code == 200
+        assert all(p["series_id"] == "S1" for p in resp.json()["points"])
+
+    def test_forecast_series_404_for_unknown_series(self):
+        """series_id that doesn't exist should return 404."""
+        from fastapi.testclient import TestClient
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_forecast_parquet(tmpdir, "rossmann")
+            app = self._make_app(tmpdir)
+            client = TestClient(app)
+            resp = client.get("/forecast/rossmann?series_id=NONEXISTENT")
+        assert resp.status_code == 404
+
+    def test_forecast_horizon_filter(self):
+        """horizon query param should limit the number of returned weeks."""
+        from fastapi.testclient import TestClient
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_forecast_parquet(tmpdir, "rossmann")
+            app = self._make_app(tmpdir)
+            client = TestClient(app)
+            resp = client.get("/forecast/rossmann?horizon=2")
+        assert resp.status_code == 200
+        assert len(resp.json()["points"]) == 2
+
+    def test_forecast_series_path_param(self):
+        """GET /forecast/{lob}/{series_id} path param should work."""
+        from fastapi.testclient import TestClient
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_forecast_parquet(tmpdir, "rossmann")
+            app = self._make_app(tmpdir)
+            client = TestClient(app)
+            resp = client.get("/forecast/rossmann/S1")
+        assert resp.status_code == 200
+        assert resp.json()["series_count"] == 1
+
+    def test_leaderboard_404_when_no_metrics(self):
+        """GET /metrics/leaderboard/{lob} should return 404 when no data."""
+        from fastapi.testclient import TestClient
+        with tempfile.TemporaryDirectory() as tmpdir:
+            app = self._make_app(tmpdir)
+            client = TestClient(app)
+            resp = client.get("/metrics/leaderboard/rossmann")
+        assert resp.status_code == 404
+
+    def test_drift_404_when_no_metrics(self):
+        """GET /metrics/drift/{lob} should return 404 when no data."""
+        from fastapi.testclient import TestClient
+        with tempfile.TemporaryDirectory() as tmpdir:
+            app = self._make_app(tmpdir)
+            client = TestClient(app)
+            resp = client.get("/metrics/drift/rossmann")
+        assert resp.status_code == 404
+
+    def test_openapi_docs_available(self):
+        """The /docs endpoint should return 200 (Swagger UI)."""
+        from fastapi.testclient import TestClient
+        app = self._make_app("/tmp/test_api_docs")
+        client = TestClient(app)
+        resp = client.get("/docs")
+        assert resp.status_code == 200

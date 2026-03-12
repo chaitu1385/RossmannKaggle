@@ -365,6 +365,20 @@ All metrics defined in `src/metrics/definitions.py`.
 | `scripts/run_sku_mapping.py` | `python run_sku_mapping.py --config configs/sku_mapping_config.yaml` | SKU discovery, writes mapping CSV |
 | `scripts/spark_forecast.py` | `spark-submit spark_forecast.py` | Distributed forecast on Spark |
 | `scripts/spark_backtest.py` | `spark-submit spark_backtest.py` | Distributed backtest on Spark |
+| `scripts/spark_deploy.py`   | `spark-submit spark_deploy.py --lob rossmann` | Unified deploy: pre-flight → backtest → forecast → audit |
+| `scripts/serve.py`          | `python serve.py --port 8000`  | REST API server (uvicorn) |
+
+### REST API Endpoints (`src/api/`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Liveness probe — returns `{"status": "ok"}` |
+| GET | `/forecast/{lob}` | Latest forecasts for a LOB (query: `series_id`, `horizon`) |
+| GET | `/forecast/{lob}/{series_id}` | Latest forecast for a single series |
+| GET | `/metrics/leaderboard/{lob}` | Model leaderboard from metric store |
+| GET | `/metrics/drift/{lob}` | Drift alerts (accuracy, bias, volume) |
+
+OpenAPI docs auto-generated at `/docs`. Response schemas in `src/api/schemas.py`.
 
 ---
 
@@ -410,7 +424,7 @@ pytest tests/ -v
 - [x] Enhanced proportion estimation (Bayesian)
 - [x] Production Fabric deployment pipeline
 - [x] Monitoring & drift detection
-- [ ] REST API / serving layer
+- [x] REST API / serving layer
 
 ---
 
@@ -426,6 +440,7 @@ pytest tests/ -v
 | 2026-03-12 | 0.6.0 | Phase 2 — Bayesian proportion estimation: `BayesianProportionEstimator` replaces equal-split fallback for 1-to-Many, Many-to-1, and Many-to-Many mappings using Dirichlet-Bayes formula. Integrated into `CandidateFusion` and `build_phase2_pipeline()`. 11 new tests. |
 | 2026-03-12 | 0.7.0 | Phase 2 — Production Fabric deployment pipeline: `DeploymentOrchestrator` chains backtest→champion→forecast with pre-flight validation (data freshness, series count), post-run checks (forecast row count), and audit logging to `deploy_log` Delta table. New `spark_deploy.py` unified CLI entry point. 12 new tests. |
 | 2026-03-12 | 0.8.0 | Phase 2 — Monitoring & drift detection: `ForecastDriftDetector` detects accuracy drift (WMAPE ratio), bias drift (normalised bias threshold), and volume anomalies (z-score) with configurable WARNING/CRITICAL severity levels. `summary()` returns Polars DataFrame. 12 new tests. |
+| 2026-03-12 | 0.9.0 | Phase 2 — REST API serving layer: FastAPI app with `/health`, `/forecast/{lob}`, `/forecast/{lob}/{series_id}`, `/metrics/leaderboard/{lob}`, `/metrics/drift/{lob}` endpoints. Pydantic response schemas, auto-generated OpenAPI docs at `/docs`. `scripts/serve.py` uvicorn entry point. 10 new tests. Phase 2 complete. |
 
 ---
 

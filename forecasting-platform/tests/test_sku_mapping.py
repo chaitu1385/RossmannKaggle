@@ -684,11 +684,11 @@ class TestPhase2Pipeline:
         df = pipeline.run(pm)
         assert isinstance(df, pl.DataFrame)
 
-    def test_phase2_pipeline_has_three_methods(self):
+    def test_phase2_pipeline_has_four_methods(self):
         pipeline = build_phase2_pipeline()
-        assert len(pipeline.methods) == 3
+        assert len(pipeline.methods) == 4
         names = {m.name for m in pipeline.methods}
-        assert names == {"attribute", "naming", "curve"}
+        assert names == {"attribute", "naming", "curve", "temporal"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
