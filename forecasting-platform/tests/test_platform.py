@@ -1119,3 +1119,258 @@ class TestDeploymentPostRun:
         forecasts_sdf.count.return_value = 0   # would fail if check were active
         n = orch._postrun_check(forecasts_sdf)
         assert n == 0
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ForecastDriftDetector tests (Phase 2 item 7)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _make_metrics_df(
+    series_id: str,
+    n_baseline: int,
+    n_recent: int,
+    baseline_wmape: float = 0.10,
+    recent_wmape: float = 0.10,
+    baseline_bias: float = 0.00,
+    recent_bias: float = 0.00,
+    baseline_vol: float = 100.0,
+    recent_vol: float = 100.0,
+) -> "pl.DataFrame":
+    """
+    Build a synthetic metrics DataFrame for drift tests.
+
+    Actual is always 100 (baseline) or recent_vol (recent).
+    Forecast is derived from wmape/bias targets.
+    target_week is a monotonically increasing integer used as a date proxy.
+    """
+    import polars as pl
+    from datetime import date, timedelta
+
+    rows = []
+    start_date = date(2024, 1, 1)
+    total = n_baseline + n_recent
+
+    for i in range(total):
+        week = start_date + timedelta(weeks=i)
+        is_recent = i >= n_baseline
+        vol = recent_vol if is_recent else baseline_vol
+        # derive a forecast that matches target wmape/bias
+        target_wmape = recent_wmape if is_recent else baseline_wmape
+        target_bias  = recent_bias  if is_recent else baseline_bias
+        # forecast = actual * (1 + bias ± wmape)
+        forecast = vol * (1 + target_bias + target_wmape)
+        rows.append({
+            "series_id": series_id,
+            "target_week": week,
+            "actual": vol,
+            "forecast": forecast,
+            "wmape": target_wmape,
+            "normalized_bias": target_bias,
+        })
+
+    return pl.DataFrame(rows)
+
+
+class TestForecastDriftDetector:
+
+    def test_no_alerts_on_stable_series(self):
+        """A series with stable accuracy and no bias should produce no alerts."""
+        from src.metrics.drift import ForecastDriftDetector, DriftConfig
+        # Raise bias threshold above the test's WMAPE (0.10) so the constant positive
+        # offset in the helper (forecast = actual * (1 + wmape)) doesn't trigger bias.
+        cfg = DriftConfig(
+            baseline_weeks=26, recent_weeks=8, min_baseline_periods=4,
+            bias_warning_threshold=0.20,  # above 0.10 wmape-induced bias
+        )
+        detector = ForecastDriftDetector(cfg)
+        df = _make_metrics_df("S1", n_baseline=26, n_recent=8,
+                              baseline_wmape=0.10, recent_wmape=0.10)
+        alerts = detector.detect(df)
+        assert alerts == []
+
+    def test_accuracy_warning_when_wmape_degrades(self):
+        """Should raise WARNING when WMAPE increases by more than warning ratio."""
+        from src.metrics.drift import ForecastDriftDetector, DriftConfig, DriftSeverity
+        cfg = DriftConfig(
+            baseline_weeks=20, recent_weeks=8,
+            accuracy_warning_ratio=1.25, accuracy_critical_ratio=1.50,
+            min_baseline_periods=4,
+        )
+        detector = ForecastDriftDetector(cfg)
+        # Recent WMAPE is 35% above baseline → crosses WARNING (1.25) but not CRITICAL (1.50)
+        df = _make_metrics_df("S1", n_baseline=20, n_recent=8,
+                              baseline_wmape=0.10, recent_wmape=0.135)
+        alerts = detector.detect_accuracy_drift(df)
+        assert len(alerts) == 1
+        assert alerts[0].severity == DriftSeverity.WARNING
+        assert alerts[0].metric == "accuracy"
+
+    def test_accuracy_critical_when_wmape_severely_degrades(self):
+        """Should raise CRITICAL when WMAPE more than doubles baseline."""
+        from src.metrics.drift import ForecastDriftDetector, DriftConfig, DriftSeverity
+        cfg = DriftConfig(baseline_weeks=20, recent_weeks=8, min_baseline_periods=4)
+        detector = ForecastDriftDetector(cfg)
+        df = _make_metrics_df("S1", n_baseline=20, n_recent=8,
+                              baseline_wmape=0.10, recent_wmape=0.20)
+        alerts = detector.detect_accuracy_drift(df)
+        assert len(alerts) == 1
+        assert alerts[0].severity == DriftSeverity.CRITICAL
+
+    def test_no_accuracy_alert_when_wmape_improves(self):
+        """No alert when recent WMAPE is better than baseline."""
+        from src.metrics.drift import ForecastDriftDetector, DriftConfig
+        cfg = DriftConfig(baseline_weeks=20, recent_weeks=8, min_baseline_periods=4)
+        detector = ForecastDriftDetector(cfg)
+        df = _make_metrics_df("S1", n_baseline=20, n_recent=8,
+                              baseline_wmape=0.20, recent_wmape=0.10)
+        alerts = detector.detect_accuracy_drift(df)
+        assert alerts == []
+
+    def test_bias_warning_on_systematic_overforecast(self):
+        """Should raise bias WARNING when normalised bias exceeds warning threshold."""
+        from src.metrics.drift import ForecastDriftDetector, DriftConfig, DriftSeverity
+        cfg = DriftConfig(
+            baseline_weeks=20, recent_weeks=8,
+            bias_warning_threshold=0.10, bias_critical_threshold=0.25,
+            min_baseline_periods=4,
+        )
+        detector = ForecastDriftDetector(cfg)
+        df = _make_metrics_df("S1", n_baseline=20, n_recent=8,
+                              recent_bias=0.15)
+        alerts = detector.detect_bias_drift(df)
+        assert len(alerts) == 1
+        assert alerts[0].severity == DriftSeverity.WARNING
+        assert "over-forecasting" in alerts[0].message
+
+    def test_bias_critical_on_severe_underforecast(self):
+        """Should raise bias CRITICAL when normalised bias is strongly negative."""
+        from src.metrics.drift import ForecastDriftDetector, DriftConfig, DriftSeverity
+        cfg = DriftConfig(baseline_weeks=20, recent_weeks=8, min_baseline_periods=4)
+        detector = ForecastDriftDetector(cfg)
+        # Use zero wmape offset so computed bias = recent_bias exactly:
+        # forecast = actual * (1 + bias + wmape) → with wmape=0: forecast = actual*(1+bias)
+        # computed bias = (forecast - actual)/actual = bias ✓
+        df = _make_metrics_df("S1", n_baseline=20, n_recent=8,
+                              baseline_wmape=0.0, recent_wmape=0.0,
+                              recent_bias=-0.30)
+        alerts = detector.detect_bias_drift(df)
+        assert len(alerts) == 1
+        assert alerts[0].severity == DriftSeverity.CRITICAL
+        assert "under-forecasting" in alerts[0].message
+
+    def test_volume_anomaly_warning_on_spike(self):
+        """Should raise volume WARNING when actuals spike above baseline mean."""
+        import polars as pl
+        from datetime import date, timedelta
+        from src.metrics.drift import ForecastDriftDetector, DriftConfig, DriftSeverity
+
+        cfg = DriftConfig(
+            baseline_weeks=20, recent_weeks=4,
+            volume_warning_zscore=2.0, volume_critical_zscore=3.0,
+            min_baseline_periods=4,
+        )
+        detector = ForecastDriftDetector(cfg)
+
+        # Build baseline with natural variance (~N(100, 15)) so std > 0,
+        # then spike recent to 300 — well beyond 2σ.
+        import math
+        start = date(2024, 1, 1)
+        rows = []
+        for i in range(20):
+            # oscillate around 100 with amplitude 15
+            vol = 100.0 + 15.0 * math.sin(i * 0.5)
+            rows.append({
+                "series_id": "S1",
+                "target_week": start + timedelta(weeks=i),
+                "actual": vol,
+                "forecast": vol,
+                "wmape": 0.0,
+                "normalized_bias": 0.0,
+            })
+        for i in range(4):
+            rows.append({
+                "series_id": "S1",
+                "target_week": start + timedelta(weeks=20 + i),
+                "actual": 300.0,
+                "forecast": 300.0,
+                "wmape": 0.0,
+                "normalized_bias": 0.0,
+            })
+        df = pl.DataFrame(rows)
+
+        alerts = detector.detect_volume_anomaly(df)
+        assert len(alerts) >= 1
+        vol_alerts = [a for a in alerts if a.metric == "volume"]
+        assert vol_alerts
+        assert "spike" in vol_alerts[0].message
+
+    def test_volume_no_alert_on_normal_variation(self):
+        """No alert when volume is within normal z-score range."""
+        from src.metrics.drift import ForecastDriftDetector, DriftConfig
+        cfg = DriftConfig(baseline_weeks=20, recent_weeks=4,
+                          volume_warning_zscore=2.0, min_baseline_periods=4)
+        detector = ForecastDriftDetector(cfg)
+        df = _make_metrics_df("S1", n_baseline=20, n_recent=4,
+                              baseline_vol=100.0, recent_vol=102.0)
+        alerts = detector.detect_volume_anomaly(df)
+        vol_alerts = [a for a in alerts if a.metric == "volume"]
+        assert vol_alerts == []
+
+    def test_summary_returns_polars_dataframe(self):
+        """summary() should return a Polars DataFrame with expected columns."""
+        from src.metrics.drift import ForecastDriftDetector, DriftConfig
+        import polars as pl
+        cfg = DriftConfig(baseline_weeks=20, recent_weeks=8, min_baseline_periods=4)
+        detector = ForecastDriftDetector(cfg)
+        df = _make_metrics_df("S1", n_baseline=20, n_recent=8,
+                              baseline_wmape=0.10, recent_wmape=0.25)
+        result = detector.summary(df)
+        assert isinstance(result, pl.DataFrame)
+        assert "series_id" in result.columns
+        assert "severity" in result.columns
+        assert len(result) >= 1
+
+    def test_empty_input_returns_no_alerts(self):
+        """detect() on empty DataFrame returns empty list."""
+        from src.metrics.drift import ForecastDriftDetector
+        import polars as pl
+        detector = ForecastDriftDetector()
+        df = pl.DataFrame(schema={
+            "series_id": pl.Utf8, "target_week": pl.Date,
+            "actual": pl.Float64, "forecast": pl.Float64,
+            "wmape": pl.Float64, "normalized_bias": pl.Float64,
+        })
+        alerts = detector.detect(df)
+        assert alerts == []
+
+    def test_insufficient_history_skipped(self):
+        """Series with fewer rows than min_baseline_periods should be skipped."""
+        from src.metrics.drift import ForecastDriftDetector, DriftConfig
+        cfg = DriftConfig(baseline_weeks=20, recent_weeks=8, min_baseline_periods=10)
+        detector = ForecastDriftDetector(cfg)
+        # Only 6 rows total — baseline window will have < min_baseline_periods
+        df = _make_metrics_df("S1", n_baseline=3, n_recent=3,
+                              baseline_wmape=0.10, recent_wmape=0.30)
+        alerts = detector.detect(df)
+        assert alerts == []
+
+    def test_critical_alert_sorted_before_warning(self):
+        """CRITICAL alerts must appear before WARNING alerts in sorted output."""
+        from src.metrics.drift import ForecastDriftDetector, DriftConfig
+        import polars as pl
+        cfg = DriftConfig(baseline_weeks=20, recent_weeks=8, min_baseline_periods=4)
+        detector = ForecastDriftDetector(cfg)
+
+        # S1: WARNING (moderate drift), S2: CRITICAL (severe drift)
+        df1 = _make_metrics_df("S1", n_baseline=20, n_recent=8,
+                               baseline_wmape=0.10, recent_wmape=0.135)
+        df2 = _make_metrics_df("S2", n_baseline=20, n_recent=8,
+                               baseline_wmape=0.10, recent_wmape=0.25)
+        combined = pl.concat([df1, df2])
+        alerts = detector.detect(combined)
+        severities = [a.severity.value for a in alerts]
+        # All critical before all warnings
+        crit_indices = [i for i, s in enumerate(severities) if s == "critical"]
+        warn_indices = [i for i, s in enumerate(severities) if s == "warning"]
+        if crit_indices and warn_indices:
+            assert max(crit_indices) < min(warn_indices)

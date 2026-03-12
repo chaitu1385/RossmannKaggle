@@ -409,7 +409,7 @@ pytest tests/ -v
 - [x] S-curve and step ramp shapes for transitions
 - [x] Enhanced proportion estimation (Bayesian)
 - [x] Production Fabric deployment pipeline
-- [ ] Monitoring & drift detection
+- [x] Monitoring & drift detection
 - [ ] REST API / serving layer
 
 ---
@@ -425,6 +425,7 @@ pytest tests/ -v
 | 2026-03-12 | 0.5.0 | Phase 2 — S-curve & step ramp shapes: validated `scurve` (Hermite smoothstep) and `step` shapes in TransitionEngine; added VALID_RAMP_SHAPES guard with ValueError for unknown shapes. 17 new tests. |
 | 2026-03-12 | 0.6.0 | Phase 2 — Bayesian proportion estimation: `BayesianProportionEstimator` replaces equal-split fallback for 1-to-Many, Many-to-1, and Many-to-Many mappings using Dirichlet-Bayes formula. Integrated into `CandidateFusion` and `build_phase2_pipeline()`. 11 new tests. |
 | 2026-03-12 | 0.7.0 | Phase 2 — Production Fabric deployment pipeline: `DeploymentOrchestrator` chains backtest→champion→forecast with pre-flight validation (data freshness, series count), post-run checks (forecast row count), and audit logging to `deploy_log` Delta table. New `spark_deploy.py` unified CLI entry point. 12 new tests. |
+| 2026-03-12 | 0.8.0 | Phase 2 — Monitoring & drift detection: `ForecastDriftDetector` detects accuracy drift (WMAPE ratio), bias drift (normalised bias threshold), and volume anomalies (z-score) with configurable WARNING/CRITICAL severity levels. `summary()` returns Polars DataFrame. 12 new tests. |
 
 ---
 

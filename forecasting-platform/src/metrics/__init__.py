@@ -8,3 +8,4 @@ from .definitions import (
     METRIC_REGISTRY,
 )
 from .store import MetricStore
+from .drift import DriftAlert, DriftConfig, DriftSeverity, ForecastDriftDetector  # noqa: F401
