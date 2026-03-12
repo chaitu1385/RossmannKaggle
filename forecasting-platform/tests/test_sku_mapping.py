@@ -689,3 +689,109 @@ class TestPhase2Pipeline:
         assert len(pipeline.methods) == 3
         names = {m.name for m in pipeline.methods}
         assert names == {"attribute", "naming", "curve"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 2: Temporal co-movement method tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+from src.sku_mapping.methods.temporal_comovement import TemporalCovementMethod
+
+
+class TestTemporalCovementMethod:
+    """Phase 2: temporal co-movement SKU discovery tests."""
+
+    def test_no_sales_returns_empty(self):
+        pm = _curve_pm(date(2023, 1, 1), date(2023, 7, 1))
+        assert TemporalCovementMethod(sales_df=None).run(pm) == []
+
+    def test_method_name_is_temporal(self):
+        assert TemporalCovementMethod().name == "temporal"
+
+    def test_detects_negatively_correlated_pair(self):
+        """
+        Old SKU declining while new SKU grows → negative raw correlation →
+        high correlation_score → candidate found.
+        """
+        new_launch = date(2023, 7, 3)
+        # Old SKU: 26 weeks high then strictly declining
+        old_s = [100.0] * 26 + [100 - i * 7 for i in range(1, 14)]
+        # New SKU: starts at 0, strictly increasing (anti-correlated with old)
+        new_s = [0.0] * 26 + [i * 7 for i in range(1, 14)]
+
+        sales_df = _make_sales_df({"OLD-1": old_s, "NEW-1": new_s})
+        pm = _curve_pm(date(2023, 1, 2), new_launch)
+        method = TemporalCovementMethod(sales_df=sales_df, window_weeks=13, min_data_points=4)
+        candidates = method.run(pm)
+
+        assert len(candidates) == 1
+        c = candidates[0]
+        assert c.old_sku == "OLD-1"
+        assert c.new_sku == "NEW-1"
+        assert c.method == "temporal"
+        assert 0.0 < c.method_score <= 1.0
+
+    def test_correlation_score_high_for_anti_correlated_pair(self):
+        new_launch = date(2023, 7, 3)
+        old_s = [100.0] * 26 + [90, 80, 70, 60, 50, 40, 30, 20, 10, 5, 3, 2, 1]
+        new_s = [0.0]   * 26 + [10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 97, 98, 99]
+
+        sales_df = _make_sales_df({"OLD-1": old_s, "NEW-1": new_s})
+        pm = _curve_pm(date(2023, 1, 2), new_launch)
+        method = TemporalCovementMethod(sales_df=sales_df, window_weeks=13)
+        candidates = method.run(pm)
+
+        assert len(candidates) == 1
+        assert candidates[0].metadata["correlation_score"] > 0.5
+
+    def test_volume_match_high_for_similar_volumes(self):
+        """When old pre-launch avg ≈ new post-launch avg, volume_match_score → 1."""
+        new_launch = date(2023, 7, 3)
+        # Both at ~100 units
+        old_s = [100.0] * 26 + [95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35]
+        new_s = [0.0]   * 26 + [30, 45, 60, 70, 80, 90, 95, 100, 103, 105, 106, 107, 108]
+
+        sales_df = _make_sales_df({"OLD-1": old_s, "NEW-1": new_s})
+        pm = _curve_pm(date(2023, 1, 2), new_launch)
+        method = TemporalCovementMethod(sales_df=sales_df, window_weeks=13)
+        candidates = method.run(pm)
+
+        assert len(candidates) == 1
+        assert candidates[0].metadata["volume_match_score"] > 0.5
+
+    def test_missing_sku_in_sales_skipped(self):
+        old_s = [100.0] * 39
+        sales_df = _make_sales_df({"OLD-1": old_s})  # NEW-1 missing
+        pm = _curve_pm(date(2023, 1, 2), date(2023, 7, 3))
+        method = TemporalCovementMethod(sales_df=sales_df)
+        assert method.run(pm) == []
+
+    def test_insufficient_overlap_returns_no_candidate(self):
+        """Fewer than min_data_points in post-window → skip."""
+        new_launch = date(2023, 7, 3)
+        old_s = [100.0] * 26 + [80.0, 60.0]   # only 2 post-launch points
+        new_s = [0.0]   * 26 + [20.0, 40.0]
+        sales_df = _make_sales_df({"OLD-1": old_s, "NEW-1": new_s})
+        pm = _curve_pm(date(2023, 1, 2), new_launch)
+        method = TemporalCovementMethod(sales_df=sales_df, min_data_points=4)
+        assert method.run(pm) == []
+
+    def test_metadata_keys_present(self):
+        new_launch = date(2023, 7, 3)
+        old_s = [100.0] * 26 + [90, 80, 70, 60, 50, 40, 30, 20, 10, 5, 3, 2, 1]
+        new_s = [0.0]   * 26 + [10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 97, 98, 99]
+        sales_df = _make_sales_df({"OLD-1": old_s, "NEW-1": new_s})
+        pm = _curve_pm(date(2023, 1, 2), new_launch)
+        method = TemporalCovementMethod(sales_df=sales_df, window_weeks=13)
+        candidates = method.run(pm)
+        assert len(candidates) == 1
+        meta = candidates[0].metadata
+        for key in ("correlation_score", "overlap_score", "volume_match_score",
+                    "n_overlap_points", "old_pre_avg", "new_post_avg"):
+            assert key in meta, f"Missing metadata key: {key}"
+
+    def test_phase2_pipeline_has_four_methods(self):
+        pipeline = build_phase2_pipeline()
+        assert len(pipeline.methods) == 4
+        names = {m.name for m in pipeline.methods}
+        assert names == {"attribute", "naming", "curve", "temporal"}

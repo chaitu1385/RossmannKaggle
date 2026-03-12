@@ -5,7 +5,7 @@ Wires together:
   ProductMasterLoader → [methods...]  → CandidateFusion → MappingWriter
 
 Phase 1 methods : AttributeMatchingMethod, NamingConventionMethod
-Phase 2 methods : + CurveFittingMethod
+Phase 2 methods : + CurveFittingMethod, TemporalCovementMethod
 """
 
 import logging
@@ -19,6 +19,7 @@ from .methods.base import BaseMethod
 from .methods.attribute_matching import AttributeMatchingMethod
 from .methods.naming_parsing import NamingConventionMethod
 from .methods.curve_fitting import CurveFittingMethod
+from .methods.temporal_comovement import TemporalCovementMethod
 from .output.writer import MappingWriter
 
 logger = logging.getLogger(__name__)
@@ -32,22 +33,21 @@ def build_phase2_pipeline(
     window_weeks: int = 13,
 ) -> "SKUMappingPipeline":
     """
-    Phase 2 pipeline: attribute + naming + curve-fitting methods.
+    Phase 2 pipeline: all four methods (attribute + naming + curve + temporal).
 
-    The curve-fitting method adds demand-shape analysis on top of the
-    Phase 1 attribute and naming signals.  If ``sales_df`` is None the
-    curve method returns no candidates (Phase 1 behaviour is preserved).
+    Both ``CurveFittingMethod`` and ``TemporalCovementMethod`` require sales
+    history data.  If ``sales_df`` is None they silently return no candidates
+    and the pipeline degrades to Phase 1 behaviour.
 
     Parameters
     ----------
     sales_df:
         Weekly sales history DataFrame with columns
-        ``[sku_id, week, quantity]``.  Required for the curve method to
-        produce candidates.
+        ``[sku_id, week, quantity]``.
     launch_window_days, min_base_similarity, min_confidence:
         Same as ``build_phase1_pipeline``.
     window_weeks:
-        Half-width of the transition window for curve fitting (weeks).
+        Half-width of the transition window for curve and temporal methods.
     """
     methods: List[BaseMethod] = [
         AttributeMatchingMethod(launch_window_days=launch_window_days),
@@ -57,9 +57,14 @@ def build_phase2_pipeline(
             window_weeks=window_weeks,
             launch_window_days=launch_window_days,
         ),
+        TemporalCovementMethod(
+            sales_df=sales_df,
+            window_weeks=window_weeks,
+            launch_window_days=launch_window_days,
+        ),
     ]
-    # Use full 4-method weights; fusion auto-normalises to whichever
-    # methods returned candidates for each pair.
+    # _FULL_WEIGHTS covers all 4 methods; fusion auto-normalises to whichever
+    # returned candidates for each specific pair.
     fusion = CandidateFusion(weights=_FULL_WEIGHTS, min_confidence=min_confidence)
     return SKUMappingPipeline(methods=methods, fusion=fusion)
 

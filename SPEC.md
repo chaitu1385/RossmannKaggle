@@ -384,7 +384,7 @@ pytest tests/ -v
 
 - [x] MinT reconciliation (OLS / WLS)
 - [x] SKU mapping: curve-fitting method
-- [ ] SKU mapping: temporal co-movement method
+- [x] SKU mapping: temporal co-movement method
 - [ ] S-curve and step ramp shapes for transitions
 - [ ] Enhanced proportion estimation (Bayesian)
 - [ ] Production Fabric deployment pipeline
@@ -400,6 +400,7 @@ pytest tests/ -v
 | 2026-03-12 | 0.1.0 | Initial spec written. Phase 1 MVP complete: forecasting engine, backtesting, hierarchy, SKU mapping (2 methods), product transitions, Fabric/Spark integration. |
 | 2026-03-12 | 0.2.0 | Phase 2 — MinT reconciliation: added OLS, WLS, and MinT (Ledoit-Wolf shrinkage) methods to `reconciler.py`. 7 new tests. |
 | 2026-03-12 | 0.3.0 | Phase 2 — SKU mapping curve-fitting method: `CurveFittingMethod` scores demand transitions via decline/ramp/complementarity/scale signals. `build_phase2_pipeline()` factory added. 13 new tests. |
+| 2026-03-12 | 0.4.0 | Phase 2 — SKU mapping temporal co-movement method: `TemporalCovementMethod` scores demand transitions via correlation/overlap/volume signals. `build_phase2_pipeline()` updated to include all 4 methods. 9 new tests. |
 
 ---
 

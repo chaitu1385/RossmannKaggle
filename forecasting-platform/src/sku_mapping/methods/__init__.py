@@ -2,10 +2,12 @@ from .base import BaseMethod
 from .attribute_matching import AttributeMatchingMethod
 from .naming_parsing import NamingConventionMethod
 from .curve_fitting import CurveFittingMethod
+from .temporal_comovement import TemporalCovementMethod
 
 __all__ = [
     "BaseMethod",
     "AttributeMatchingMethod",
     "NamingConventionMethod",
     "CurveFittingMethod",
+    "TemporalCovementMethod",
 ]
