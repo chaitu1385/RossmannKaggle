@@ -795,3 +795,141 @@ class TestTemporalCovementMethod:
         assert len(pipeline.methods) == 4
         names = {m.name for m in pipeline.methods}
         assert names == {"attribute", "naming", "curve", "temporal"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 2: Bayesian proportion estimation tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+from src.sku_mapping.fusion.bayesian_proportions import BayesianProportionEstimator
+from src.sku_mapping.data.schemas import MappingRecord
+
+
+def _make_record(old_sku, new_sku, mapping_type, confidence_score=0.5, proportion=None):
+    return MappingRecord(
+        mapping_id="MAP-TEST",
+        old_sku=old_sku,
+        new_sku=new_sku,
+        mapping_type=mapping_type,
+        proportion=proportion if proportion is not None else (1.0 if mapping_type == "1-to-1" else 0.5),
+        confidence_score=confidence_score,
+        confidence_level="Medium",
+        methods_matched=["attribute"],
+        transition_start_week=None,
+        transition_end_week=None,
+        old_sku_lifecycle_stage="Discontinued",
+    )
+
+
+class TestBayesianProportionEstimator:
+    """Phase 2: Bayesian proportion estimation tests."""
+
+    def test_one_to_one_stays_1(self):
+        estimator = BayesianProportionEstimator()
+        r = _make_record("OLD", "NEW", "1-to-1", confidence_score=0.8)
+        result = estimator.estimate([r])
+        assert result[0].proportion == 1.0
+
+    def test_one_to_many_sums_to_one(self):
+        """1-to-Many: proportions across all successors must sum to 1.0."""
+        estimator = BayesianProportionEstimator(concentration=0.5)
+        records = [
+            _make_record("OLD", "NEW-A", "1-to-Many", confidence_score=0.9),
+            _make_record("OLD", "NEW-B", "1-to-Many", confidence_score=0.3),
+            _make_record("OLD", "NEW-C", "1-to-Many", confidence_score=0.6),
+        ]
+        estimator.estimate(records)
+        total = sum(r.proportion for r in records)
+        assert abs(total - 1.0) < 1e-3
+
+    def test_one_to_many_high_score_gets_more(self):
+        """High-confidence pair should get a larger proportion than low-confidence."""
+        estimator = BayesianProportionEstimator(concentration=0.1)  # low alpha → score-dominated
+        records = [
+            _make_record("OLD", "NEW-A", "1-to-Many", confidence_score=0.9),
+            _make_record("OLD", "NEW-B", "1-to-Many", confidence_score=0.1),
+        ]
+        estimator.estimate(records)
+        p_a = next(r.proportion for r in records if r.new_sku == "NEW-A")
+        p_b = next(r.proportion for r in records if r.new_sku == "NEW-B")
+        assert p_a > p_b
+
+    def test_equal_scores_give_equal_proportions(self):
+        """When all confidence scores are equal, proportions should be ~1/n."""
+        estimator = BayesianProportionEstimator(concentration=0.5)
+        records = [
+            _make_record("OLD", "NEW-A", "1-to-Many", confidence_score=0.6),
+            _make_record("OLD", "NEW-B", "1-to-Many", confidence_score=0.6),
+            _make_record("OLD", "NEW-C", "1-to-Many", confidence_score=0.6),
+        ]
+        estimator.estimate(records)
+        for r in records:
+            assert abs(r.proportion - 1/3) < 0.01
+
+    def test_many_to_one_sums_to_one_per_new_sku(self):
+        """Many-to-1: proportions for all predecessors of same new_sku sum to 1.0."""
+        estimator = BayesianProportionEstimator()
+        records = [
+            _make_record("OLD-A", "NEW", "Many-to-1", confidence_score=0.8),
+            _make_record("OLD-B", "NEW", "Many-to-1", confidence_score=0.4),
+        ]
+        estimator.estimate(records)
+        total = sum(r.proportion for r in records)
+        assert abs(total - 1.0) < 1e-3
+
+    def test_high_alpha_approaches_equal_split(self):
+        """Very high concentration → proportions approach equal split."""
+        estimator = BayesianProportionEstimator(concentration=1000.0)
+        records = [
+            _make_record("OLD", "NEW-A", "1-to-Many", confidence_score=0.9),
+            _make_record("OLD", "NEW-B", "1-to-Many", confidence_score=0.1),
+        ]
+        estimator.estimate(records)
+        p_a = next(r.proportion for r in records if r.new_sku == "NEW-A")
+        p_b = next(r.proportion for r in records if r.new_sku == "NEW-B")
+        # With very high alpha, both should be close to 0.5
+        assert abs(p_a - 0.5) < 0.05
+        assert abs(p_b - 0.5) < 0.05
+
+    def test_negative_concentration_raises(self):
+        with pytest.raises(ValueError):
+            BayesianProportionEstimator(concentration=-0.1)
+
+    def test_empty_records_returns_empty(self):
+        estimator = BayesianProportionEstimator()
+        assert estimator.estimate([]) == []
+
+    def test_notes_updated_for_multi_mapped(self):
+        """Notes should mention Bayesian proportion after estimation."""
+        estimator = BayesianProportionEstimator(concentration=0.5)
+        records = [
+            _make_record("OLD", "NEW-A", "1-to-Many", confidence_score=0.8),
+            _make_record("OLD", "NEW-B", "1-to-Many", confidence_score=0.5),
+        ]
+        estimator.estimate(records)
+        for r in records:
+            assert "Bayesian" in (r.notes or ""), f"Expected Bayesian in notes: {r.notes}"
+
+    def test_many_to_many_proportions_sum_to_one_per_old(self):
+        """For Many-to-Many, proportions per old_sku should sum to 1.0."""
+        estimator = BayesianProportionEstimator(concentration=0.5)
+        records = [
+            _make_record("OLD-A", "NEW-1", "Many-to-Many", confidence_score=0.8),
+            _make_record("OLD-A", "NEW-2", "Many-to-Many", confidence_score=0.4),
+            _make_record("OLD-B", "NEW-1", "Many-to-Many", confidence_score=0.6),
+            _make_record("OLD-B", "NEW-2", "Many-to-Many", confidence_score=0.7),
+        ]
+        estimator.estimate(records)
+        # OLD-A's two successors should sum to 1.0
+        old_a = [r.proportion for r in records if r.old_sku == "OLD-A"]
+        assert abs(sum(old_a) - 1.0) < 1e-3
+        # OLD-B's two successors should sum to 1.0
+        old_b = [r.proportion for r in records if r.old_sku == "OLD-B"]
+        assert abs(sum(old_b) - 1.0) < 1e-3
+
+    def test_fusion_with_bayesian_enabled(self):
+        """CandidateFusion with bayesian_proportions=True runs end-to-end."""
+        pm = generate_product_master()
+        pipeline = build_phase2_pipeline(min_confidence="Low")
+        df = pipeline.run(pm)
+        assert isinstance(df, pl.DataFrame)

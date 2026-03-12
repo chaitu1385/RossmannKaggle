@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Tuple
 import polars as pl
 
 from ..data.schemas import MappingCandidate, MappingRecord
+from .bayesian_proportions import BayesianProportionEstimator
 
 
 # ── Weight tables ─────────────────────────────────────────────────────────────
@@ -71,6 +72,8 @@ class CandidateFusion:
         weights: Optional[Dict[str, float]] = None,
         multi_method_bonus: float = _MULTI_METHOD_BONUS,
         min_confidence: str = "Very Low",
+        bayesian_proportions: bool = False,
+        bayesian_concentration: float = 0.5,
     ):
         """
         Parameters
@@ -83,10 +86,22 @@ class CandidateFusion:
         min_confidence:
             Minimum confidence level to include in the output.
             E.g. ``"Low"`` discards Very Low candidates.
+        bayesian_proportions:
+            When True, use Dirichlet-Bayes weighting instead of equal-split
+            for multi-mapped pairs (Phase 2).  Default: False (Phase 1 compat).
+        bayesian_concentration:
+            Dirichlet concentration parameter α for Bayesian proportion
+            estimation.  Only used when ``bayesian_proportions=True``.
+            Default: 0.5.
         """
         self.weights = weights or _PHASE1_WEIGHTS
         self.multi_method_bonus = multi_method_bonus
         self.min_confidence = min_confidence
+        self.bayesian_proportions = bayesian_proportions
+        self._bayesian_estimator = (
+            BayesianProportionEstimator(concentration=bayesian_concentration)
+            if bayesian_proportions else None
+        )
 
         _order = ["High", "Medium", "Low", "Very Low"]
         self._min_rank = _order.index(min_confidence) if min_confidence in _order else 3
@@ -180,6 +195,10 @@ class CandidateFusion:
 
         # ── Step 3+4: mapping types and proportions ──────────────────────────
         proto_records = self._assign_mapping_types_and_proportions(proto_records)
+
+        # ── Step 5 (Phase 2): Bayesian proportion refinement ─────────────────
+        if self._bayesian_estimator is not None:
+            proto_records = self._bayesian_estimator.estimate(proto_records)
 
         # Sort: highest confidence first, then by score descending
         conf_rank = {"High": 0, "Medium": 1, "Low": 2, "Very Low": 3}

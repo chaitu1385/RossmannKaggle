@@ -386,7 +386,7 @@ pytest tests/ -v
 - [x] SKU mapping: curve-fitting method
 - [x] SKU mapping: temporal co-movement method
 - [x] S-curve and step ramp shapes for transitions
-- [ ] Enhanced proportion estimation (Bayesian)
+- [x] Enhanced proportion estimation (Bayesian)
 - [ ] Production Fabric deployment pipeline
 - [ ] Monitoring & drift detection
 - [ ] REST API / serving layer
@@ -402,6 +402,7 @@ pytest tests/ -v
 | 2026-03-12 | 0.3.0 | Phase 2 — SKU mapping curve-fitting method: `CurveFittingMethod` scores demand transitions via decline/ramp/complementarity/scale signals. `build_phase2_pipeline()` factory added. 13 new tests. |
 | 2026-03-12 | 0.4.0 | Phase 2 — SKU mapping temporal co-movement method: `TemporalCovementMethod` scores demand transitions via correlation/overlap/volume signals. `build_phase2_pipeline()` updated to include all 4 methods. 9 new tests. |
 | 2026-03-12 | 0.5.0 | Phase 2 — S-curve & step ramp shapes: validated `scurve` (Hermite smoothstep) and `step` shapes in TransitionEngine; added VALID_RAMP_SHAPES guard with ValueError for unknown shapes. 17 new tests. |
+| 2026-03-12 | 0.6.0 | Phase 2 — Bayesian proportion estimation: `BayesianProportionEstimator` replaces equal-split fallback for 1-to-Many, Many-to-1, and Many-to-Many mappings using Dirichlet-Bayes formula. Integrated into `CandidateFusion` and `build_phase2_pipeline()`. 11 new tests. |
 
 ---
 

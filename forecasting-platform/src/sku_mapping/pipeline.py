@@ -65,7 +65,7 @@ def build_phase2_pipeline(
     ]
     # _FULL_WEIGHTS covers all 4 methods; fusion auto-normalises to whichever
     # returned candidates for each specific pair.
-    fusion = CandidateFusion(weights=_FULL_WEIGHTS, min_confidence=min_confidence)
+    fusion = CandidateFusion(weights=_FULL_WEIGHTS, min_confidence=min_confidence, bayesian_proportions=True)
     return SKUMappingPipeline(methods=methods, fusion=fusion)
 
 
