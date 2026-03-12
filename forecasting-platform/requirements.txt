@@ -26,3 +26,16 @@ seaborn>=0.11.0
 
 # ── Testing ──────────────────────────────────────────────────────────────────
 pytest>=7.0.0
+
+# ── Spark / Microsoft Fabric layer ──────────────────────────────────────────
+# PySpark (use the version that matches your Fabric Spark runtime)
+pyspark>=3.4.0
+
+# Delta Lake (open-source; Fabric uses the managed Delta runtime automatically)
+# Install only for local development / testing outside Fabric.
+delta-spark>=2.4.0
+
+# Microsoft Fabric / Azure SDK (optional — needed only for REST API calls,
+# token-based auth, or notebookutils alternatives outside Fabric notebooks)
+# azure-identity>=1.15.0
+# azure-storage-file-datalake>=12.14.0

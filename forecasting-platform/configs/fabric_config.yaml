@@ -1,0 +1,80 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Microsoft Fabric / Spark Layer Configuration
+# ═══════════════════════════════════════════════════════════════════════════════
+# This file configures the Fabric/Spark execution layer.
+# Platform forecasting settings (models, hierarchy, backtest) continue to be
+# driven by platform_config.yaml (or an LOB override in configs/lob/).
+#
+# Environment variable overrides:
+#   FABRIC_WORKSPACE      Workspace name or GUID
+#   FABRIC_LAKEHOUSE      Lakehouse name or GUID
+#   FABRIC_ENVIRONMENT    development | staging | production
+
+fabric:
+  # ── Identity ────────────────────────────────────────────────────────────────
+  workspace: ""                        # Set via FABRIC_WORKSPACE or override here
+  lakehouse: ""                        # Set via FABRIC_LAKEHOUSE or override here
+  onelake_host: "onelake.dfs.fabric.microsoft.com"
+  environment: "development"           # development | staging | production
+
+  # ── Storage layout ──────────────────────────────────────────────────────────
+  # All managed Delta tables live under: abfss://<workspace>@<host>/<lakehouse>/Tables/
+  # Unmanaged files live under:          abfss://<workspace>@<host>/<lakehouse>/Files/
+  tables_root: "Tables"
+  files_root: "Files"
+
+  # ── Delta Lake retention ─────────────────────────────────────────────────────
+  enable_delta_log_retention: true
+  delta_log_retention_days: 30
+  delta_data_retention_days: 7
+
+# ── Spark session settings ───────────────────────────────────────────────────
+spark:
+  app_name: "ForecastingPlatform"
+  executor_memory: "8g"
+  executor_cores: 4
+  # Number of shuffle partitions.
+  # Rule of thumb: ~2-3× total executor cores for medium clusters.
+  shuffle_partitions: 400
+  # Parallelism for the per-series pandas_udf fan-out.
+  # Set to number of distinct series (or leave 0 for auto-detect).
+  series_parallelism: 0
+
+# ── Table names ──────────────────────────────────────────────────────────────
+# These are sub-paths under the Lakehouse Tables/ root.
+tables:
+  actuals:         "actuals"
+  product_master:  "product_master"
+  forecasts:       "forecasts"
+  backtest_results: "backtest_results"
+  leaderboard:     "leaderboard"
+  sku_mappings:    "sku_mappings"
+  overrides:       "overrides"
+
+# ── Write strategy ────────────────────────────────────────────────────────────
+write:
+  # "upsert" runs MERGE INTO (idempotent, safe for re-runs).
+  # "overwrite_partition" replaces the (lob, forecast_origin) partition.
+  # "append" adds rows (use only when you are sure there are no duplicates).
+  forecast_mode: "upsert"
+  backtest_mode: "overwrite_partition"
+  # Partition columns for the forecasts table
+  forecast_partition_by:
+    - lob
+    - forecast_origin
+  # Z-ORDER columns for query acceleration
+  forecast_zorder_by:
+    - series_id
+    - week
+
+# ── Feature engineering ───────────────────────────────────────────────────────
+features:
+  lag_periods:      [1, 7, 14, 30]
+  rolling_windows:  [7, 14, 30]
+
+# ── Data sources (used by SparkDataLoader when not reading Delta tables) ──────
+data:
+  # Relative to fabric.files_root
+  actuals_path:        "raw/actuals"
+  product_master_path: "raw/product_master"
+  format: "parquet"    # delta | parquet | csv
