@@ -309,6 +309,13 @@ Planners can manually adjust forecasts at any hierarchy level. Overrides are app
 - Reads/writes Delta tables on OneLake via `lakehouse.py`.
 - `fabric_config.yaml` holds workspace, lakehouse, and table names.
 
+| Module | Purpose |
+|--------|---------|
+| `config.py` | `FabricConfig` — workspace / lakehouse settings |
+| `lakehouse.py` | Read/write Delta tables with time-travel and partition pruning |
+| `delta_writer.py` | Upsert, overwrite-partition, and append write strategies |
+| `deployment.py` | `DeploymentOrchestrator` — end-to-end deploy cycle with audit log |
+
 ### Apache Spark (`src/spark/`)
 
 | Module | Purpose |
@@ -317,7 +324,21 @@ Planners can manually adjust forecasts at any hierarchy level. Overrides are app
 | `utils.py` | Polars ↔ Spark DataFrame conversions via Arrow |
 | `features.py` | Distributed feature engineering |
 
-Spark scripts: `scripts/spark_forecast.py`, `scripts/spark_backtest.py`.
+### Deployment CLI Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/spark_forecast.py` | Distributed production forecast |
+| `scripts/spark_backtest.py` | Distributed walk-forward backtest |
+| `scripts/spark_deploy.py` | **Unified deploy**: pre-flight → backtest → forecast → audit log |
+
+### Deployment Cycle (`DeploymentOrchestrator`)
+
+1. **Pre-flight**: data freshness check (`max_staleness_days`), series count check (`min_series_count`)
+2. **Backtest** (optional): skipped when champion exists and `force_retrain=False`
+3. **Forecast**: champion model fit on full actuals, writes forecasts
+4. **Post-run**: forecast row count check (`min_forecast_rows`)
+5. **Audit log**: `deploy_log` Delta table row per run (`run_id`, `status`, `champion_model`, `n_forecast_rows`, `error`)
 
 ---
 
@@ -387,7 +408,7 @@ pytest tests/ -v
 - [x] SKU mapping: temporal co-movement method
 - [x] S-curve and step ramp shapes for transitions
 - [x] Enhanced proportion estimation (Bayesian)
-- [ ] Production Fabric deployment pipeline
+- [x] Production Fabric deployment pipeline
 - [ ] Monitoring & drift detection
 - [ ] REST API / serving layer
 
@@ -403,6 +424,7 @@ pytest tests/ -v
 | 2026-03-12 | 0.4.0 | Phase 2 — SKU mapping temporal co-movement method: `TemporalCovementMethod` scores demand transitions via correlation/overlap/volume signals. `build_phase2_pipeline()` updated to include all 4 methods. 9 new tests. |
 | 2026-03-12 | 0.5.0 | Phase 2 — S-curve & step ramp shapes: validated `scurve` (Hermite smoothstep) and `step` shapes in TransitionEngine; added VALID_RAMP_SHAPES guard with ValueError for unknown shapes. 17 new tests. |
 | 2026-03-12 | 0.6.0 | Phase 2 — Bayesian proportion estimation: `BayesianProportionEstimator` replaces equal-split fallback for 1-to-Many, Many-to-1, and Many-to-Many mappings using Dirichlet-Bayes formula. Integrated into `CandidateFusion` and `build_phase2_pipeline()`. 11 new tests. |
+| 2026-03-12 | 0.7.0 | Phase 2 — Production Fabric deployment pipeline: `DeploymentOrchestrator` chains backtest→champion→forecast with pre-flight validation (data freshness, series count), post-run checks (forecast row count), and audit logging to `deploy_log` Delta table. New `spark_deploy.py` unified CLI entry point. 12 new tests. |
 
 ---
 

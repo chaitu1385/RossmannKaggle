@@ -897,3 +897,225 @@ class TestEndToEnd:
             assert forecast["forecast"].null_count() == 0
             # 2 series × 13 weeks
             assert len(forecast) == 2 * 13
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DeploymentOrchestrator tests (Phase 2 item 6)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestDeploymentConfig:
+    """Unit tests for DeploymentConfig defaults and field values."""
+
+    def test_defaults(self):
+        from src.fabric.deployment import DeploymentConfig
+        dc = DeploymentConfig()
+        assert dc.lob == "rossmann"
+        assert dc.force_retrain is False
+        assert dc.max_staleness_days == 14
+        assert dc.min_series_count == 1
+        assert dc.min_forecast_rows == 1
+        assert dc.write_mode == "upsert"
+        assert dc.deploy_log_table == "deploy_log"
+
+    def test_custom_values(self):
+        from src.fabric.deployment import DeploymentConfig
+        dc = DeploymentConfig(
+            lob="surface",
+            force_retrain=True,
+            horizon_weeks=52,
+            max_staleness_days=7,
+            min_series_count=10,
+            write_mode="append",
+        )
+        assert dc.lob == "surface"
+        assert dc.force_retrain is True
+        assert dc.horizon_weeks == 52
+        assert dc.max_staleness_days == 7
+        assert dc.min_series_count == 10
+        assert dc.write_mode == "append"
+
+
+class TestDeploymentResult:
+    """Unit tests for DeploymentResult dataclass."""
+
+    def test_defaults(self):
+        from src.fabric.deployment import DeploymentResult
+        r = DeploymentResult(
+            run_id="ABC123",
+            lob="rossmann",
+            run_date="2026-03-12",
+            status="success",
+        )
+        assert r.champion_model == ""
+        assert r.n_forecast_rows == 0
+        assert r.retrained is False
+        assert r.error == ""
+        assert r.preflight_warnings == []
+
+    def test_failed_result(self):
+        from src.fabric.deployment import DeploymentResult
+        r = DeploymentResult(
+            run_id="XYZ",
+            lob="rossmann",
+            run_date="2026-03-12",
+            status="failed",
+            error="Something went wrong",
+        )
+        assert r.status == "failed"
+        assert r.error == "Something went wrong"
+
+
+class TestDeploymentPreflight:
+    """
+    Tests for pre-flight validation in DeploymentOrchestrator.
+
+    Uses a minimal mock Spark and Polars→mock-Spark bridge so that the
+    pre-flight logic can be exercised without a real SparkSession.
+    """
+
+    def _make_mock_spark(self, series_count: int, max_week):
+        """Return a mock SparkSession whose DataFrame supports count/agg/distinct."""
+        import unittest.mock as mock
+
+        spark = mock.MagicMock()
+
+        # mock for actuals_sdf.select("series_id").distinct().count()
+        distinct_df = mock.MagicMock()
+        distinct_df.count.return_value = series_count
+
+        # mock for actuals_sdf.agg(F.max("week")...).collect()[0]["max_week"]
+        agg_row = mock.MagicMock()
+        agg_row.__getitem__ = mock.Mock(return_value=max_week)
+        agg_df = mock.MagicMock()
+        agg_df.collect.return_value = [agg_row]
+
+        actuals_sdf = mock.MagicMock()
+        actuals_sdf.select.return_value.distinct.return_value = distinct_df
+        actuals_sdf.agg.return_value = agg_df
+
+        return spark, actuals_sdf
+
+    def _make_orchestrator(self, spark, series_count=5, max_staleness=7, min_series=1):
+        from src.fabric.deployment import DeploymentConfig, DeploymentOrchestrator
+        from src.config.schema import PlatformConfig, ForecastConfig, BacktestConfig
+
+        config = PlatformConfig(
+            lob="test",
+            forecast=ForecastConfig(horizon_weeks=13, forecasters=["naive_seasonal"]),
+            backtest=BacktestConfig(),
+        )
+        dc = DeploymentConfig(
+            lob="test",
+            max_staleness_days=max_staleness,
+            min_series_count=min_series,
+        )
+        return DeploymentOrchestrator(spark=spark, config=config, deploy_config=dc)
+
+    def _with_pyspark_mock(self):
+        """Context manager that stubs pyspark.sql.functions for tests without Spark."""
+        import unittest.mock as mock
+        import sys
+        # Build a minimal pyspark mock hierarchy in sys.modules
+        pyspark_mock = mock.MagicMock()
+        pyspark_sql_mock = mock.MagicMock()
+        F_mock = mock.MagicMock()
+        F_mock.max = mock.MagicMock(return_value=mock.MagicMock())
+        pyspark_sql_mock.functions = F_mock
+        pyspark_mock.sql = pyspark_sql_mock
+        patches = {
+            "pyspark": pyspark_mock,
+            "pyspark.sql": pyspark_sql_mock,
+            "pyspark.sql.functions": F_mock,
+        }
+        return mock.patch.dict(sys.modules, patches)
+
+    def test_preflight_passes_with_fresh_data(self):
+        """Pre-flight should produce no warnings when data is recent and series count met."""
+        from datetime import date, timedelta
+        max_week = date.today() - timedelta(days=3)
+        spark, actuals_sdf = self._make_mock_spark(series_count=10, max_week=max_week)
+        orch = self._make_orchestrator(spark, max_staleness=14, min_series=5)
+        with self._with_pyspark_mock():
+            warnings = orch._preflight(actuals_sdf)
+        assert warnings == []
+
+    def test_preflight_warns_on_stale_data(self):
+        """Pre-flight should warn when actuals are older than max_staleness_days."""
+        from datetime import date, timedelta
+        max_week = date.today() - timedelta(days=30)
+        spark, actuals_sdf = self._make_mock_spark(series_count=10, max_week=max_week)
+        orch = self._make_orchestrator(spark, max_staleness=14, min_series=1)
+        with self._with_pyspark_mock():
+            warnings = orch._preflight(actuals_sdf)
+        assert any("stale" in w.lower() for w in warnings)
+
+    def test_preflight_warns_on_low_series_count(self):
+        """Pre-flight should warn when series count is below minimum."""
+        from datetime import date, timedelta
+        max_week = date.today() - timedelta(days=2)
+        spark, actuals_sdf = self._make_mock_spark(series_count=2, max_week=max_week)
+        orch = self._make_orchestrator(spark, max_staleness=0, min_series=10)
+        warnings = orch._preflight(actuals_sdf)
+        assert any("2" in w for w in warnings)
+
+    def test_preflight_skip_freshness_when_zero(self):
+        """max_staleness_days=0 should skip the freshness check entirely."""
+        from datetime import date, timedelta
+        max_week = date.today() - timedelta(days=365)   # very stale
+        spark, actuals_sdf = self._make_mock_spark(series_count=5, max_week=max_week)
+        orch = self._make_orchestrator(spark, max_staleness=0, min_series=1)
+        warnings = orch._preflight(actuals_sdf)
+        # No freshness warning since max_staleness_days=0
+        assert not any("stale" in w.lower() for w in warnings)
+
+    def test_preflight_skip_series_check_when_zero(self):
+        """min_series_count=0 should skip the series count check entirely."""
+        from datetime import date, timedelta
+        max_week = date.today() - timedelta(days=1)
+        spark, actuals_sdf = self._make_mock_spark(series_count=0, max_week=max_week)
+        orch = self._make_orchestrator(spark, max_staleness=0, min_series=0)
+        warnings = orch._preflight(actuals_sdf)
+        assert warnings == []
+
+
+class TestDeploymentPostRun:
+    """Tests for post-run check in DeploymentOrchestrator."""
+
+    def _make_orch(self, min_forecast_rows=1):
+        import unittest.mock as mock
+        from src.fabric.deployment import DeploymentConfig, DeploymentOrchestrator
+        from src.config.schema import PlatformConfig, ForecastConfig, BacktestConfig
+
+        config = PlatformConfig(
+            lob="test",
+            forecast=ForecastConfig(horizon_weeks=13, forecasters=["naive_seasonal"]),
+            backtest=BacktestConfig(),
+        )
+        dc = DeploymentConfig(lob="test", min_forecast_rows=min_forecast_rows)
+        spark = mock.MagicMock()
+        return DeploymentOrchestrator(spark=spark, config=config, deploy_config=dc)
+
+    def test_postrun_passes_when_rows_met(self):
+        import unittest.mock as mock
+        orch = self._make_orch(min_forecast_rows=10)
+        forecasts_sdf = mock.MagicMock()
+        forecasts_sdf.count.return_value = 100
+        n = orch._postrun_check(forecasts_sdf)
+        assert n == 100
+
+    def test_postrun_raises_when_rows_insufficient(self):
+        import unittest.mock as mock
+        import pytest
+        orch = self._make_orch(min_forecast_rows=50)
+        forecasts_sdf = mock.MagicMock()
+        forecasts_sdf.count.return_value = 10
+        with pytest.raises(RuntimeError, match="Post-run check failed"):
+            orch._postrun_check(forecasts_sdf)
+
+    def test_postrun_skipped_when_zero(self):
+        import unittest.mock as mock
+        orch = self._make_orch(min_forecast_rows=0)
+        forecasts_sdf = mock.MagicMock()
+        forecasts_sdf.count.return_value = 0   # would fail if check were active
+        n = orch._postrun_check(forecasts_sdf)
+        assert n == 0
