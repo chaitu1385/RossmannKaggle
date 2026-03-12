@@ -183,7 +183,9 @@ Three dimensions supported out-of-the-box:
 | Bottom-up | ✅ Phase 1 |
 | Top-down | ✅ Phase 1 |
 | Middle-out | ✅ Phase 1 |
-| MinT (OLS/WLS) | 🔲 Phase 2 |
+| OLS | ✅ Phase 2 |
+| WLS | ✅ Phase 2 |
+| MinT (Ledoit-Wolf shrinkage) | ✅ Phase 2 |
 
 ---
 
@@ -380,7 +382,7 @@ pytest tests/ -v
 
 ### Phase 2 — Production Hardening
 
-- [ ] MinT reconciliation (OLS / WLS)
+- [x] MinT reconciliation (OLS / WLS)
 - [ ] SKU mapping: curve-fitting method
 - [ ] SKU mapping: temporal co-movement method
 - [ ] S-curve and step ramp shapes for transitions
@@ -396,6 +398,7 @@ pytest tests/ -v
 | Date | Version | Summary |
 |------|---------|---------|
 | 2026-03-12 | 0.1.0 | Initial spec written. Phase 1 MVP complete: forecasting engine, backtesting, hierarchy, SKU mapping (2 methods), product transitions, Fabric/Spark integration. |
+| 2026-03-12 | 0.2.0 | Phase 2 — MinT reconciliation: added OLS, WLS, and MinT (Ledoit-Wolf shrinkage) methods to `reconciler.py`. 7 new tests. |
 
 ---
 
