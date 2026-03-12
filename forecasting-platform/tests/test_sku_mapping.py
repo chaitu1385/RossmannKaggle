@@ -477,3 +477,215 @@ class TestPipelineEndToEnd:
                 f"Proportions for {row['old_sku']!r} sum to "
                 f"{row['total_proportion']:.4f}, expected 1.0"
             )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 2: Curve-fitting method tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+from src.sku_mapping.methods.curve_fitting import CurveFittingMethod
+from src.sku_mapping.pipeline import build_phase2_pipeline
+
+
+def _make_sales_df(
+    sku_sales: dict,          # {sku_id: list_of_weekly_sales}
+    start: date = date(2023, 1, 2),
+) -> pl.DataFrame:
+    """Build a weekly sales DataFrame for testing."""
+    from datetime import timedelta
+    rows = []
+    for sku_id, sales in sku_sales.items():
+        for i, qty in enumerate(sales):
+            rows.append({
+                "sku_id": sku_id,
+                "week": start + timedelta(weeks=i),
+                "quantity": float(qty),
+            })
+    return pl.DataFrame(rows)
+
+
+def _curve_pm(old_launch, new_launch) -> pl.DataFrame:
+    """Minimal product master with one old and one new SKU."""
+    return _minimal_pm(
+        {
+            "sku_id": "OLD-1", "sku_description": "Widget Gen1",
+            "product_family": "Widget", "product_category": "Electronics",
+            "form_factor": "Standard", "price_tier": "Mid",
+            "country": ["US"], "segment": "Consumer",
+            "launch_date": old_launch, "eol_date": new_launch,
+            "status": "Discontinued",
+        },
+        {
+            "sku_id": "NEW-1", "sku_description": "Widget Gen2",
+            "product_family": "Widget", "product_category": "Electronics",
+            "form_factor": "Standard", "price_tier": "Mid",
+            "country": ["US"], "segment": "Consumer",
+            "launch_date": new_launch, "eol_date": None,
+            "status": "Active",
+        },
+    )
+
+
+class TestCurveFittingMethod:
+    """Phase 2: demand curve-fitting SKU discovery tests."""
+
+    def test_no_sales_data_returns_empty(self):
+        pm = _curve_pm(date(2023, 1, 1), date(2023, 7, 1))
+        method = CurveFittingMethod(sales_df=None)
+        assert method.run(pm) == []
+
+    def test_empty_sales_df_returns_empty(self):
+        empty = pl.DataFrame({"sku_id": [], "week": [], "quantity": []}).cast({
+            "week": pl.Date, "quantity": pl.Float64
+        })
+        method = CurveFittingMethod(sales_df=empty)
+        assert method.run(pm := _curve_pm(date(2023, 1, 1), date(2023, 7, 1))) == []
+
+    def test_detects_clean_transition(self):
+        """
+        Old SKU declining + new SKU ramping up → should find a candidate.
+        """
+        new_launch = date(2023, 7, 3)   # week 26
+        # Old SKU: 52 weeks of data — first 26 weeks high, then declining
+        old_sales = [100.0] * 26 + [100 - i * 6 for i in range(1, 14)]
+        # New SKU: starts at new_launch, ramps up
+        new_sales = [i * 8 for i in range(1, 14)]
+
+        sales_df = _make_sales_df({
+            "OLD-1": old_sales,
+            "NEW-1": [0.0] * 26 + new_sales,
+        })
+
+        pm = _curve_pm(date(2023, 1, 2), new_launch)
+        method = CurveFittingMethod(sales_df=sales_df, window_weeks=13, min_data_points=4)
+        candidates = method.run(pm)
+
+        assert len(candidates) == 1
+        c = candidates[0]
+        assert c.old_sku == "OLD-1"
+        assert c.new_sku == "NEW-1"
+        assert c.method == "curve"
+        assert 0.0 < c.method_score <= 1.0
+
+    def test_decline_score_positive_for_falling_old_sku(self):
+        """Old SKU that strictly declines post-launch should get decline_score > 0."""
+        new_launch = date(2023, 7, 3)
+        old_sales = [100.0] * 26 + [90, 80, 70, 60, 50, 40, 30, 20, 10, 5, 3, 2, 1]
+        new_sales = [0.0] * 26 + [10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 97, 98, 99]
+
+        sales_df = _make_sales_df({"OLD-1": old_sales, "NEW-1": new_sales})
+        pm = _curve_pm(date(2023, 1, 2), new_launch)
+        method = CurveFittingMethod(sales_df=sales_df, window_weeks=13)
+        candidates = method.run(pm)
+
+        assert len(candidates) == 1
+        assert candidates[0].metadata["decline_score"] > 0
+
+    def test_ramp_score_positive_for_growing_new_sku(self):
+        """New SKU that strictly grows should get ramp_score > 0."""
+        new_launch = date(2023, 7, 3)
+        old_sales = [100.0] * 26 + [80, 60, 40, 30, 20, 10, 8, 6, 4, 3, 2, 1, 0]
+        new_sales = [0.0] * 26 + [10, 20, 35, 50, 65, 78, 86, 91, 95, 97, 98, 99, 100]
+
+        sales_df = _make_sales_df({"OLD-1": old_sales, "NEW-1": new_sales})
+        pm = _curve_pm(date(2023, 1, 2), new_launch)
+        method = CurveFittingMethod(sales_df=sales_df, window_weeks=13)
+        candidates = method.run(pm)
+
+        assert len(candidates) == 1
+        assert candidates[0].metadata["ramp_score"] > 0
+
+    def test_insufficient_post_window_data_returns_no_candidate(self):
+        """If old SKU has fewer than min_data_points post-launch, no candidate."""
+        new_launch = date(2023, 7, 3)
+        # Only 2 post-launch data points for old SKU
+        old_sales = [100.0] * 26 + [80.0, 60.0]
+        new_sales = [0.0] * 26 + [20.0, 40.0]
+
+        sales_df = _make_sales_df({"OLD-1": old_sales, "NEW-1": new_sales})
+        pm = _curve_pm(date(2023, 1, 2), new_launch)
+        method = CurveFittingMethod(sales_df=sales_df, min_data_points=4)
+        # With only 2 points and min=4, should return nothing
+        candidates = method.run(pm)
+        assert candidates == []
+
+    def test_missing_sku_in_sales_skipped(self):
+        """If one of the SKUs is not in the sales data, the pair is skipped."""
+        new_launch = date(2023, 7, 3)
+        old_sales = [100.0] * 39
+        # NEW-1 not in sales_df at all
+        sales_df = _make_sales_df({"OLD-1": old_sales})
+        pm = _curve_pm(date(2023, 1, 2), new_launch)
+        method = CurveFittingMethod(sales_df=sales_df)
+        assert method.run(pm) == []
+
+    def test_method_name_is_curve(self):
+        method = CurveFittingMethod()
+        assert method.name == "curve"
+
+    def test_metadata_keys_present(self):
+        """All expected metadata keys are present in the candidate."""
+        new_launch = date(2023, 7, 3)
+        old_sales = [100.0] * 26 + [90, 80, 70, 60, 50, 40, 30, 20, 10, 5, 3, 2, 1]
+        new_sales = [0.0] * 26 + [10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 97, 98, 99]
+        sales_df = _make_sales_df({"OLD-1": old_sales, "NEW-1": new_sales})
+        pm = _curve_pm(date(2023, 1, 2), new_launch)
+        method = CurveFittingMethod(sales_df=sales_df, window_weeks=13)
+        candidates = method.run(pm)
+        assert len(candidates) == 1
+        meta = candidates[0].metadata
+        for key in ("decline_score", "ramp_score", "complement_score", "scale_score",
+                    "old_pre_weeks", "old_post_weeks", "new_post_weeks"):
+            assert key in meta, f"Missing metadata key: {key}"
+
+    def test_flat_old_sku_gets_low_decline_score(self):
+        """An old SKU with flat sales should not get a high decline score."""
+        new_launch = date(2023, 7, 3)
+        old_sales = [100.0] * 39   # flat throughout
+        new_sales = [0.0] * 26 + [10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 97, 98, 99]
+        sales_df = _make_sales_df({"OLD-1": old_sales, "NEW-1": new_sales})
+        pm = _curve_pm(date(2023, 1, 2), new_launch)
+        method = CurveFittingMethod(sales_df=sales_df, window_weeks=13)
+        candidates = method.run(pm)
+        if candidates:
+            assert candidates[0].metadata["decline_score"] < 0.3
+
+
+class TestPhase2Pipeline:
+    """Phase 2 pipeline smoke tests (curve-fitting integrated)."""
+
+    def test_build_phase2_pipeline_no_sales(self):
+        """Phase 2 pipeline without sales data behaves like Phase 1."""
+        pipeline = build_phase2_pipeline(sales_df=None, min_confidence="Low")
+        pm = generate_product_master()
+        df = pipeline.run(pm)
+        assert isinstance(df, pl.DataFrame)
+
+    def test_build_phase2_pipeline_with_sales(self):
+        """Phase 2 pipeline with sales data runs end-to-end without error."""
+        pm = generate_product_master()
+
+        # Build a simple sales dataset for all SKUs
+        from datetime import timedelta
+        import random
+        random.seed(0)
+        rows = []
+        start = date(2022, 1, 3)
+        for sku_row in pm.iter_rows(named=True):
+            for w in range(52):
+                rows.append({
+                    "sku_id": sku_row["sku_id"],
+                    "week": start + timedelta(weeks=w),
+                    "quantity": float(random.randint(10, 200)),
+                })
+        sales_df = pl.DataFrame(rows)
+
+        pipeline = build_phase2_pipeline(sales_df=sales_df, min_confidence="Low")
+        df = pipeline.run(pm)
+        assert isinstance(df, pl.DataFrame)
+
+    def test_phase2_pipeline_has_three_methods(self):
+        pipeline = build_phase2_pipeline()
+        assert len(pipeline.methods) == 3
+        names = {m.name for m in pipeline.methods}
+        assert names == {"attribute", "naming", "curve"}
