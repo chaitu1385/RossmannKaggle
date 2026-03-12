@@ -587,6 +587,166 @@ class TestTransitionEngine:
         assert len(new_series) == 4  # 2 old + 2 new
 
 
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 2: S-curve and step ramp shape tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _make_ramp_actuals(n_weeks: int = 26, quantity: float = 100.0) -> pl.DataFrame:
+    """Uniform weekly sales over n_weeks for one SKU."""
+    start = date(2024, 1, 1)
+    return pl.DataFrame({
+        "series_id": ["SKU-A"] * n_weeks,
+        "week": [start + timedelta(weeks=i) for i in range(n_weeks)],
+        "quantity": [quantity] * n_weeks,
+    })
+
+
+def _ramp_values(shape: str, n_during: int = 13, direction: str = "up") -> list:
+    """
+    Simulate what _apply_ramp_weights produces for a uniform series by running
+    the engine on a controlled DataFrame.
+    """
+    from src.config.schema import TransitionConfig
+    from src.series.transition import TransitionEngine, TransitionPlan, TransitionScenario
+
+    start = date(2024, 1, 1)
+    ramp_start = start + timedelta(weeks=0)
+    ramp_end   = start + timedelta(weeks=n_during - 1)
+
+    df = pl.DataFrame({
+        "series_id": ["SKU-A"] * n_during,
+        "week": [start + timedelta(weeks=i) for i in range(n_during)],
+        "quantity": [100.0] * n_during,
+    })
+
+    config = TransitionConfig(ramp_shape=shape)
+    engine = TransitionEngine(config)
+    plan = TransitionPlan(
+        old_sku="SKU-A", new_sku="SKU-B",
+        scenario=TransitionScenario.B_IN_HORIZON,
+        proportion=1.0,
+        ramp_start=ramp_start,
+        ramp_end=ramp_end,
+        ramp_shape=shape,
+    )
+    result = engine._apply_ramp_weights(df, plan, "week", "quantity", direction)
+    return result.sort("week")["quantity"].to_list()
+
+
+class TestRampShapes:
+    """Phase 2: S-curve and step ramp shape tests."""
+
+    def test_linear_ramp_up_is_monotone(self):
+        vals = _ramp_values("linear", direction="up")
+        for i in range(len(vals) - 1):
+            assert vals[i] <= vals[i + 1] + 1e-6
+
+    def test_linear_ramp_down_is_monotone(self):
+        vals = _ramp_values("linear", direction="down")
+        for i in range(len(vals) - 1):
+            assert vals[i] >= vals[i + 1] - 1e-6
+
+    def test_scurve_ramp_up_starts_near_zero(self):
+        vals = _ramp_values("scurve", direction="up")
+        assert vals[0] < 10.0
+
+    def test_scurve_ramp_up_ends_near_full(self):
+        vals = _ramp_values("scurve", direction="up")
+        assert vals[-1] > 90.0
+
+    def test_scurve_ramp_up_is_monotone(self):
+        vals = _ramp_values("scurve", direction="up")
+        for i in range(len(vals) - 1):
+            assert vals[i] <= vals[i + 1] + 1e-6
+
+    def test_scurve_midpoint_approximately_half(self):
+        vals = _ramp_values("scurve", n_during=13, direction="up")
+        mid = vals[len(vals) // 2]
+        assert 35.0 < mid < 65.0
+
+    def test_scurve_slower_at_edges_than_linear(self):
+        linear_vals = _ramp_values("linear", direction="up")
+        scurve_vals = _ramp_values("scurve", direction="up")
+        n_third = len(linear_vals) // 3
+        assert scurve_vals[n_third] < linear_vals[n_third]
+
+    def test_scurve_ramp_down_starts_near_full(self):
+        vals = _ramp_values("scurve", direction="down")
+        assert vals[0] > 90.0
+
+    def test_scurve_ramp_down_ends_near_zero(self):
+        vals = _ramp_values("scurve", direction="down")
+        assert vals[-1] < 10.0
+
+    def test_scurve_ramp_down_is_monotone(self):
+        vals = _ramp_values("scurve", direction="down")
+        for i in range(len(vals) - 1):
+            assert vals[i] >= vals[i + 1] - 1e-6
+
+    def test_step_ramp_up_first_half_is_zero(self):
+        vals = _ramp_values("step", n_during=13, direction="up")
+        first_half = vals[: len(vals) // 2]
+        assert all(v == 0.0 for v in first_half)
+
+    def test_step_ramp_up_second_half_is_full(self):
+        vals = _ramp_values("step", n_during=13, direction="up")
+        second_half = vals[len(vals) // 2 :]
+        assert all(v == 100.0 for v in second_half)
+
+    def test_step_ramp_down_first_half_is_full(self):
+        vals = _ramp_values("step", n_during=13, direction="down")
+        first_half = vals[: len(vals) // 2]
+        assert all(v == 100.0 for v in first_half)
+
+    def test_step_ramp_down_second_half_is_zero(self):
+        vals = _ramp_values("step", n_during=13, direction="down")
+        second_half = vals[len(vals) // 2 :]
+        assert all(v == 0.0 for v in second_half)
+
+    def test_invalid_ramp_shape_raises(self):
+        from src.config.schema import TransitionConfig
+        from src.series.transition import TransitionEngine
+        with pytest.raises(ValueError, match="ramp_shape"):
+            TransitionEngine(TransitionConfig(ramp_shape="banana"))
+
+    def test_all_shapes_start_low_end_high_for_ramp_up(self):
+        for shape in ("linear", "scurve", "step"):
+            vals = _ramp_values(shape, direction="up")
+            assert vals[0] <= 50.0, f"{shape}: first val {vals[0]} too high"
+            assert vals[-1] >= 50.0, f"{shape}: last val {vals[-1]} too low"
+
+    def test_scurve_stitch_scenario_b_smoke(self):
+        from src.config.schema import TransitionConfig
+        from src.series.transition import TransitionEngine, TransitionPlan, TransitionScenario
+
+        ramp_start = date(2024, 6, 1)
+        ramp_end   = date(2024, 8, 24)
+
+        actuals = pl.DataFrame({
+            "series_id": (["OLD-1"] * 26 + ["NEW-1"] * 13),
+            "week": (
+                [date(2024, 1, 1) + timedelta(weeks=i) for i in range(26)]
+                + [ramp_start + timedelta(weeks=i) for i in range(13)]
+            ),
+            "quantity": [100.0] * 39,
+        })
+
+        plan = TransitionPlan(
+            old_sku="OLD-1", new_sku="NEW-1",
+            scenario=TransitionScenario.B_IN_HORIZON,
+            proportion=1.0,
+            ramp_start=ramp_start,
+            ramp_end=ramp_end,
+            ramp_shape="scurve",
+        )
+        engine = TransitionEngine(TransitionConfig(ramp_shape="scurve"))
+        result = engine.stitch_series(actuals, [plan])
+        assert isinstance(result, pl.DataFrame)
+        assert len(result) > 0
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Forecaster tests
 # ═══════════════════════════════════════════════════════════════════════════════
