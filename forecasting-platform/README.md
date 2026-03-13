@@ -188,7 +188,7 @@ All thresholds configurable at construction. `exception_summary()` groups by ser
 
 | Class | Description |
 |-------|-------------|
-| `OverrideStore` | DuckDB-backed store for planner manual overrides; `add_override()`, `get_overrides()`, `delete_override()` |
+| `OverrideStore` | DuckDB-backed store for planner **transition overrides** (old_sku → new_sku proportion, scenario, ramp shape); `add_override()`, `get_overrides()`, `delete_override()` |
 
 ### `src/sku_mapping/` — New / Discontinued SKU Mapping
 
@@ -321,26 +321,31 @@ BIExporter().export_forecast_vs_actual(reconciled, actuals_df, lob="retail")
 
 ```yaml
 lob: retail
-horizon_weeks: 13
-season_length: 52
 
-models:
-  - type: lgbm
-  - type: naive
-  - type: ensemble
+forecast:
+  horizon_weeks: 39          # default; override per LOB
+  forecasters: [lgbm_direct, auto_ets, seasonal_naive]
+  quantiles: [0.1, 0.5, 0.9]
+  sparse_detection: true
+  intermittent_forecasters: [croston_sba, tsb]
 
 backtest:
-  n_folds: 4
-  horizon_weeks: 13
-  step_weeks: 13
+  n_folds: 3
+  val_weeks: 13
+  gap_weeks: 0
+  champion_granularity: lob  # lob | product_group | series
+  selection_strategy: champion   # champion | weighted_ensemble
 
-reconciliation:
-  method: mint    # bottom_up | top_down | middle_out | ols | wls | mint
-  non_negative: true
+hierarchies:
+  - name: product
+    levels: [total, category, sku]
+    reconciliation:
+      method: mint    # bottom_up | top_down | middle_out | ols | wls | mint
 
 transition:
-  transition_window_weeks: 8
-  ramp_shape: scurve   # linear | scurve | step
+  transition_window_weeks: 13
+  ramp_shape: linear   # linear | scurve | step
+  enable_overrides: true
 ```
 
 ---

@@ -168,10 +168,17 @@ class XGBoostDirectForecaster(_DirectMLBase)
 ```
 
 Both share `_DirectMLBase` which provides:
-- `fit()` using `mlforecast` or manual lag construction
+- `fit()` using `mlforecast` or manual lag construction (fallback)
 - `predict()` for point forecasts
-- `predict_quantiles()` using quantile regression or residual bootstrap
-- Configurable `lag_weeks`, `rolling_windows`, `horizon`
+- `predict_quantiles()` via quantile regression learner or empirical YoY residual bootstrap
+- Default lags: `[1, 2, 4, 8, 13, 26, 52]`; date features: week, month, quarter
+
+Default hyperparameters:
+
+| Model | n_estimators | learning_rate | num_leaves / max_depth |
+|-------|-------------|--------------|----------------------|
+| `LGBMDirectForecaster` | 200 | 0.05 | num_leaves=31 |
+| `XGBoostDirectForecaster` | 200 | 0.05 | max_depth=6 |
 
 ### 4.4 Foundation Models (`foundation.py`)
 
@@ -314,12 +321,12 @@ result = reconciler.reconcile(
 `WalkForwardCV` generates expanding-window folds:
 
 ```
-Fold 1: train=[0..T₁],   test=[T₁..T₁+H]
-Fold 2: train=[0..T₂],   test=[T₂..T₂+H]
+Fold 1: train=[0..T₁],   val=[T₁..T₁+val_weeks]
+Fold 2: train=[0..T₂],   val=[T₂..T₂+val_weeks]
 ...
 ```
 
-Config: `n_folds`, `horizon_weeks`, `min_train_weeks`, `step_weeks`.
+Config: `n_folds=3`, `val_weeks=13`, `gap_weeks=0` (gap between train end and val start).
 
 ### 7.2 BacktestEngine
 
@@ -335,12 +342,16 @@ results = engine.run(models=[lgbm, naive], data=panel_df)
 
 ```python
 selector = ChampionSelector(config)
-champion_id = selector.select(metric_store)
-# Ranks by mean WMAPE across all folds and series (ascending).
-# Tie-break: normalized_bias closest to 0.
+champions = selector.select(backtest_results, granularity_col=None)
+# Granularity (from config.champion_granularity or granularity_col override):
+#   "lob"           → one champion for the entire LOB (default)
+#   "product_group" → one champion per product group
+#   "series"        → one champion per individual series
+#   None/global     → single champion across everything
+# Ranks by primary_metric ascending (wmape); tie-break: secondary_metric (normalized_bias) abs closest to 0.
 
-weights = selector.compute_ensemble_weights(metric_store)
-# Returns softmax-normalised inverse-WMAPE weights for ensemble construction.
+weights = selector.compute_ensemble_weights(backtest_results)
+# Returns inverse-WMAPE weights for WeightedEnsembleForecaster construction.
 ```
 
 ---
@@ -583,21 +594,63 @@ Schema: `run_date`, `lob`, `model_id`, `selection_strategy`, `n_series`, `horizo
 
 ## 10. Planner Override Store
 
+`OverrideStore` persists planner-driven **product transition overrides** — corrections to the automated SKU mapping decisions (proportion, scenario, ramp shape). Backed by DuckDB (zero-server, file-based, Arrow-native); falls back to CSV if `duckdb` is not installed.
+
 ```python
 store = OverrideStore("data/overrides.duckdb")
-store.add_override(series_id, lob, week, override_value, override_type,
-                   reason="", created_by="")
-store.get_overrides(lob=None, series_id=None, week=None) -> pl.DataFrame
+store.add_override(
+    old_sku, new_sku, proportion, scenario,
+    ramp_shape="linear", effective_date=None,
+    created_by="", notes=""
+) -> override_id
+
+store.get_overrides(old_sku=None, new_sku=None) -> pl.DataFrame
 store.get_all() -> pl.DataFrame
 store.delete_override(override_id) -> bool
 store.close()
 ```
 
-`override_type`: `"absolute"` (replace forecast with value) or `"percent_change"` (multiply by `1 + value/100`).
+Table schema (`transition_overrides`):
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `override_id` | VARCHAR PK | UUID |
+| `old_sku` | VARCHAR | Outgoing SKU |
+| `new_sku` | VARCHAR | Incoming SKU |
+| `effective_date` | DATE | When the override takes effect |
+| `scenario` | VARCHAR | Force `A`, `B`, `C`, or `manual` |
+| `proportion` | DOUBLE | Demand proportion for new SKU |
+| `ramp_shape` | VARCHAR | `linear` \| `scurve` \| `step` |
+| `created_by` | VARCHAR | Planner identifier |
+| `created_at` | TIMESTAMP | Auto-set |
+| `notes` | VARCHAR | Free-text justification |
+
+Overrides win unconditionally in `TransitionEngine.compute_plans()` — any (old_sku, new_sku) pair with a stored override is assigned `TransitionScenario.MANUAL`.
 
 ---
 
 ## 11. SKU Mapping
+
+### 11.0 Pipeline Factory
+
+```python
+# Phase 1: attribute + naming methods only (no sales data required)
+pipeline = build_phase1_pipeline(
+    launch_window_days=365, min_base_similarity=0.3, min_confidence=0.4
+)
+
+# Phase 2: adds curve fitting + temporal comovement (requires sales data)
+pipeline = build_phase2_pipeline(
+    sales_df=weekly_sales_df,
+    launch_window_days=365, min_base_similarity=0.3,
+    min_confidence=0.4, window_weeks=26
+)
+
+mapping_df = pipeline.run(product_master_df, output_path="data/sku_mapping/")
+mapping_df = pipeline.run_from_csv("data/product_master.csv", output_path="data/sku_mapping/")
+```
+
+`SKUMappingPipeline(methods, fusion, writer)` — runs all methods, fuses candidates, writes output.
 
 ### 11.1 Mapping Methods
 
@@ -767,47 +820,55 @@ spark = get_or_create_spark(app_name="ForecastingPlatform", config_overrides={})
 
 ```yaml
 lob: retail
-horizon_weeks: 13
-season_length: 52
-min_train_weeks: 104
 
-models:
-  - type: lgbm
-    lag_weeks: [1, 2, 4, 8, 13, 26, 52]
-    rolling_windows: [4, 13, 26]
-  - type: naive
-  - type: ensemble
-    weights: [0.7, 0.3]
-    quantiles: [0.1, 0.5, 0.9]
+forecast:
+  horizon_weeks: 39          # 9 months (default); override per LOB
+  frequency: W
+  target_column: quantity
+  time_column: week
+  series_id_column: series_id
+  forecasters: [lgbm_direct, auto_ets, seasonal_naive]
+  quantiles: [0.1, 0.5, 0.9]
+  sparse_detection: true
+  sparse_adi_threshold: 1.32
+  sparse_cv2_threshold: 0.49
+  intermittent_forecasters: [croston_sba, tsb]
 
 backtest:
-  n_folds: 4
-  horizon_weeks: 13
-  step_weeks: 13
-  min_train_weeks: 104
+  n_folds: 3
+  val_weeks: 13              # each fold validates on 13 weeks
+  gap_weeks: 0               # gap between train end and val start
+  champion_granularity: lob  # lob | product_group | series
+  primary_metric: wmape
+  secondary_metric: normalized_bias
+  selection_strategy: champion   # champion | weighted_ensemble
 
 hierarchies:
   - name: product
+    id_column: series_id
     levels:
       - name: total
       - name: category
-      - name: sku     # leaf
+      - name: sku     # leaf level
     reconciliation:
       method: mint      # bottom_up | top_down | middle_out | ols | wls | mint
-      non_negative: true
 
 transition:
-  transition_window_weeks: 8
-  ramp_shape: scurve    # linear | scurve | step
+  transition_window_weeks: 13
+  ramp_shape: linear    # linear | scurve | step
+  enable_overrides: true
+  override_store_path: data/overrides.duckdb
 
 output:
-  forecast_dir: data/forecasts/
-  metrics_dir: data/metrics/
-  bi_export_dir: data/bi_exports/
+  grain: lob
+  forecast_path: data/forecasts/
+  metrics_path: data/metrics/
+  bi_export_path: data/bi_exports/
+  format: parquet
 ```
 
 Loaded via `load_config(path)` or `load_config_with_overrides(base_path, override_path)`.
-All nested dicts deep-merged; override values take precedence.
+All nested dicts deep-merged; LOB override values take precedence over base config.
 
 ---
 
