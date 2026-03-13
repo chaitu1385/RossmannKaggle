@@ -2,30 +2,42 @@
 Hierarchy forecast reconciliation.
 
 Ensures forecasts at different hierarchy levels are consistent (coherent).
-Supports Bottom-Up, Top-Down, Middle-Out, and MinT/OLS/WLS methods.
 
-Phase 1: Bottom-Up, Top-Down, Middle-Out.
-Phase 2: MinT (Minimum Trace), OLS, WLS.
+Supported methods
+-----------------
+bottom_up   — leaf forecasts are authoritative; aggregate by summing.
+top_down    — top-level forecast disaggregated by historical proportions.
+middle_out  — mid-level forecast disaggregated down and aggregated up.
+ols         — Optimal reconciliation with identity error covariance (W = I).
+wls         — Weighted Least Squares; uses structural weights (1/n_leaves)
+              by default, or per-series residual variance when residuals are
+              supplied.
+mint        — Minimum Trace reconciliation (Wickramasuriya et al., 2019).
+              Uses Ledoit–Wolf diagonal shrinkage covariance when residuals
+              are supplied; falls back to WLS-structural otherwise.
 
-MinT Theory
------------
-Given base (unreconciled) forecasts ŷ stacked over all hierarchy levels and a
-summing matrix S (shape n_nodes × n_leaves, where S[i,j]=1 if leaf j rolls up
-into node i), the MinT reconciled leaf forecasts are:
+OLS / WLS / MinT mathematics
+-----------------------------
+Given:
+  S   — summing matrix (n_all × n_leaves);  S[i,j]=1 if leaf j ∈ subtree(i)
+  P̂  — base forecast matrix (n_all × T), one column per time period
+  W   — error covariance matrix (n_all × n_all)
 
-    ỹ = P ŷ     where  P = (S' W⁻¹ S)⁻¹ S' W⁻¹
+Reconciled leaf forecasts:
+  P̃_leaf = G · P̂
+  G = (S′W⁻¹S)⁻¹ S′W⁻¹           (projects onto the coherent subspace)
 
-W is the covariance matrix of forecast errors:
-- OLS:  W = I  (identity — equal uncertainty at every level)
-- WLS:  W = diag(σ²)  (per-series variance, estimated from residuals or actuals)
-- MinT: W = full covariance with Ledoit-Wolf diagonal shrinkage
+For OLS,  W = I   → G = (S′S)⁻¹ S′
+For WLS,  W = diag(w_i)
+For MinT, W = Ŵ_shrink (Ledoit-Wolf diagonal shrinkage)
 
-All-level reconciled forecasts follow from S ỹ.
-
-References
-----------
-Wickramasuriya et al. (2019). "Optimal Forecast Reconciliation Using a Unifying
-Framework for the ETS-ARIMA State Space Model." JASA.
+Base-forecast construction
+--------------------------
+``forecasts`` is keyed by hierarchy level name.  For nodes whose level is
+not present, base forecasts are computed bottom-up (S @ P̂_leaf).  When
+independent upper-level forecasters are available (e.g. a market-level
+model alongside SKU models), pass them in the dict and they will be used
+directly, making the reconciliation genuinely "optimal".
 """
 
 from typing import Dict, List, Optional
@@ -42,8 +54,8 @@ class Reconciler:
     """
     Reconcile forecasts across hierarchy levels.
 
-    After reconciliation, forecasts at every level of the hierarchy are
-    consistent: the sum of children equals the parent at every node.
+    After reconciliation, forecasts at every level are coherent:
+    the sum of children equals the parent at every node.
     """
 
     _METHODS = {"bottom_up", "top_down", "middle_out", "mint", "ols", "wls"}
@@ -53,14 +65,6 @@ class Reconciler:
         trees: Dict[str, HierarchyTree],
         config: ReconciliationConfig,
     ):
-        """
-        Parameters
-        ----------
-        trees:
-            Hierarchy trees by dimension name (e.g. {"product": ..., "geography": ...}).
-        config:
-            Reconciliation settings from platform config.
-        """
         self.trees = trees
         self.config = config
         self._aggregators = {
@@ -74,10 +78,15 @@ class Reconciler:
                 f"Supported: {self._METHODS}"
             )
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Public entry point
+    # ─────────────────────────────────────────────────────────────────────────
+
     def reconcile(
         self,
         forecasts: Dict[str, pl.DataFrame],
         actuals: Optional[pl.DataFrame] = None,
+        residuals: Optional[pl.DataFrame] = None,
         value_columns: Optional[List[str]] = None,
         time_column: str = "week",
     ) -> pl.DataFrame:
@@ -87,20 +96,29 @@ class Reconciler:
         Parameters
         ----------
         forecasts:
-            Keyed by the hierarchy level name at which the forecast was
-            produced.  Each DataFrame must contain the level column, the
-            time column, and the value columns.
+            Keyed by hierarchy level name.  Each DataFrame must contain:
+            - a column named after the level (node key),
+            - ``time_column``,
+            - the ``value_columns``.
         actuals:
-            Historical actuals at the leaf level (needed for top-down
-            proportions and MinT).
+            Historical actuals at leaf level — needed by top_down and
+            middle_out to compute disaggregation proportions.
+        residuals:
+            In-sample forecast residuals for WLS/MinT.  Expected columns:
+            ``["node_key", "node_level", time_column, "residual"]``.
+            When omitted, WLS uses structural weights (1/n_leaves per node)
+            and MinT falls back to the same.
         value_columns:
-            Columns to reconcile. Defaults to ``["forecast"]``.
+            Columns to reconcile.  Defaults to ``["forecast"]``.
+            Pass ``["forecast", "forecast_p10", "forecast_p90"]`` to
+            reconcile point and quantile forecasts simultaneously.
         time_column:
             Time column name.
 
         Returns
         -------
-        Leaf-level reconciled forecasts.
+        Leaf-level reconciled DataFrame with columns
+        [leaf_level_name, time_column] + value_columns.
         """
         value_columns = value_columns or ["forecast"]
 
@@ -110,13 +128,22 @@ class Reconciler:
             return self._top_down(forecasts, actuals, value_columns, time_column)
         elif self.config.method == "middle_out":
             return self._middle_out(forecasts, actuals, value_columns, time_column)
-        elif self.config.method in {"mint", "ols", "wls"}:
-            return self._mint_reconcile(forecasts, actuals, value_columns, time_column, self.config.method)
-        else:
-            raise NotImplementedError(
-                f"Unknown reconciliation method {self.config.method!r}. "
-                f"Supported: {self._METHODS}"
+        elif self.config.method in ("ols", "wls", "mint"):
+            return self._linear_reconcile(
+                forecasts=forecasts,
+                value_columns=value_columns,
+                time_column=time_column,
+                method=self.config.method,
+                residuals=residuals,
             )
+        else:
+            raise ValueError(
+                f"Reconciliation method {self.config.method!r} not handled."
+            )
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Existing methods (unchanged)
+    # ─────────────────────────────────────────────────────────────────────────
 
     def _bottom_up(
         self,
@@ -125,13 +152,9 @@ class Reconciler:
         time_column: str,
     ) -> pl.DataFrame:
         """
-        Bottom-Up: forecasts are at leaf level, aggregate up.
-
-        The leaf-level forecast IS the reconciled forecast — no adjustment
-        needed.  We just return it as-is.  Higher-level numbers are obtained
-        by summing.
+        Bottom-Up: forecasts are at leaf level — no adjustment needed.
+        Higher-level numbers are obtained by summing.
         """
-        # Find the leaf-level forecast
         for tree in self.trees.values():
             leaf = tree.leaf_level
             if leaf in forecasts:
@@ -149,10 +172,7 @@ class Reconciler:
         value_columns: List[str],
         time_column: str,
     ) -> pl.DataFrame:
-        """
-        Top-Down: forecast at top level, disaggregate to leaves using
-        historical proportions.
-        """
+        """Top-Down: disaggregate root-level forecast to leaves."""
         if actuals is None:
             raise ValueError(
                 "Top-Down reconciliation requires historical actuals "
@@ -168,7 +188,6 @@ class Reconciler:
             if top_level not in forecasts:
                 continue
 
-            # Compute historical proportions
             props = agg.compute_historical_proportions(
                 actuals,
                 source_level=top_level,
@@ -198,14 +217,7 @@ class Reconciler:
         value_columns: List[str],
         time_column: str,
     ) -> pl.DataFrame:
-        """
-        Middle-Out: forecast at a mid level, then:
-        - Disaggregate DOWN to leaves using historical proportions
-        - Aggregate UP to higher levels by summing
-
-        This is the recommended approach: forecast at CDS×ProductUnit,
-        disaggregate to Country, aggregate to Region/Global.
-        """
+        """Middle-Out: forecast at mid level, disaggregate down, aggregate up."""
         result = None
         for dim_name, tree in self.trees.items():
             agg = self._aggregators[dim_name]
@@ -217,10 +229,8 @@ class Reconciler:
             leaf_level = tree.leaf_level
 
             if mid_level == leaf_level:
-                # Already at leaf, no disaggregation needed
                 result = forecasts[mid_level]
             else:
-                # Disaggregate to leaf
                 if actuals is None:
                     raise ValueError(
                         f"Middle-Out for {dim_name!r}: need actuals to compute "
@@ -249,193 +259,264 @@ class Reconciler:
 
         return result
 
-    def _mint_reconcile(
+    # ─────────────────────────────────────────────────────────────────────────
+    # Linear reconciliation (OLS / WLS / MinT)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _linear_reconcile(
         self,
         forecasts: Dict[str, pl.DataFrame],
-        actuals: Optional[pl.DataFrame],
         value_columns: List[str],
         time_column: str,
         method: str,
+        residuals: Optional[pl.DataFrame] = None,
     ) -> pl.DataFrame:
         """
-        MinT / OLS / WLS reconciliation (Phase 2).
+        Core linear reconciliation used by OLS, WLS, and MinT.
 
-        Requires leaf-level base forecasts.  All-level base forecasts are
-        derived by summing leaves through the summing matrix S, so the
-        reconciliation operates on a fully coherent starting point.
+        For each hierarchy tree that has leaf-level forecasts, builds the
+        summing matrix S, stacks base forecasts into P̂, computes
+        G = (S′W⁻¹S)⁻¹S′W⁻¹, and returns P̃_leaf = G·P̂.
 
-        Parameters
-        ----------
-        forecasts:
-            Must include the leaf level for each hierarchy dimension.
-        actuals:
-            Historical leaf-level actuals used to estimate forecast error
-            variances (WLS) or the full covariance (MinT).  If None, the
-            method degrades gracefully: WLS uses forecast variance; MinT
-            uses the same diagonal approximation.
-        value_columns:
-            Forecast value columns to reconcile.
-        time_column:
-            Time column name.
-        method:
-            "ols" | "wls" | "mint"
+        Multiple value_columns (e.g. point + quantiles) are reconciled
+        independently — the same G matrix applies to each because the
+        reconciliation is a linear operator.
         """
-        result: Optional[pl.DataFrame] = None
-
-        for dim_name, tree in self.trees.items():
-            # ── Summing matrix ──────────────────────────────────────────────
-            S_df = tree.summing_matrix()
-            leaf_keys = [c for c in S_df.columns if c not in ("node_key", "node_level")]
-            S_np = S_df.select(leaf_keys).to_numpy().astype(np.float64)  # (n_nodes, n_leaves)
-            n_nodes, n_leaves = S_np.shape
+        for _dim_name, tree in self.trees.items():
             leaf_level = tree.leaf_level
 
             if leaf_level not in forecasts:
-                raise ValueError(
-                    f"MinT/OLS/WLS requires leaf-level ('{leaf_level}') forecasts "
-                    f"for dimension '{dim_name}'. Got: {list(forecasts.keys())}"
-                )
+                continue
 
             leaf_df = forecasts[leaf_level]
 
-            dim_result: Optional[pl.DataFrame] = None
+            # ── Build S matrix ────────────────────────────────────────────
+            S_df = tree.summing_matrix()
+            leaf_keys: List[str] = [
+                c for c in S_df.columns if c not in ("node_key", "node_level")
+            ]
+            S: np.ndarray = S_df.select(leaf_keys).to_numpy().astype(float)
+            node_keys: List[str] = S_df["node_key"].to_list()
+            node_levels: List[str] = S_df["node_level"].to_list()
+            n_all = len(node_keys)
+            n_leaves = len(leaf_keys)
+
+            # ── Time axis ─────────────────────────────────────────────────
+            time_periods: List = sorted(leaf_df[time_column].unique().to_list())
+            T = len(time_periods)
+            time_to_idx = {t: i for i, t in enumerate(time_periods)}
+            leaf_to_idx = {lk: i for i, lk in enumerate(leaf_keys)}
+            node_to_idx = {nk: i for i, nk in enumerate(node_keys)}
+
+            # ── Compute W⁻¹  (shared across value columns) ────────────────
+            W_inv = self._build_W_inv(
+                method=method,
+                n_all=n_all,
+                node_keys=node_keys,
+                node_levels=node_levels,
+                S=S,
+                residuals=residuals,
+                time_column=time_column,
+            )
+
+            # ── Reconciliation matrix G ────────────────────────────────────
+            # G = (S′W⁻¹S)⁻¹ S′W⁻¹   shape: (n_leaves × n_all)
+            StWinv = S.T @ W_inv                         # (n_leaves × n_all)
+            StWinvS = StWinv @ S                         # (n_leaves × n_leaves)
+            # Tikhonov regularisation for near-singular matrices
+            reg = 1e-8 * np.trace(StWinvS) / n_leaves
+            try:
+                StWinvS_inv = np.linalg.inv(StWinvS + reg * np.eye(n_leaves))
+            except np.linalg.LinAlgError:
+                StWinvS_inv = np.linalg.pinv(StWinvS)
+            G = StWinvS_inv @ StWinv                     # (n_leaves × n_all)
+
+            # ── Reconcile each value column ────────────────────────────────
+            reconciled: Dict[str, np.ndarray] = {}
 
             for vc in value_columns:
                 if vc not in leaf_df.columns:
                     continue
 
-                # ── Pivot leaf forecasts: (T, n_leaves) ────────────────────
-                leaf_wide = leaf_df.pivot(values=vc, index=time_column, on=leaf_level)
-                times = leaf_wide[time_column].to_list()
-                T = len(times)
+                # Build P̂_leaf  (n_leaves × T) from leaf-level forecasts
+                P_leaf = np.zeros((n_leaves, T))
+                for row in leaf_df.select([leaf_level, time_column, vc]).iter_rows():
+                    lk, t, val = row
+                    l_idx = leaf_to_idx.get(str(lk))
+                    t_idx = time_to_idx.get(t)
+                    if l_idx is not None and t_idx is not None and val is not None:
+                        P_leaf[l_idx, t_idx] = float(val)
 
-                Y_np = np.zeros((T, n_leaves), dtype=np.float64)
-                for j, lk in enumerate(leaf_keys):
-                    if lk in leaf_wide.columns:
-                        col = leaf_wide[lk]
-                        Y_np[:, j] = col.fill_null(0).cast(pl.Float64).to_numpy()
+                # P̂_all = S @ P̂_leaf  (bottom-up aggregates, n_all × T)
+                P_all = S @ P_leaf
 
-                # ── Base forecasts at ALL levels: (T, n_nodes) ─────────────
-                # yhat_all[t, i] = sum of leaves under node i at time t
-                yhat_all = Y_np @ S_np.T
+                # Override with any independent non-leaf level forecasts
+                for level_name in tree.levels[:-1]:  # all non-leaf levels
+                    if level_name not in forecasts:
+                        continue
+                    lv_df = forecasts[level_name]
+                    if vc not in lv_df.columns:
+                        continue
+                    for row in lv_df.select([level_name, time_column, vc]).iter_rows():
+                        nk, t, val = row
+                        n_idx = node_to_idx.get(str(nk))
+                        t_idx = time_to_idx.get(t)
+                        if n_idx is not None and t_idx is not None and val is not None:
+                            P_all[n_idx, t_idx] = float(val)
 
-                # ── W inverse ───────────────────────────────────────────────
-                W_inv = self._build_W_inv(
-                    method, n_nodes, n_leaves, S_np,
-                    yhat_all, Y_np, actuals, leaf_keys, leaf_level, time_column, vc,
+                # Reconcile: P̃_leaf = G · P̂_all  (n_leaves × T)
+                P_tilde = G @ P_all
+                P_tilde = np.maximum(P_tilde, 0.0)   # non-negativity constraint
+                reconciled[vc] = P_tilde
+
+            if not reconciled:
+                raise ValueError(
+                    f"None of the requested value_columns {value_columns} "
+                    f"found in leaf-level forecast DataFrame."
                 )
 
-                # ── MinT formula: P = (S' W⁻¹ S)⁻¹ S' W⁻¹ ─────────────────
-                SWinv = S_np.T @ W_inv          # (n_leaves, n_nodes)
-                SWinvS = SWinv @ S_np           # (n_leaves, n_leaves)
-                P = np.linalg.pinv(SWinvS) @ SWinv  # (n_leaves, n_nodes)
+            # ── Build output DataFrame ─────────────────────────────────────
+            rows = []
+            for l_idx, lk in enumerate(leaf_keys):
+                for t_idx, t in enumerate(time_periods):
+                    row: Dict = {leaf_level: lk, time_column: t}
+                    for vc, P_tilde in reconciled.items():
+                        row[vc] = float(P_tilde[l_idx, t_idx])
+                    rows.append(row)
 
-                # Reconciled leaf forecasts: (T, n_leaves)
-                reconciled = yhat_all @ P.T
+            return pl.DataFrame(rows)
 
-                # ── Back to Polars long format ───────────────────────────────
-                wide_out = pl.DataFrame(
-                    {time_column: times,
-                     **{leaf_keys[j]: reconciled[:, j].tolist() for j in range(n_leaves)}}
-                )
-                long_out = wide_out.unpivot(
-                    on=leaf_keys,
-                    index=[time_column],
-                    variable_name=leaf_level,
-                    value_name=vc,
-                )
+        raise ValueError(
+            "No reconcilable hierarchy found with leaf-level forecasts. "
+            f"Provided forecast levels: {list(forecasts.keys())}"
+        )
 
-                dim_result = long_out if dim_result is None else dim_result.join(
-                    long_out, on=[time_column, leaf_level], how="inner"
-                )
-
-            if dim_result is not None:
-                result = dim_result
-
-        if result is None:
-            raise ValueError("No leaf-level forecasts found for MinT/OLS/WLS reconciliation.")
-
-        return result
+    # ─────────────────────────────────────────────────────────────────────────
+    # W-matrix construction helpers
+    # ─────────────────────────────────────────────────────────────────────────
 
     def _build_W_inv(
         self,
         method: str,
-        n_nodes: int,
-        n_leaves: int,
-        S_np: np.ndarray,
-        yhat_all: np.ndarray,
-        Y_leaves: np.ndarray,
-        actuals: Optional[pl.DataFrame],
-        leaf_keys: List[str],
-        leaf_level: str,
+        n_all: int,
+        node_keys: List[str],
+        node_levels: List[str],
+        S: np.ndarray,
+        residuals: Optional[pl.DataFrame],
         time_column: str,
-        vc: str,
     ) -> np.ndarray:
         """
-        Build the inverse of the weight matrix W for MinT/OLS/WLS.
+        Return W⁻¹ for the chosen reconciliation method.
 
-        OLS
-            W = I  →  W⁻¹ = I.  Equal weight everywhere.
-
-        WLS
-            W = diag(σ²_i) where σ²_i is the variance of node i's forecast
-            errors.  Estimated from actuals if provided, else from the spread
-            of the base forecasts over time.
-
-        MinT
-            W is the full forecast-error covariance matrix, estimated using
-            Ledoit-Wolf diagonal shrinkage to ensure positive definiteness
-            even when the number of nodes exceeds the number of time steps.
-
-            Shrinkage intensity λ is set analytically as:
-                λ = min(1, (n_nodes + 2) / T)
-            which increases shrinkage as the problem becomes ill-conditioned.
+        OLS   → W = I
+        WLS   → W = diag(w_i) where w_i = n_leaves_under_i (structural)
+                or diag(σ²_i) from residuals when provided
+        MinT  → W = shrinkage covariance from residuals,
+                or WLS-structural fallback when residuals are absent
         """
         if method == "ols":
-            return np.eye(n_nodes)
-
-        # ── Estimate residuals ───────────────────────────────────────────────
-        # Prefer actuals-based residuals; fall back to centred forecasts.
-        residuals: np.ndarray
-        if actuals is not None and leaf_level in actuals.columns and vc in actuals.columns:
-            try:
-                act_wide = actuals.pivot(values=vc, index=time_column, on=leaf_level)
-                T_act = len(act_wide)
-                A_np = np.zeros((T_act, n_leaves), dtype=np.float64)
-                for j, lk in enumerate(leaf_keys):
-                    if lk in act_wide.columns:
-                        A_np[:, j] = act_wide[lk].fill_null(0).cast(pl.Float64).to_numpy()
-                A_all = A_np @ S_np.T   # actuals at all levels: (T_act, n_nodes)
-                T_min = min(yhat_all.shape[0], A_all.shape[0])
-                residuals = yhat_all[:T_min] - A_all[:T_min]
-            except Exception:
-                residuals = yhat_all - yhat_all.mean(axis=0, keepdims=True)
-        else:
-            residuals = yhat_all - yhat_all.mean(axis=0, keepdims=True)
-
-        T_r = max(residuals.shape[0], 1)
+            return np.eye(n_all)
 
         if method == "wls":
-            # Diagonal: per-node variance
-            variances = np.var(residuals, axis=0, ddof=min(1, T_r - 1))
-            variances = np.where(variances < 1e-10, 1e-10, variances)
-            return np.diag(1.0 / variances)
+            if residuals is not None:
+                diag = self._residual_variances(
+                    residuals, node_keys, node_levels, time_column
+                )
+            else:
+                # Structural weights: w_i = number of leaf descendants
+                diag = np.maximum(S.sum(axis=1), 1.0)
+            return np.diag(1.0 / np.maximum(diag, 1e-10))
 
-        # method == "mint": shrinkage covariance
-        # Sample covariance (unbiased)
-        cov = (residuals.T @ residuals) / T_r  # (n_nodes, n_nodes)
+        if method == "mint":
+            if residuals is not None:
+                W = self._shrinkage_cov(
+                    residuals, node_keys, node_levels, time_column, n_all
+                )
+                try:
+                    return np.linalg.inv(W)
+                except np.linalg.LinAlgError:
+                    return np.linalg.pinv(W)
+            else:
+                # No residuals supplied → fall back to WLS structural
+                diag = np.maximum(S.sum(axis=1), 1.0)
+                return np.diag(1.0 / np.maximum(diag, 1e-10))
 
-        # Ledoit-Wolf diagonal target
-        diag_cov = np.diag(np.diag(cov))
+        raise ValueError(f"Unknown method {method!r}")
 
-        # Analytical shrinkage intensity: increases when n_nodes >> T
-        shrinkage = float(np.clip((n_nodes + 2) / T_r, 0.0, 1.0))
-        W = (1.0 - shrinkage) * cov + shrinkage * diag_cov
+    def _residual_variances(
+        self,
+        residuals: pl.DataFrame,
+        node_keys: List[str],
+        node_levels: List[str],
+        time_column: str,
+    ) -> np.ndarray:
+        """
+        Per-node variance of base-forecast residuals.
 
-        # Regularise to guarantee invertibility
-        W += np.eye(n_nodes) * 1e-8
+        ``residuals`` must have columns:
+        ["node_key", "node_level", time_column, "residual"].
+        """
+        variances = np.ones(len(node_keys))
+        for i, (nk, nl) in enumerate(zip(node_keys, node_levels)):
+            match = residuals.filter(
+                (pl.col("node_key") == nk) & (pl.col("node_level") == nl)
+            )
+            if not match.is_empty() and "residual" in match.columns:
+                res = match["residual"].drop_nulls().to_numpy()
+                if len(res) > 0:
+                    variances[i] = max(float(np.var(res)), 1e-10)
+        return variances
 
-        try:
-            return np.linalg.inv(W)
-        except np.linalg.LinAlgError:
-            return np.linalg.pinv(W)
+    def _shrinkage_cov(
+        self,
+        residuals: pl.DataFrame,
+        node_keys: List[str],
+        node_levels: List[str],
+        time_column: str,
+        n_all: int,
+    ) -> np.ndarray:
+        """
+        Ledoit-Wolf diagonal shrinkage covariance estimator.
+
+        Shrinkage target: diag(Ŵ_sample).
+        Intensity λ ∈ [0,1] is set heuristically as min(1, n/T), which
+        gives full shrinkage (diagonal W) when T < n and approaches the
+        sample covariance as T → ∞.
+
+        Returns a positive-definite (n_all × n_all) matrix.
+        """
+        all_times: List = sorted(residuals[time_column].unique().to_list())
+        T = len(all_times)
+        time_to_idx = {t: i for i, t in enumerate(all_times)}
+
+        E = np.zeros((n_all, T))
+        for i, (nk, nl) in enumerate(zip(node_keys, node_levels)):
+            match = residuals.filter(
+                (pl.col("node_key") == nk) & (pl.col("node_level") == nl)
+            )
+            if match.is_empty() or "residual" not in match.columns:
+                continue
+            for row in match.select([time_column, "residual"]).iter_rows():
+                t, val = row
+                t_idx = time_to_idx.get(t)
+                if t_idx is not None and val is not None:
+                    E[i, t_idx] = float(val)
+
+        if T < 2:
+            return np.diag(np.maximum(np.var(E, axis=1), 1e-10))
+
+        # Sample covariance (with ddof=1)
+        W_sample = np.cov(E)
+
+        # Shrinkage intensity: aggressive when T < n, relaxed when T >> n
+        lam = max(0.0, min(1.0, n_all / T))
+
+        W_diag = np.diag(np.diag(W_sample))
+        W_shrink = (1.0 - lam) * W_sample + lam * W_diag
+
+        # Ensure strict positive definiteness
+        min_eig = np.linalg.eigvalsh(W_shrink).min()
+        if min_eig <= 0:
+            W_shrink += (-min_eig + 1e-8) * np.eye(n_all)
+
+        return W_shrink
