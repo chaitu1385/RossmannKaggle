@@ -14,11 +14,12 @@ Steps:
 import logging
 from datetime import date
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 import polars as pl
 
 from ..config.schema import PlatformConfig
+from ..forecasting.base import BaseForecaster
 from ..forecasting.registry import registry
 from ..series.builder import SeriesBuilder
 
@@ -43,7 +44,7 @@ class ForecastPipeline:
     def run(
         self,
         actuals: pl.DataFrame,
-        champion_model: str = "naive_seasonal",
+        champion_model: Union[str, BaseForecaster] = "naive_seasonal",
         product_master: Optional[pl.DataFrame] = None,
         mapping_table: Optional[pl.DataFrame] = None,
         forecast_origin: Optional[date] = None,
@@ -57,7 +58,9 @@ class ForecastPipeline:
         actuals:
             Historical data.
         champion_model:
-            Name of the model to use (from registry).
+            Either the registered model name (str) or a pre-built
+            ``BaseForecaster`` instance (e.g. a ``WeightedEnsembleForecaster``
+            returned by ``BacktestPipeline.run()["ensemble"]``).
         product_master:
             Product metadata for transitions.
         mapping_table:
@@ -69,7 +72,9 @@ class ForecastPipeline:
 
         Returns
         -------
-        Forecast DataFrame: [series_id, week, forecast].
+        Forecast DataFrame: [series_id, week, forecast] plus optional
+        ``forecast_p{q}`` quantile columns if ``config.forecast.quantiles``
+        is configured.
         """
         fc = self.config.forecast
         horizon = fc.horizon_weeks
@@ -84,8 +89,11 @@ class ForecastPipeline:
             overrides=overrides,
         )
 
-        # Step 2: Instantiate champion
-        forecaster = registry.build(champion_model)
+        # Step 2: Resolve forecaster (name → registry lookup, or use directly)
+        if isinstance(champion_model, str):
+            forecaster: BaseForecaster = registry.build(champion_model)
+        else:
+            forecaster = champion_model
         logger.info("Champion model: %s", forecaster.name)
 
         # Step 3: Fit on all data
@@ -97,13 +105,27 @@ class ForecastPipeline:
             id_col=fc.series_id_column,
         )
 
-        # Step 4: Predict
+        # Step 4: Point forecast
         logger.info("Forecasting %d weeks...", horizon)
         forecast = forecaster.predict(
             horizon=horizon,
             id_col=fc.series_id_column,
             time_col=fc.time_column,
         )
+
+        # Step 4b: Quantile forecasts (if configured)
+        if fc.quantiles:
+            logger.info("Computing quantile forecasts %s...", fc.quantiles)
+            qdf = forecaster.predict_quantiles(
+                horizon=horizon,
+                quantiles=fc.quantiles,
+                id_col=fc.series_id_column,
+                time_col=fc.time_column,
+            )
+            # Join quantile columns onto the point forecast frame
+            forecast = forecast.join(
+                qdf, on=[fc.series_id_column, fc.time_column], how="left"
+            )
 
         # Step 5: Write to output
         output_path = Path(self.config.output.forecast_path)

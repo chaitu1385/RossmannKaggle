@@ -9,7 +9,7 @@ which aligns with the platform's seq2seq requirement.
 """
 
 from datetime import timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import polars as pl
 
@@ -105,6 +105,61 @@ class _StatsforecastBase(BaseForecaster):
             result = result.with_columns(pl.col(time_col).cast(pl.Date))
 
         return result
+
+    def predict_quantiles(
+        self,
+        horizon: int,
+        quantiles: List[float],
+        id_col: str = "series_id",
+        time_col: str = "week",
+    ) -> pl.DataFrame:
+        """
+        Native statsforecast prediction intervals.
+
+        statsforecast returns symmetric PI at ``level`` % coverage.
+        A ``level=80`` interval covers [P10, P90]; ``level=90`` covers [P5, P95].
+        For each lower quantile q < 0.5 the required coverage level is
+        ``(1 - 2*q) * 100``.
+        """
+        if self._sf is None:
+            raise RuntimeError(f"{self.name}: call fit() before predict_quantiles()")
+
+        # Determine the coverage levels we need
+        lower_qs = sorted(q for q in quantiles if q < 0.5 - 1e-6)
+        levels = sorted({int(round((1 - 2 * q) * 100)) for q in lower_qs}) if lower_qs else [80]
+
+        result_pdf = self._sf.predict(h=horizon, level=levels)
+        result_pdf = result_pdf.reset_index()
+
+        result = pl.from_pandas(result_pdf)
+        result = result.rename({"unique_id": id_col, "ds": time_col})
+        if result[time_col].dtype != pl.Date:
+            result = result.with_columns(pl.col(time_col).cast(pl.Date))
+
+        # Identify point forecast column (no "-lo-" / "-hi-" in name)
+        point_col = next(
+            c for c in result.columns
+            if c not in (id_col, time_col) and "-lo-" not in c and "-hi-" not in c
+        )
+
+        output = result.select([id_col, time_col])
+        for q in quantiles:
+            col = f"forecast_p{int(round(q * 100))}"
+            if abs(q - 0.5) < 1e-6:
+                output = output.with_columns(result[point_col].alias(col))
+            elif q < 0.5:
+                level = int(round((1 - 2 * q) * 100))
+                lo = next((c for c in result.columns if f"-lo-{level}" in c), None)
+                src = result[lo] if lo else result[point_col]
+                output = output.with_columns(src.alias(col))
+            else:  # q > 0.5 — mirror lower bound
+                mirror_q = 1.0 - q
+                level = int(round((1 - 2 * mirror_q) * 100))
+                hi = next((c for c in result.columns if f"-hi-{level}" in c), None)
+                src = result[hi] if hi else result[point_col]
+                output = output.with_columns(src.alias(col))
+
+        return output
 
 
 @registry.register("auto_arima")

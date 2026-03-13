@@ -9,7 +9,7 @@ which model generates the final forecast.
 """
 
 import logging
-from typing import Optional
+from typing import Dict, Optional
 
 import polars as pl
 
@@ -128,3 +128,50 @@ class ChampionSelector:
             )
 
         return champions
+
+    def compute_ensemble_weights(
+        self, backtest_results: pl.DataFrame
+    ) -> Dict[str, float]:
+        """
+        Compute inverse-WMAPE blend weights for a weighted ensemble.
+
+        Each model receives a weight proportional to ``1 / mean_WMAPE`` across
+        all series and folds.  This gives higher influence to better-performing
+        models while every model retains some contribution.
+
+        Parameters
+        ----------
+        backtest_results:
+            Output from ``BacktestEngine.run()``.
+
+        Returns
+        -------
+        Dict mapping model name → normalised weight (values sum to 1.0).
+        Returns uniform weights if all models have zero WMAPE.
+        """
+        if backtest_results.is_empty():
+            return {}
+
+        # Aggregate mean WMAPE per model
+        model_stats = (
+            backtest_results
+            .group_by("model_id")
+            .agg(pl.col(self.primary_metric).mean().alias("mean_metric"))
+            .sort("mean_metric")
+        )
+
+        rows = model_stats.iter_rows(named=True)
+        # Inverse-WMAPE weights; protect against zero WMAPE
+        raw: Dict[str, float] = {}
+        for row in rows:
+            wmape = row["mean_metric"]
+            raw[row["model_id"]] = 1.0 / wmape if wmape > 1e-9 else 1e9
+
+        total = sum(raw.values())
+        weights = {k: v / total for k, v in raw.items()}
+
+        logger.info("Ensemble weights computed:")
+        for model, w in sorted(weights.items(), key=lambda x: -x[1]):
+            logger.info("  %s → %.4f", model, w)
+
+        return weights

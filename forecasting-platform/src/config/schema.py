@@ -47,6 +47,9 @@ class ForecastConfig:
     forecasters: List[str] = field(
         default_factory=lambda: ["naive_seasonal"]
     )
+    quantiles: List[float] = field(
+        default_factory=list
+    )                                    # e.g. [0.1, 0.5, 0.9]; empty = point forecast only
 
 
 @dataclass
@@ -58,6 +61,7 @@ class BacktestConfig:
     champion_granularity: str = "lob"    # "lob" | "product_group" | "series"
     primary_metric: str = "wmape"
     secondary_metric: str = "normalized_bias"
+    selection_strategy: str = "champion" # "champion" | "weighted_ensemble"
 
 
 @dataclass
