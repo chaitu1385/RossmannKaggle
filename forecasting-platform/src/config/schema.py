@@ -50,6 +50,12 @@ class ForecastConfig:
     quantiles: List[float] = field(
         default_factory=list
     )                                    # e.g. [0.1, 0.5, 0.9]; empty = point forecast only
+    intermittent_forecasters: List[str] = field(
+        default_factory=list
+    )                                    # e.g. ["croston_sba", "tsb"]; empty = no sparse routing
+    sparse_detection: bool = True        # auto-detect sparse series when intermittent_forecasters set
+    sparse_adi_threshold: float = 1.32   # ADI ≥ threshold → sparse (SBC recommendation)
+    sparse_cv2_threshold: float = 0.49   # CV² threshold for SBC classification
 
 
 @dataclass

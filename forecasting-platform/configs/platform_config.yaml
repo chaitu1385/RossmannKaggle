@@ -53,6 +53,18 @@ forecast:
     # - chronos          # Amazon Chronos (local, open-source); pip install chronos-forecasting torch
     # - timegpt          # Nixtla TimeGPT (API); pip install nixtla; set NIXTLA_API_KEY
 
+  # ── Intermittent / sparse demand ─────────────────────────────────────────
+  # Series classified as intermittent (ADI ≥ adi_threshold) are routed to
+  # these models instead of the regular forecasters above.
+  # Leave empty to disable sparse routing (default).
+  intermittent_forecasters: []
+  # - croston_sba      # Syntetos-Boylan bias-corrected Croston (recommended)
+  # - tsb              # Teunter-Syntetos-Babai (handles obsolescence)
+  # - croston          # Classic Croston (1972)
+  sparse_detection: true
+  sparse_adi_threshold: 1.32             # ADI ≥ threshold → sparse (SBC)
+  sparse_cv2_threshold: 0.49             # CV² threshold for SBC classification
+
 # ── Backtesting ───────────────────────────────────────────────────────────────
 backtest:
   n_folds: 3
