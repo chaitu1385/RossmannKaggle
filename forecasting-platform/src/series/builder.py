@@ -35,6 +35,7 @@ class SeriesBuilder:
     def build(
         self,
         actuals: pl.DataFrame,
+        external_features: Optional[pl.DataFrame] = None,
         product_master: Optional[pl.DataFrame] = None,
         mapping_table: Optional[pl.DataFrame] = None,
         forecast_origin: Optional[date] = None,
@@ -93,6 +94,31 @@ class SeriesBuilder:
 
         # Step 3: Fill missing weeks
         df = self._fill_gaps(df, time_col, sid_col, value_col)
+
+        # Step 3b: Join external features (if provided and enabled)
+        if external_features is not None and self.config.forecast.external_regressors.enabled:
+            feature_cols = self.config.forecast.external_regressors.feature_columns
+            available_cols = [c for c in feature_cols if c in external_features.columns]
+            if available_cols:
+                join_cols = [time_col]
+                select_cols = [time_col] + available_cols
+
+                # If features have series_id, join on both; otherwise broadcast
+                if sid_col in external_features.columns:
+                    join_cols = [sid_col, time_col]
+                    select_cols = [sid_col, time_col] + available_cols
+
+                df = df.join(
+                    external_features.select(select_cols),
+                    on=join_cols,
+                    how="left",
+                )
+
+                # Fill nulls in feature columns with 0
+                for col in available_cols:
+                    df = df.with_columns(
+                        pl.col(col).fill_null(0).alias(col)
+                    )
 
         # Step 4: Sort
         df = df.sort([sid_col, time_col])

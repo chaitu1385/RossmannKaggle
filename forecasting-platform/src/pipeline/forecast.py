@@ -49,6 +49,7 @@ class ForecastPipeline:
         mapping_table: Optional[pl.DataFrame] = None,
         forecast_origin: Optional[date] = None,
         overrides: Optional[pl.DataFrame] = None,
+        external_features: Optional[pl.DataFrame] = None,
     ) -> pl.DataFrame:
         """
         Generate production forecasts.
@@ -83,6 +84,7 @@ class ForecastPipeline:
         logger.info("Building model-ready series...")
         series = self._series_builder.build(
             actuals=actuals,
+            external_features=external_features,
             product_master=product_master,
             mapping_table=mapping_table,
             forecast_origin=forecast_origin,
@@ -104,6 +106,18 @@ class ForecastPipeline:
             time_col=fc.time_column,
             id_col=fc.series_id_column,
         )
+
+        # Step 3b: Set future features for ML models (if external regressors configured)
+        if external_features is not None and hasattr(forecaster, 'set_future_features'):
+            er_config = fc.external_regressors
+            if er_config.enabled and er_config.future_features_path:
+                from ..data.regressors import load_external_features
+                future_feats = load_external_features(er_config.future_features_path)
+                forecaster.set_future_features(
+                    future_feats,
+                    id_col=fc.series_id_column,
+                    time_col=fc.time_column,
+                )
 
         # Step 4: Point forecast
         logger.info("Forecasting %d weeks...", horizon)

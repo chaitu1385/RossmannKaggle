@@ -13,6 +13,7 @@ import yaml
 
 from .schema import (
     BacktestConfig,
+    ExternalRegressorConfig,
     ForecastConfig,
     HierarchyConfig,
     OutputConfig,
@@ -68,6 +69,11 @@ def _dict_to_config(d: Dict[str, Any]) -> PlatformConfig:
         time_column=fc_raw.get("time_column", "week"),
         series_id_column=fc_raw.get("series_id_column", "series_id"),
         forecasters=fc_raw.get("forecasters", ["naive_seasonal"]),
+        external_regressors=ExternalRegressorConfig(
+            enabled=fc_raw.get("external_regressors", {}).get("enabled", False),
+            feature_columns=fc_raw.get("external_regressors", {}).get("feature_columns", []),
+            future_features_path=fc_raw.get("external_regressors", {}).get("future_features_path"),
+        ),
     )
 
     bt_raw = d.get("backtest", {})

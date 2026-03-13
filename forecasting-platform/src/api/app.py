@@ -35,9 +35,10 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 
 from .schemas import (
+    AuditEventResponse,
     DriftAlertItem,
     DriftResponse,
     ForecastPoint,
@@ -56,6 +57,9 @@ def create_app(
     data_dir: str = "data/",
     metrics_dir: str = "data/metrics/",
     title: str = "Forecasting Platform API",
+    auth_enabled: bool = False,
+    jwt_secret: str = "",
+    audit_log_path: str = "data/audit_log/",
 ) -> FastAPI:
     """
     Factory function — returns a configured FastAPI application.
@@ -84,6 +88,14 @@ def create_app(
     # ── Shared state (attached to app for testability) ─────────────────────
     app.state.data_dir    = Path(data_dir)
     app.state.metrics_dir = Path(metrics_dir)
+    app.state.auth_enabled = auth_enabled
+    app.state.jwt_secret = jwt_secret
+
+    from ..audit.logger import AuditLogger
+    app.state.audit_logger = AuditLogger(audit_log_path)
+
+    from ..auth.rbac import get_current_user, require_permission
+    from ..auth.models import Permission, User
 
     # ── Routes ─────────────────────────────────────────────────────────────
 
@@ -92,11 +104,47 @@ def create_app(
         """Liveness probe — returns 200 OK when the service is running."""
         return HealthResponse(status="ok", version=_API_VERSION)
 
+    @app.post("/auth/token", tags=["auth"])
+    def create_auth_token(
+        username: str = Query(..., description="Username"),
+        role: str = Query("viewer", description="Role"),
+    ):
+        """Issue a JWT token (development endpoint)."""
+        if not auth_enabled:
+            return {"detail": "Auth is disabled. All endpoints are open."}
+        from ..auth.token import create_token
+        token = create_token(
+            user_id=username,
+            email=f"{username}@example.com",
+            role=role,
+            secret_key=jwt_secret,
+        )
+        return {"access_token": token, "token_type": "bearer"}
+
+    @app.get("/audit", tags=["audit"])
+    def get_audit_log(
+        user: User = Depends(require_permission(Permission.VIEW_AUDIT_LOG)),
+        action: Optional[str] = Query(None),
+        resource_type: Optional[str] = Query(None),
+        limit: int = Query(100, ge=1, le=1000),
+    ):
+        """Query the audit log. Requires VIEW_AUDIT_LOG permission."""
+        results = app.state.audit_logger.query(
+            action=action,
+            resource_type=resource_type,
+            limit=limit,
+        )
+        return {
+            "count": len(results),
+            "events": results.to_dicts(),
+        }
+
     @app.get("/forecast/{lob}", response_model=ForecastResponse, tags=["forecasts"])
     def get_forecast(
         lob: str,
         series_id: Optional[str] = Query(None, description="Filter to a single series"),
         horizon: Optional[int] = Query(None, description="Limit output to first N weeks"),
+        user: User = Depends(get_current_user),
     ):
         """
         Return the latest forecast Parquet file for a LOB.
@@ -156,9 +204,9 @@ def create_app(
         response_model=ForecastResponse,
         tags=["forecasts"],
     )
-    def get_forecast_series(lob: str, series_id: str):
+    def get_forecast_series(lob: str, series_id: str, user: User = Depends(get_current_user)):
         """Return the latest forecast for a single series within a LOB."""
-        return get_forecast(lob=lob, series_id=series_id, horizon=None)
+        return get_forecast(lob=lob, series_id=series_id, horizon=None, user=user)
 
     @app.get(
         "/metrics/leaderboard/{lob}",
@@ -168,6 +216,7 @@ def create_app(
     def get_leaderboard(
         lob: str,
         run_type: str = Query("backtest", description="'backtest' or 'live'"),
+        user: User = Depends(get_current_user),
     ):
         """
         Return the model leaderboard for a LOB from the metric store.
@@ -214,6 +263,7 @@ def create_app(
         run_type: str = Query("backtest", description="'backtest' or 'live'"),
         baseline_weeks: int = Query(26, ge=4),
         recent_weeks:   int = Query(8,  ge=2),
+        user: User = Depends(get_current_user),
     ):
         """
         Return drift alerts for all series in a LOB.
