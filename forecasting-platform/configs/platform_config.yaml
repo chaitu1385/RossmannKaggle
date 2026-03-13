@@ -49,6 +49,9 @@ forecast:
     - auto_ets
     - lgbm_direct
     - xgboost_direct
+    # Foundation models (zero-shot — no training required):
+    # - chronos          # Amazon Chronos (local, open-source); pip install chronos-forecasting torch
+    # - timegpt          # Nixtla TimeGPT (API); pip install nixtla; set NIXTLA_API_KEY
 
 # ── Backtesting ───────────────────────────────────────────────────────────────
 backtest:
