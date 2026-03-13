@@ -127,3 +127,52 @@ class BIExporter:
 
         logger.info("BI export: bias_report → %s", path)
         return path
+
+    def export_fva(
+        self,
+        fva_summary: pl.DataFrame,
+        fva_detail: pl.DataFrame,
+        lob: str,
+        run_date: Optional[str] = None,
+    ) -> dict:
+        """
+        Export FVA analysis tables for BI consumption.
+
+        Parameters
+        ----------
+        fva_summary:
+            Aggregated FVA summary (from FVAAnalyzer.summarize).
+        fva_detail:
+            Per-series FVA detail (from FVAAnalyzer.compute_fva_detail).
+        lob:
+            Line of business identifier.
+        run_date:
+            ISO date string. Defaults to today.
+
+        Returns
+        -------
+        Dict with paths to written Parquet files.
+        """
+        from datetime import date as dt_date
+        run_date = run_date or dt_date.today().isoformat()
+        paths = {}
+
+        # FVA summary
+        if not fva_summary.is_empty():
+            out_dir = self.base_path / "fva_summary" / f"lob={lob}"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            path = out_dir / f"{run_date}.parquet"
+            fva_summary.write_parquet(str(path))
+            paths["fva_summary"] = path
+            logger.info("BI export: fva_summary → %s", path)
+
+        # FVA detail
+        if not fva_detail.is_empty():
+            out_dir = self.base_path / "fva_detail" / f"lob={lob}"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            path = out_dir / f"{run_date}.parquet"
+            fva_detail.write_parquet(str(path))
+            paths["fva_detail"] = path
+            logger.info("BI export: fva_detail → %s", path)
+
+        return paths

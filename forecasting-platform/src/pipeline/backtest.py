@@ -53,6 +53,7 @@ class BacktestPipeline:
         mapping_table: Optional[pl.DataFrame] = None,
         forecast_origin: Optional[date] = None,
         overrides: Optional[pl.DataFrame] = None,
+        external_features: Optional[pl.DataFrame] = None,
     ) -> dict:
         """
         Run the full backtest pipeline.
@@ -70,6 +71,7 @@ class BacktestPipeline:
         logger.info("Building model-ready series...")
         series = self._series_builder.build(
             actuals=actuals,
+            external_features=external_features,
             product_master=product_master,
             mapping_table=mapping_table,
             forecast_origin=forecast_origin,

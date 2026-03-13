@@ -52,6 +52,9 @@ class _DirectMLBase(BaseForecaster):
         # mlforecast instance (if available)
         self._mlf: Optional[Any] = None
 
+        # External feature columns detected during fit
+        self._external_feature_cols: List[str] = []
+
         # Manual fallback state
         self._fitted_data: Optional[pl.DataFrame] = None
         self._models_per_step: Dict[int, Any] = {}
@@ -96,6 +99,11 @@ class _DirectMLBase(BaseForecaster):
     # ── mlforecast path ───────────────────────────────────────────────────
 
     def _fit_mlforecast(self, df, target_col, time_col, id_col):
+        # Detect external feature columns (anything beyond id, time, target)
+        core_cols = {id_col, time_col, target_col}
+        feature_cols = [c for c in df.columns if c not in core_cols]
+        self._external_feature_cols = feature_cols
+
         pdf = (
             df.select([id_col, time_col, target_col])
             .rename({id_col: "unique_id", time_col: "ds", target_col: "y"})
@@ -111,10 +119,27 @@ class _DirectMLBase(BaseForecaster):
             date_features=["week", "month", "quarter"],
             num_threads=self.num_threads,
         )
-        self._mlf.fit(pdf)
+
+        if feature_cols:
+            # Prepare exogenous features for mlforecast
+            exog_pdf = (
+                df.select([id_col, time_col] + feature_cols)
+                .rename({id_col: "unique_id", time_col: "ds"})
+                .to_pandas()
+            )
+            exog_pdf["ds"] = exog_pdf["ds"].astype("datetime64[ns]")
+            # Merge features into the main dataframe
+            pdf_with_features = pdf.merge(exog_pdf, on=["unique_id", "ds"], how="left")
+            pdf_with_features[feature_cols] = pdf_with_features[feature_cols].fillna(0)
+            self._mlf.fit(pdf_with_features)
+        else:
+            self._mlf.fit(pdf)
 
     def _predict_mlforecast(self, horizon, id_col, time_col):
-        result_pdf = self._mlf.predict(h=horizon)
+        if self._external_feature_cols and hasattr(self, '_future_features'):
+            result_pdf = self._mlf.predict(h=horizon, X_df=self._future_features)
+        else:
+            result_pdf = self._mlf.predict(h=horizon)
         result_pdf = result_pdf.reset_index()
 
         result = pl.from_pandas(result_pdf)
@@ -131,6 +156,16 @@ class _DirectMLBase(BaseForecaster):
             result = result.with_columns(pl.col(time_col).cast(pl.Date))
 
         return result
+
+    def set_future_features(self, future_features: pl.DataFrame, id_col: str = "series_id", time_col: str = "week") -> None:
+        """Set external feature values for the forecast horizon."""
+        if future_features is not None and not future_features.is_empty():
+            self._future_features = (
+                future_features
+                .rename({id_col: "unique_id", time_col: "ds"})
+                .to_pandas()
+            )
+            self._future_features["ds"] = self._future_features["ds"].astype("datetime64[ns]")
 
     # ── Probabilistic forecasting ─────────────────────────────────────────
 

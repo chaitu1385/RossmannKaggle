@@ -65,6 +65,15 @@ forecast:
   sparse_adi_threshold: 1.32             # ADI ≥ threshold → sparse (SBC)
   sparse_cv2_threshold: 0.49             # CV² threshold for SBC classification
 
+  # ── External regressors (promotions, holidays, price) ──────────────────
+  # When enabled, external feature columns are joined to the training data
+  # and passed to ML models (LightGBM, XGBoost).  Statistical models
+  # (ARIMA, ETS) ignore external features.
+  external_regressors:
+    enabled: false                         # set to true when feature data is available
+    feature_columns: []                    # e.g. [promotion_flag, holiday_flag, price_index]
+    future_features_path: null             # path to Parquet with future feature values for prediction
+
 # ── Backtesting ───────────────────────────────────────────────────────────────
 backtest:
   n_folds: 3

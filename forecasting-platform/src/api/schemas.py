@@ -61,3 +61,14 @@ class DriftResponse(BaseModel):
     n_critical: int
     n_warning: int
     alerts: List[DriftAlertItem]
+
+
+class AuditEventResponse(BaseModel):
+    """One audit event."""
+    audit_id: str
+    timestamp: str
+    user_id: str
+    action: str
+    resource_type: str
+    resource_id: str
+    status: str

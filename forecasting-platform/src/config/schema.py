@@ -12,6 +12,14 @@ from typing import Any, Dict, List, Optional
 
 
 @dataclass
+class ExternalRegressorConfig:
+    """Configuration for external regressors (promotions, holidays, price, etc.)."""
+    enabled: bool = False
+    feature_columns: List[str] = field(default_factory=list)
+    future_features_path: Optional[str] = None
+
+
+@dataclass
 class HierarchyLevelConfig:
     """One level in a hierarchy dimension (e.g. 'country' inside geography)."""
     name: str
@@ -56,6 +64,9 @@ class ForecastConfig:
     sparse_detection: bool = True        # auto-detect sparse series when intermittent_forecasters set
     sparse_adi_threshold: float = 1.32   # ADI ≥ threshold → sparse (SBC recommendation)
     sparse_cv2_threshold: float = 0.49   # CV² threshold for SBC classification
+    external_regressors: ExternalRegressorConfig = field(
+        default_factory=ExternalRegressorConfig
+    )
 
 
 @dataclass

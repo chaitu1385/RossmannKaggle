@@ -36,7 +36,10 @@ CREATE TABLE IF NOT EXISTS transition_overrides (
     ramp_shape      VARCHAR DEFAULT 'linear',
     created_by      VARCHAR,
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    notes           VARCHAR
+    notes           VARCHAR,
+    status          VARCHAR DEFAULT 'approved',
+    approved_by     VARCHAR,
+    approved_at     TIMESTAMP
 )
 """
 
@@ -70,25 +73,40 @@ class OverrideStore:
         effective_date: Optional[str] = None,
         created_by: Optional[str] = None,
         notes: Optional[str] = None,
+        approval_threshold: float = 0.0,
     ) -> str:
         """
         Add a planner override.
 
+        Parameters
+        ----------
+        approval_threshold:
+            If proportion exceeds this threshold, the override is created
+            with status 'pending_approval' and requires manager sign-off.
+            A threshold of 0.0 means all overrides are auto-approved.
+
         Returns the generated override_id.
         """
         override_id = f"OVR-{uuid.uuid4().hex[:8].upper()}"
+
+        # Determine approval status based on threshold
+        if approval_threshold > 0.0 and proportion > approval_threshold:
+            status = "pending_approval"
+        else:
+            status = "approved"
 
         if self._conn:
             self._conn.execute(
                 """
                 INSERT INTO transition_overrides
                 (override_id, old_sku, new_sku, effective_date, scenario,
-                 proportion, ramp_shape, created_by, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 proportion, ramp_shape, created_by, notes, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     override_id, old_sku, new_sku, effective_date,
                     scenario, proportion, ramp_shape, created_by, notes,
+                    status,
                 ],
             )
         else:
@@ -104,6 +122,9 @@ class OverrideStore:
                 "created_by": [created_by],
                 "created_at": [datetime.now().isoformat()],
                 "notes": [notes],
+                "status": [status],
+                "approved_by": [None],
+                "approved_at": [None],
             })
             if self._csv_path.exists():
                 existing = pl.read_csv(str(self._csv_path))

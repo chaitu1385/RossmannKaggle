@@ -371,6 +371,7 @@ class ForecastLineage:
         "horizon_weeks": pl.Int32,
         "run_id": pl.Utf8,
         "notes": pl.Utf8,
+        "user_id": pl.Utf8,
     }
 
     def __init__(self, base_path: str = "data/lineage/"):
@@ -387,6 +388,7 @@ class ForecastLineage:
         run_id: str = "",
         notes: str = "",
         run_date: Optional[date] = None,
+        user_id: str = "system",
     ) -> None:
         """Append one lineage record."""
         row = pl.DataFrame([{
@@ -398,6 +400,7 @@ class ForecastLineage:
             "horizon_weeks": horizon_weeks,
             "run_id": run_id,
             "notes": notes,
+            "user_id": user_id,
         }])
 
         ts = (run_date or date.today()).isoformat()
