@@ -51,6 +51,7 @@ class BacktestEngine:
         self,
         series: pl.DataFrame,
         forecasters: List[BaseForecaster],
+        sparse_forecasters: Optional[List[BaseForecaster]] = None,
         target_col: Optional[str] = None,
         time_col: Optional[str] = None,
         id_col: Optional[str] = None,
@@ -63,7 +64,11 @@ class BacktestEngine:
         series:
             Model-ready panel data (from SeriesBuilder).
         forecasters:
-            List of forecaster instances to evaluate.
+            List of forecaster instances to evaluate on dense (regular) series.
+        sparse_forecasters:
+            Optional list of forecasters for intermittent/sparse series.
+            When provided, series are split by the SparseDetector and each
+            partition is evaluated with its dedicated model list.
 
         Returns
         -------
@@ -74,6 +79,27 @@ class BacktestEngine:
         time_col = time_col or fc.time_column
         id_col = id_col or fc.series_id_column
 
+        # Sparse routing: split series into dense and sparse partitions
+        if sparse_forecasters:
+            from ..series.sparse_detector import SparseDetector
+            detector = SparseDetector(
+                adi_threshold=fc.sparse_adi_threshold,
+                cv2_threshold=fc.sparse_cv2_threshold,
+            )
+            dense_series, sparse_series = detector.split(
+                series, target_col=target_col, id_col=id_col
+            )
+            n_sparse = sparse_series[id_col].n_unique() if not sparse_series.is_empty() else 0
+            n_dense = dense_series[id_col].n_unique() if not dense_series.is_empty() else 0
+            logger.info(
+                "Sparse routing: %d dense series → %s, %d sparse series → %s",
+                n_dense, [f.name for f in forecasters],
+                n_sparse, [f.name for f in sparse_forecasters],
+            )
+        else:
+            dense_series = series
+            sparse_series = pl.DataFrame()
+
         splits = self._cv.split_data(series, time_col)
         if not splits:
             logger.warning("No valid CV folds. Check data date range.")
@@ -83,37 +109,55 @@ class BacktestEngine:
         run_date = date.today()
         all_results: List[pl.DataFrame] = []
 
-        for fold, train, val in splits:
+        for fold, _train_full, _val_full in splits:
             logger.info(
                 "Fold %d: train %s→%s, val %s→%s (%d/%d train/val rows)",
                 fold.fold_index,
                 fold.train_start, fold.train_end,
                 fold.val_start, fold.val_end,
-                len(train), len(val),
+                len(_train_full), len(_val_full),
             )
 
-            for forecaster in forecasters:
-                logger.info(
-                    "  Model: %s (fold %d)", forecaster.name, fold.fold_index
-                )
-                try:
-                    fold_result = self._run_one(
-                        forecaster=forecaster,
-                        train=train,
-                        val=val,
-                        fold_index=fold.fold_index,
-                        run_id=run_id,
-                        run_date=run_date,
-                        target_col=target_col,
-                        time_col=time_col,
-                        id_col=id_col,
+            # Build per-partition train/val splits
+            partitions: List[tuple] = []
+            if not dense_series.is_empty():
+                dense_ids = dense_series[id_col].unique().to_list()
+                train_d = _train_full.filter(pl.col(id_col).is_in(dense_ids))
+                val_d = _val_full.filter(pl.col(id_col).is_in(dense_ids))
+                partitions.append((train_d, val_d, forecasters))
+            if sparse_forecasters and not sparse_series.is_empty():
+                sparse_ids = sparse_series[id_col].unique().to_list()
+                train_s = _train_full.filter(pl.col(id_col).is_in(sparse_ids))
+                val_s = _val_full.filter(pl.col(id_col).is_in(sparse_ids))
+                partitions.append((train_s, val_s, sparse_forecasters))
+            if not partitions:
+                partitions = [(_train_full, _val_full, forecasters)]
+
+            for train, val, models in partitions:
+                if train.is_empty() or val.is_empty():
+                    continue
+                for forecaster in models:
+                    logger.info(
+                        "  Model: %s (fold %d)", forecaster.name, fold.fold_index
                     )
-                    all_results.append(fold_result)
-                except Exception as e:
-                    logger.error(
-                        "  Model %s fold %d failed: %s",
-                        forecaster.name, fold.fold_index, e,
-                    )
+                    try:
+                        fold_result = self._run_one(
+                            forecaster=forecaster,
+                            train=train,
+                            val=val,
+                            fold_index=fold.fold_index,
+                            run_id=run_id,
+                            run_date=run_date,
+                            target_col=target_col,
+                            time_col=time_col,
+                            id_col=id_col,
+                        )
+                        all_results.append(fold_result)
+                    except Exception as e:
+                        logger.error(
+                            "  Model %s fold %d failed: %s",
+                            forecaster.name, fold.fold_index, e,
+                        )
 
         if not all_results:
             return pl.DataFrame()

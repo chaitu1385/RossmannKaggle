@@ -19,6 +19,7 @@ import polars as pl
 from ..backtesting.champion import ChampionSelector
 from ..backtesting.engine import BacktestEngine
 from ..config.schema import PlatformConfig
+from ..forecasting.ensemble import WeightedEnsembleForecaster
 from ..forecasting.registry import registry
 from ..metrics.store import MetricStore
 from ..series.builder import SeriesBuilder
@@ -82,9 +83,19 @@ class BacktestPipeline:
         forecasters = registry.build_from_config(fc.forecasters)
         logger.info("Forecasters: %s", [f.name for f in forecasters])
 
+        # Intermittent demand forecasters (optional sparse routing)
+        sparse_forecasters = None
+        if fc.intermittent_forecasters and fc.sparse_detection:
+            sparse_forecasters = registry.build_from_config(fc.intermittent_forecasters)
+            logger.info(
+                "Sparse forecasters: %s", [f.name for f in sparse_forecasters]
+            )
+
         # Step 3: Run backtesting
         logger.info("Running backtesting (%d folds)...", self.config.backtest.n_folds)
-        results = self._backtest_engine.run(series, forecasters)
+        results = self._backtest_engine.run(
+            series, forecasters, sparse_forecasters=sparse_forecasters
+        )
 
         if results.is_empty():
             logger.warning("Backtesting produced no results.")
@@ -94,9 +105,28 @@ class BacktestPipeline:
                 "leaderboard": pl.DataFrame(),
             }
 
-        # Step 4: Select champion
-        logger.info("Selecting champion model(s)...")
-        champions = self._champion_selector.select(results)
+        # Step 4: Select champion / build ensemble
+        strategy = self.config.backtest.selection_strategy
+        ensemble: Optional[WeightedEnsembleForecaster] = None
+
+        if strategy == "weighted_ensemble":
+            logger.info("Building weighted ensemble from backtest results...")
+            weights = self._champion_selector.compute_ensemble_weights(results)
+            ensemble = WeightedEnsembleForecaster(
+                forecasters=forecasters,
+                weights=weights,
+            )
+            # Create a synthetic champion row describing the ensemble
+            champions = pl.DataFrame({
+                "group_key": [self.config.lob],
+                "model_id": ["weighted_ensemble"],
+                self.config.backtest.primary_metric: [0.0],
+                self.config.backtest.secondary_metric: [0.0],
+            })
+            logger.info("Ensemble: %s", ensemble)
+        else:
+            logger.info("Selecting champion model(s)...")
+            champions = self._champion_selector.select(results)
 
         # Step 5: Build leaderboard
         leaderboard = self._metric_store.leaderboard(
@@ -111,4 +141,5 @@ class BacktestPipeline:
             "backtest_results": results,
             "champions": champions,
             "leaderboard": leaderboard,
+            "ensemble": ensemble,           # None unless selection_strategy="weighted_ensemble"
         }

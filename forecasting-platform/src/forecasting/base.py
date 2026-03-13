@@ -7,7 +7,7 @@ The interface is designed to work with Polars DataFrames in a multi-series
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import polars as pl
 
@@ -72,6 +72,40 @@ class BaseForecaster(ABC):
         One row per (series, future week).
         """
         ...
+
+    def predict_quantiles(
+        self,
+        horizon: int,
+        quantiles: List[float],
+        id_col: str = "series_id",
+        time_col: str = "week",
+    ) -> pl.DataFrame:
+        """
+        Generate probabilistic forecasts at the requested quantile levels.
+
+        Default implementation returns the point forecast for every quantile
+        (degenerate / zero-width intervals).  Subclasses should override
+        for proper interval estimation.
+
+        Parameters
+        ----------
+        horizon:
+            Number of future periods to forecast.
+        quantiles:
+            Ordered list of quantile levels, e.g. [0.1, 0.5, 0.9].
+        id_col, time_col:
+            Column names in output.
+
+        Returns
+        -------
+        DataFrame with columns: [id_col, time_col, "forecast_p{q}"] for each q.
+        E.g. for quantiles [0.1, 0.5, 0.9]: columns forecast_p10, forecast_p50, forecast_p90.
+        """
+        point = self.predict(horizon, id_col=id_col, time_col=time_col)
+        for q in quantiles:
+            col = f"forecast_p{int(round(q * 100))}"
+            point = point.with_columns(pl.col("forecast").alias(col))
+        return point.drop("forecast")
 
     def get_params(self) -> Dict[str, Any]:
         """Return model parameters for logging/reproducibility."""

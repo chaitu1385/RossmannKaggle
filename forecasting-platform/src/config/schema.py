@@ -47,6 +47,15 @@ class ForecastConfig:
     forecasters: List[str] = field(
         default_factory=lambda: ["naive_seasonal"]
     )
+    quantiles: List[float] = field(
+        default_factory=list
+    )                                    # e.g. [0.1, 0.5, 0.9]; empty = point forecast only
+    intermittent_forecasters: List[str] = field(
+        default_factory=list
+    )                                    # e.g. ["croston_sba", "tsb"]; empty = no sparse routing
+    sparse_detection: bool = True        # auto-detect sparse series when intermittent_forecasters set
+    sparse_adi_threshold: float = 1.32   # ADI ≥ threshold → sparse (SBC recommendation)
+    sparse_cv2_threshold: float = 0.49   # CV² threshold for SBC classification
 
 
 @dataclass
@@ -58,6 +67,7 @@ class BacktestConfig:
     champion_granularity: str = "lob"    # "lob" | "product_group" | "series"
     primary_metric: str = "wmape"
     secondary_metric: str = "normalized_bias"
+    selection_strategy: str = "champion" # "champion" | "weighted_ensemble"
 
 
 @dataclass
