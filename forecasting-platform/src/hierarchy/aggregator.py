@@ -5,7 +5,7 @@ Supports rolling data up from leaves to any ancestor level, and splitting
 data down from an aggregate level to leaves using proportional keys.
 """
 
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import polars as pl
 
@@ -191,11 +191,11 @@ class HierarchyAggregator:
         # Map each leaf to source and target
         source_map_df = pl.DataFrame({
             leaf_col: list(leaf_to_source.keys()),
-            f"_src": list(leaf_to_source.values()),
+            "_src": list(leaf_to_source.values()),
         })
         target_map_df = pl.DataFrame({
             leaf_col: list(leaf_to_target.keys()),
-            f"_tgt": list(leaf_to_target.values()),
+            "_tgt": list(leaf_to_target.values()),
         })
 
         enriched = (

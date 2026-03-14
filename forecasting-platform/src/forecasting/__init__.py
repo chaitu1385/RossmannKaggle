@@ -1,8 +1,14 @@
-from .base import BaseForecaster
-from .registry import ForecasterRegistry, registry
-from .naive import SeasonalNaiveForecaster
-from .statistical import AutoARIMAForecaster, AutoETSForecaster
-from .ml import LGBMDirectForecaster, XGBoostDirectForecaster
-from .ensemble import WeightedEnsembleForecaster
-from .foundation import ChronosForecaster, TimeGPTForecaster
-from .intermittent import CrostonForecaster, CrostonSBAForecaster, TSBForecaster
+from .base import BaseForecaster as BaseForecaster
+from .ensemble import WeightedEnsembleForecaster as WeightedEnsembleForecaster
+from .foundation import ChronosForecaster as ChronosForecaster
+from .foundation import TimeGPTForecaster as TimeGPTForecaster
+from .intermittent import CrostonForecaster as CrostonForecaster
+from .intermittent import CrostonSBAForecaster as CrostonSBAForecaster
+from .intermittent import TSBForecaster as TSBForecaster
+from .ml import LGBMDirectForecaster as LGBMDirectForecaster
+from .ml import XGBoostDirectForecaster as XGBoostDirectForecaster
+from .naive import SeasonalNaiveForecaster as SeasonalNaiveForecaster
+from .registry import ForecasterRegistry as ForecasterRegistry
+from .registry import registry as registry
+from .statistical import AutoARIMAForecaster as AutoARIMAForecaster
+from .statistical import AutoETSForecaster as AutoETSForecaster

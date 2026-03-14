@@ -15,7 +15,7 @@ Smooth and erratic series → regular forecasting models
 Intermittent and lumpy series → intermittent demand models
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import polars as pl

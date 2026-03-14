@@ -10,12 +10,12 @@ Responsibilities:
 """
 
 from datetime import date
-from typing import Dict, List, Optional
+from typing import Optional
 
 import polars as pl
 
 from ..config.schema import PlatformConfig
-from .transition import TransitionEngine, TransitionPlan
+from .transition import TransitionEngine
 
 
 class SeriesBuilder:

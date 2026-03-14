@@ -5,10 +5,10 @@ Defines the role hierarchy and user representation used throughout
 the platform for access control and audit attribution.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Set
+from typing import Optional, Set
 
 
 class Role(str, Enum):

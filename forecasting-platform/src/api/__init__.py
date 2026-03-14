@@ -9,11 +9,11 @@ app         FastAPI application with routes.
 
 from .app import create_app  # noqa: F401
 from .schemas import (  # noqa: F401
-    ForecastPoint,
-    ForecastResponse,
-    LeaderboardEntry,
-    LeaderboardResponse,
     DriftAlertItem,
     DriftResponse,
+    ForecastPoint,
+    ForecastResponse,
     HealthResponse,
+    LeaderboardEntry,
+    LeaderboardResponse,
 )

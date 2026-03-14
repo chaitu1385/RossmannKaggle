@@ -31,7 +31,6 @@ import polars as pl
 from .base import BaseForecaster
 from .registry import registry
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Core fitting routines (pure Python for testability)
 # ─────────────────────────────────────────────────────────────────────────────

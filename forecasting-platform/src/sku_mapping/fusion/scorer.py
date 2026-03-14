@@ -15,7 +15,6 @@ import polars as pl
 from ..data.schemas import MappingCandidate, MappingRecord
 from .bayesian_proportions import BayesianProportionEstimator
 
-
 # ── Weight tables ─────────────────────────────────────────────────────────────
 
 # Original four-method weights (Phase 2+, design doc §4.1)

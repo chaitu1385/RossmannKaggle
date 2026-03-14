@@ -1,10 +1,10 @@
 """LightGBM forecasting model."""
 
-import numpy as np
-import pandas as pd
 from typing import Any, Dict, List, Optional
 
 import lightgbm as lgb
+import numpy as np
+import pandas as pd
 
 from .base import BaseForecaster
 

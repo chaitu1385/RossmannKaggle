@@ -38,7 +38,6 @@ import polars as pl
 
 from ..metrics.store import MetricStore
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Drift detection
 # ─────────────────────────────────────────────────────────────────────────────
@@ -118,7 +117,6 @@ class DriftDetector:
         if n_recent_weeks is not None and "target_week" in live.columns:
             max_week = live["target_week"].max()
             if max_week is not None:
-                cutoff = max_week  # polars Date arithmetic
                 live = live.sort("target_week").tail(n_recent_weeks * live["series_id"].n_unique())
 
         n_live_weeks = live["target_week"].n_unique() if "target_week" in live.columns else 0

@@ -45,9 +45,9 @@ from typing import Dict, List, Optional
 import numpy as np
 import polars as pl
 
-from .tree import HierarchyTree
-from .aggregator import HierarchyAggregator
 from ..config.schema import ReconciliationConfig
+from .aggregator import HierarchyAggregator
+from .tree import HierarchyTree
 
 
 class Reconciler:

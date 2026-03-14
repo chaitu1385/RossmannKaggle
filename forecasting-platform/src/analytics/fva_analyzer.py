@@ -6,11 +6,11 @@ for BI consumption and stakeholder reporting.
 """
 
 import logging
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import polars as pl
 
-from ..metrics.fva import classify_fva, compute_fva_cascade, compute_layer_metrics
+from ..metrics.fva import classify_fva
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ class FVAAnalyzer:
 
             # Compute FVA cascade
             layer_order = ["naive", "statistical", "ml"]
-            available = [l for l in layer_order if l in layer_data]
+            available = [lyr for lyr in layer_order if lyr in layer_data]
 
             for i, layer in enumerate(available):
                 parent_layer = available[i - 1] if i > 0 else None
@@ -146,8 +146,6 @@ class FVAAnalyzer:
         group_cols = ["forecast_layer"]
         if group_by:
             group_cols = group_by + group_cols
-
-        n_rows = fva_detail.group_by(group_cols).agg(pl.len().alias("n"))
 
         summary = (
             fva_detail

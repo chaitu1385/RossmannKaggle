@@ -144,7 +144,6 @@ class DeltaWriter:
         -------
         str — ABFSS path of the target table.
         """
-        from pyspark.sql import functions as F
 
         path = self.config.table_path(table_name)
 

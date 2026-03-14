@@ -1,9 +1,9 @@
 """XGBoost forecasting model."""
 
-import numpy as np
-import pandas as pd
 from typing import Any, Dict, List, Optional
 
+import numpy as np
+import pandas as pd
 import xgboost as xgb
 
 from .base import BaseForecaster

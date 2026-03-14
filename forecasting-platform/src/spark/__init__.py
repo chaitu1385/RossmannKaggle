@@ -14,8 +14,8 @@ series_builder      SparkSeriesBuilder — configurable raw → canonical series
 utils               Schema helpers and Polars ↔ Spark conversion utilities.
 """
 
-from .session import get_or_create_spark  # noqa: F401
-from .loader import SparkDataLoader  # noqa: F401
 from .feature_engineering import SparkFeatureEngineer  # noqa: F401
+from .loader import SparkDataLoader  # noqa: F401
 from .pipeline import SparkForecastPipeline  # noqa: F401
-from .series_builder import SparkSeriesBuilder, SeriesBuilderConfig  # noqa: F401
+from .series_builder import SeriesBuilderConfig, SparkSeriesBuilder  # noqa: F401
+from .session import get_or_create_spark  # noqa: F401

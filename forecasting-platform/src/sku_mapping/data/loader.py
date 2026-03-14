@@ -5,8 +5,6 @@ from typing import Union
 
 import polars as pl
 
-from .schemas import PRODUCT_MASTER_SCHEMA
-
 
 class ProductMasterLoader:
     """Loads product master data and normalises it to the pipeline's schema."""

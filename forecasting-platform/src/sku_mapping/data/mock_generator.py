@@ -16,7 +16,6 @@ from typing import Dict, List
 
 import polars as pl
 
-
 # ── Seed definitions ──────────────────────────────────────────────────────────
 
 _BASE_DATE = date(2022, 1, 1)

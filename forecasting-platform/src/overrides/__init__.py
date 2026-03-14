@@ -1,1 +1,1 @@
-from .store import OverrideStore
+from .store import OverrideStore as OverrideStore

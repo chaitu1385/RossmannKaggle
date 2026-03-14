@@ -10,7 +10,7 @@ from typing import Dict, List
 
 import polars as pl
 
-from ..data.schemas import MappingCandidate, PREDECESSOR_STATUSES, SUCCESSOR_STATUSES
+from ..data.schemas import PREDECESSOR_STATUSES, MappingCandidate
 from .base import BaseMethod
 
 

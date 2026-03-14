@@ -48,7 +48,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import polars as pl
 
-from ..data.schemas import MappingCandidate, PREDECESSOR_STATUSES
+from ..data.schemas import PREDECESSOR_STATUSES, MappingCandidate
 from .base import BaseMethod
 
 
@@ -295,7 +295,6 @@ class TemporalCovementMethod(BaseMethod):
             overlap_end   = min(old_last_ord, post_end)
 
             if overlap_end > overlap_start:
-                old_span = max(old_last_ord - old_first_ord, 1.0)
                 overlap_score = float(
                     np.clip((overlap_end - overlap_start) / window_ord, 0.0, 1.0)
                 )

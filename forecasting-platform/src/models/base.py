@@ -1,11 +1,12 @@
 """Base forecaster class for all models."""
 
-import joblib
-import numpy as np
-import pandas as pd
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+import joblib
+import numpy as np
+import pandas as pd
 
 
 class BaseForecaster(ABC):

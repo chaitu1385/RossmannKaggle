@@ -1,8 +1,9 @@
 """Data loading utilities for the forecasting platform."""
 
-import pandas as pd
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Tuple
+
+import pandas as pd
 
 
 class DataLoader:

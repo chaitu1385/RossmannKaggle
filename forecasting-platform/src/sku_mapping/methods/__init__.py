@@ -1,7 +1,7 @@
-from .base import BaseMethod
 from .attribute_matching import AttributeMatchingMethod
-from .naming_parsing import NamingConventionMethod
+from .base import BaseMethod
 from .curve_fitting import CurveFittingMethod
+from .naming_parsing import NamingConventionMethod
 from .temporal_comovement import TemporalCovementMethod
 
 __all__ = [

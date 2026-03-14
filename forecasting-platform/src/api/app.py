@@ -38,7 +38,6 @@ from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException, Query
 
 from .schemas import (
-    AuditEventResponse,
     DriftAlertItem,
     DriftResponse,
     ForecastPoint,
@@ -94,8 +93,8 @@ def create_app(
     from ..audit.logger import AuditLogger
     app.state.audit_logger = AuditLogger(audit_log_path)
 
-    from ..auth.rbac import get_current_user, require_permission
     from ..auth.models import Permission, User
+    from ..auth.rbac import get_current_user, require_permission
 
     # ── Routes ─────────────────────────────────────────────────────────────
 
@@ -271,8 +270,8 @@ def create_app(
         Reads the metric store, runs ``ForecastDriftDetector``, and returns
         any accuracy / bias / volume alerts.
         """
-        from ..metrics.store import MetricStore
         from ..metrics.drift import DriftConfig, ForecastDriftDetector
+        from ..metrics.store import MetricStore
 
         store = MetricStore(str(app.state.metrics_dir))
         try:

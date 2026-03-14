@@ -23,10 +23,9 @@ Usage
 >>> actionable = flagged.filter(pl.col("has_exception"))
 """
 
-from typing import Dict, List, Optional
+from typing import List
 
 import polars as pl
-
 
 # Default thresholds (can all be overridden at construction or call time)
 _DEFAULTS = dict(

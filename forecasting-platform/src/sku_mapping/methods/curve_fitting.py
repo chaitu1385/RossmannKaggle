@@ -36,13 +36,13 @@ Usage
 >>> candidates = method.run(product_master)
 """
 
-from datetime import date, timedelta
+from datetime import date
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import polars as pl
 
-from ..data.schemas import MappingCandidate, PREDECESSOR_STATUSES
+from ..data.schemas import PREDECESSOR_STATUSES, MappingCandidate
 from .base import BaseMethod
 
 

@@ -1,11 +1,11 @@
 """Model evaluation utilities."""
 
-import numpy as np
-import pandas as pd
 from typing import Dict, List
 
-from .metrics import rmspe, rmse, mae, mape
+import pandas as pd
+
 from ..models.base import BaseForecaster
+from .metrics import mae, mape, rmse, rmspe
 
 
 class ModelEvaluator:

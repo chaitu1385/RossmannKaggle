@@ -5,12 +5,11 @@ Both backtesting and live performance write to the same schema, enabling
 cross-comparison ("does our backtesting champion actually win in production?").
 """
 
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional
 
 import polars as pl
-
 
 # The canonical schema for all metric records
 METRIC_SCHEMA = {

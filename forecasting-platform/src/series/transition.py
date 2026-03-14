@@ -18,8 +18,7 @@ planner overrides when available.
 
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
@@ -27,7 +26,6 @@ from typing import Dict, List, Optional, Tuple
 import polars as pl
 
 from ..config.schema import TransitionConfig
-
 
 VALID_RAMP_SHAPES = frozenset({"linear", "scurve", "step"})
 
