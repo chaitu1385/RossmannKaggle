@@ -1,8 +1,9 @@
 """Configuration loading utilities."""
 
-import yaml
 from pathlib import Path
 from typing import Any, Dict
+
+import yaml
 
 
 def load_config(config_path: str) -> Dict[str, Any]:

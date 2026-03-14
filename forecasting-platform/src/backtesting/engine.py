@@ -11,11 +11,11 @@ For each (model, fold) combination:
 import logging
 import uuid
 from datetime import date
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import polars as pl
 
-from ..config.schema import BacktestConfig, PlatformConfig
+from ..config.schema import PlatformConfig
 from ..forecasting.base import BaseForecaster
 from ..metrics.definitions import compute_all_metrics
 from ..metrics.store import MetricStore

@@ -14,7 +14,7 @@ Usage
 >>> fa.compare_reconciliation_strategies(metric="wmape")
 """
 
-from typing import Dict, List, Optional
+from typing import Optional
 
 import polars as pl
 

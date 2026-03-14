@@ -20,7 +20,7 @@ Example
 >>> forecast = ensemble.predict(horizon=13)
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import polars as pl
 

@@ -14,7 +14,7 @@ Steps:
 import logging
 from datetime import date
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Optional, Union
 
 import polars as pl
 

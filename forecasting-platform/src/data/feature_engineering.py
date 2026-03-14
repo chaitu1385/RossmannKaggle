@@ -1,8 +1,8 @@
 """Feature engineering for time series forecasting."""
 
-import pandas as pd
-import numpy as np
 from typing import List, Optional
+
+import pandas as pd
 
 
 class FeatureEngineer:

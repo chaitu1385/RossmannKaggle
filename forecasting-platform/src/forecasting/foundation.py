@@ -176,8 +176,8 @@ class ChronosForecaster(BaseForecaster):
             return
 
         try:
-            from chronos import ChronosPipeline  # type: ignore[import]
             import torch
+            from chronos import ChronosPipeline  # type: ignore[import]
         except ImportError as exc:
             raise ImportError(
                 "ChronosForecaster requires 'chronos-forecasting' and 'torch'.\n"
@@ -367,7 +367,7 @@ class TimeGPTForecaster(BaseForecaster):
         lower_qs = sorted(q for q in quantiles if q < 0.5 - 1e-6)
         levels = sorted({int(round((1 - 2 * q) * 100)) for q in lower_qs}) if lower_qs else [80]
 
-        raw = self._call_api(horizon, levels=levels, id_col=id_col, time_col=time_col)
+        self._call_api(horizon, levels=levels, id_col=id_col, time_col=time_col)
 
         # _call_api returns a "forecast" point column; rename + add quantile columns
         # Get the raw result with interval columns by re-running with level param

@@ -1,11 +1,23 @@
 from .definitions import (
-    wmape,
-    normalized_bias,
-    mape,
-    mae,
-    rmse,
-    compute_all_metrics,
-    METRIC_REGISTRY,
+    METRIC_REGISTRY as METRIC_REGISTRY,
 )
-from .store import MetricStore
+from .definitions import (
+    compute_all_metrics as compute_all_metrics,
+)
+from .definitions import (
+    mae as mae,
+)
+from .definitions import (
+    mape as mape,
+)
+from .definitions import (
+    normalized_bias as normalized_bias,
+)
+from .definitions import (
+    rmse as rmse,
+)
+from .definitions import (
+    wmape as wmape,
+)
 from .drift import DriftAlert, DriftConfig, DriftSeverity, ForecastDriftDetector  # noqa: F401
+from .store import MetricStore as MetricStore

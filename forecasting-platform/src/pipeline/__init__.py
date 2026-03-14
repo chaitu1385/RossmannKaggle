@@ -1,2 +1,2 @@
-from .backtest import BacktestPipeline
-from .forecast import ForecastPipeline
+from .backtest import BacktestPipeline as BacktestPipeline
+from .forecast import ForecastPipeline as ForecastPipeline

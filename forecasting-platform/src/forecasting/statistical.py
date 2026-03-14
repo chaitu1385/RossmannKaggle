@@ -8,7 +8,6 @@ These models output the full horizon vector at once (direct multi-step),
 which aligns with the platform's seq2seq requirement.
 """
 
-from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 import polars as pl

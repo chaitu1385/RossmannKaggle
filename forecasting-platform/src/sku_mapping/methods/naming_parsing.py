@@ -16,9 +16,8 @@ from typing import List, Optional, Tuple
 import polars as pl
 from rapidfuzz import fuzz
 
-from ..data.schemas import MappingCandidate, PREDECESSOR_STATUSES, SUCCESSOR_STATUSES
+from ..data.schemas import PREDECESSOR_STATUSES, MappingCandidate
 from .base import BaseMethod
-
 
 # ── Generation-marker regex patterns ─────────────────────────────────────────
 # Each tuple: (compiled regex, marker_type_label)

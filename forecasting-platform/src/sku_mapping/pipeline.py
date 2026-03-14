@@ -14,11 +14,11 @@ from typing import List, Optional
 import polars as pl
 
 from .data.loader import ProductMasterLoader
-from .fusion.scorer import CandidateFusion, _FULL_WEIGHTS
-from .methods.base import BaseMethod
+from .fusion.scorer import _FULL_WEIGHTS, CandidateFusion
 from .methods.attribute_matching import AttributeMatchingMethod
-from .methods.naming_parsing import NamingConventionMethod
+from .methods.base import BaseMethod
 from .methods.curve_fitting import CurveFittingMethod
+from .methods.naming_parsing import NamingConventionMethod
 from .methods.temporal_comovement import TemporalCovementMethod
 from .output.writer import MappingWriter
 

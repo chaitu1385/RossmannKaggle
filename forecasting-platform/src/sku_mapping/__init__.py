@@ -16,8 +16,8 @@ Quick start
 >>> mapping_df = pipeline.run(product_master, output_path="output/mappings.csv")
 """
 
-from .pipeline import SKUMappingPipeline, build_phase1_pipeline
 from .data.schemas import MappingCandidate, MappingRecord
+from .pipeline import SKUMappingPipeline, build_phase1_pipeline
 
 __all__ = [
     "SKUMappingPipeline",

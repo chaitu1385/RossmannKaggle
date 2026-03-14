@@ -15,7 +15,6 @@ from typing import Callable, Dict, List, Optional
 
 import polars as pl
 
-
 # ── Metric functions ──────────────────────────────────────────────────────────
 
 def wmape(actual: pl.Series, forecast: pl.Series) -> float:

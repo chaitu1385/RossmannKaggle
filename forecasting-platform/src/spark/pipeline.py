@@ -102,6 +102,7 @@ class SparkForecastPipeline:
         Spark DataFrame: [series_id, week, forecast].
         """
         from pyspark.sql import types as T
+
         from .utils import repartition_by_series
 
         horizon = horizon or self.config.forecast.horizon_weeks
@@ -123,6 +124,7 @@ class SparkForecastPipeline:
             """Called once per series partition.  Runs entirely on the executor."""
             import pandas as pd
             import polars as pl
+
             from src.forecasting.registry import registry
 
             p = params_bc.value
@@ -176,6 +178,7 @@ class SparkForecastPipeline:
         Spark DataFrame: [series_id, model, fold, wmape, normalized_bias, mae].
         """
         from pyspark.sql import types as T
+
         from .utils import repartition_by_series
 
         model_names = model_names or self.config.forecast.forecasters
@@ -193,7 +196,6 @@ class SparkForecastPipeline:
         params_bc = self.spark.sparkContext.broadcast(params)
 
         id_col   = params["id_col"]
-        time_col = params["time_col"]
 
         output_schema = T.StructType([
             T.StructField(id_col,            T.StringType(),  nullable=False),
@@ -209,6 +211,7 @@ class SparkForecastPipeline:
             import numpy as np
             import pandas as pd
             import polars as pl
+
             from src.forecasting.registry import registry
 
             p = params_bc.value

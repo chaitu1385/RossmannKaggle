@@ -10,12 +10,11 @@ Measures how much accuracy each forecast layer contributes:
 FVA = error reduction from the previous layer. Positive = improvement.
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List
 
 import polars as pl
 
-from .definitions import wmape, normalized_bias, mae
-
+from .definitions import mae, normalized_bias, wmape
 
 # FVA classification thresholds (in WMAPE percentage points)
 FVA_ADDS_VALUE_THRESHOLD = 0.02      # > 2pp improvement
@@ -88,7 +87,7 @@ def compute_fva_cascade(
     List of dicts, one per layer transition.
     """
     layer_order = ["naive", "statistical", "ml", "override"]
-    available = [l for l in layer_order if l in forecasts]
+    available = [lyr for lyr in layer_order if lyr in forecasts]
 
     if not available:
         return []
@@ -140,7 +139,7 @@ def compute_total_fva(
     Compute total FVA: WMAPE reduction from baseline (naive) to final layer.
     """
     layer_order = ["naive", "statistical", "ml", "override"]
-    available = [l for l in layer_order if l in forecasts]
+    available = [lyr for lyr in layer_order if lyr in forecasts]
 
     if len(available) < 2:
         return 0.0

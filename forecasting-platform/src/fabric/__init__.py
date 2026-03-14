@@ -10,6 +10,6 @@ deployment      End-to-end deployment orchestrator with pre/post-run checks.
 """
 
 from .config import FabricConfig  # noqa: F401
-from .lakehouse import FabricLakehouse  # noqa: F401
 from .delta_writer import DeltaWriter  # noqa: F401
 from .deployment import DeploymentConfig, DeploymentOrchestrator, DeploymentResult  # noqa: F401
+from .lakehouse import FabricLakehouse  # noqa: F401

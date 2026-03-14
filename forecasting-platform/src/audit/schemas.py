@@ -4,10 +4,10 @@ Audit event data model.
 Defines the immutable record structure for all auditable platform actions.
 """
 
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
-import uuid
 
 
 @dataclass

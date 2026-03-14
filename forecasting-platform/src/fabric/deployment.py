@@ -42,7 +42,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
@@ -273,8 +273,9 @@ class DeploymentOrchestrator:
 
         Runs backtest when ``force_retrain=True`` or no champion found.
         """
-        from src.spark.pipeline import SparkForecastPipeline
         from pyspark.sql import functions as F
+
+        from src.spark.pipeline import SparkForecastPipeline
 
         pipeline = SparkForecastPipeline(self.spark, self.config)
         models = self.dc.models or self.config.forecast.forecasters
@@ -322,6 +323,7 @@ class DeploymentOrchestrator:
     def _read_existing_champion(self) -> Optional[str]:
         """Read champion model from leaderboard Delta table. Returns None if absent."""
         from pyspark.sql import functions as F
+
         from src.fabric.config import FabricConfig
         from src.fabric.lakehouse import FabricLakehouse
 
@@ -380,7 +382,6 @@ class DeploymentOrchestrator:
             lh.optimize("forecasts", z_order_by=["series_id", "week"])
             logger.info("Forecasts written to Lakehouse.")
         else:
-            import os
             from pathlib import Path
             output_path = Path("data/forecasts") / self.dc.lob
             output_path.mkdir(parents=True, exist_ok=True)
@@ -391,6 +392,7 @@ class DeploymentOrchestrator:
     def _write_leaderboard(self, backtest_sdf, leaderboard_sdf) -> None:
         """Write backtest results and leaderboard to Lakehouse."""
         from pyspark.sql import functions as F
+
         from src.fabric.config import FabricConfig
         from src.fabric.delta_writer import DeltaWriter
 
@@ -406,7 +408,6 @@ class DeploymentOrchestrator:
         writer.append(out_backtest, "backtest_results", partition_by=["lob", "run_date"])
 
         # Add champion_model column (first-ranked model for this LOB)
-        from pyspark.sql import Window
         champion = (
             leaderboard_sdf
             .filter(F.col("rank") == 1)
@@ -424,7 +425,6 @@ class DeploymentOrchestrator:
 
     def _write_audit_log(self, result: DeploymentResult) -> None:
         """Append a single audit log row to the deploy_log Delta table."""
-        from pyspark.sql import functions as F
         import pyspark.sql.types as T
 
         schema = T.StructType([

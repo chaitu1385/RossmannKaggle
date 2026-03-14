@@ -8,7 +8,7 @@ Falls back to a direct manual implementation if mlforecast is not installed.
 """
 
 from datetime import timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import polars as pl
@@ -19,7 +19,6 @@ from .registry import registry
 # Attempt to import mlforecast; fall back to manual implementation
 try:
     from mlforecast import MLForecast
-    from mlforecast.target_transforms import Differences
     _HAS_MLFORECAST = True
 except ImportError:
     _HAS_MLFORECAST = False

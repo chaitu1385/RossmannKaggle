@@ -7,7 +7,7 @@ The interface is designed to work with Polars DataFrames in a multi-series
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import polars as pl
 
