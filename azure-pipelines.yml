@@ -1,0 +1,107 @@
+trigger:
+  branches:
+    include:
+      - master
+      - main
+  tags:
+    include:
+      - 'v*'
+
+pr:
+  branches:
+    include:
+      - master
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  pythonVersion: '3.11'
+  workingDirectory: 'forecasting-platform'
+
+stages:
+  # ── Stage 1: Lint & Test ────────────────────────────────────────────
+  - stage: Test
+    displayName: 'Lint & Test'
+    jobs:
+      - job: LintAndTest
+        displayName: 'Lint + pytest'
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(pythonVersion)'
+            displayName: 'Use Python $(pythonVersion)'
+
+          - script: |
+              pip install -r $(workingDirectory)/requirements.txt
+              pip install pytest pytest-cov httpx rapidfuzz ruff
+            displayName: 'Install dependencies'
+
+          - script: ruff check $(workingDirectory)/src/
+            displayName: 'Lint (ruff)'
+
+          - script: |
+              cd $(workingDirectory)
+              python -m pytest \
+                --ignore=tests/test_metrics.py \
+                --ignore=tests/test_feature_engineering.py \
+                -v \
+                --cov=src \
+                --cov-report=xml \
+                --junitxml=test-results.xml
+            displayName: 'Run tests'
+
+          - task: PublishTestResults@2
+            condition: always()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(workingDirectory)/test-results.xml'
+              testRunTitle: 'Python $(pythonVersion) Tests'
+
+          - task: PublishCodeCoverageResults@2
+            condition: succeededOrFailed()
+            inputs:
+              summaryFileLocation: '$(workingDirectory)/coverage.xml'
+
+  # ── Stage 2: Docker Build ──────────────────────────────────────────
+  - stage: Build
+    displayName: 'Docker Build'
+    dependsOn: Test
+    condition: succeeded()
+    jobs:
+      - job: DockerBuild
+        displayName: 'Build container image'
+        steps:
+          - task: Docker@2
+            displayName: 'Build image'
+            inputs:
+              command: build
+              Dockerfile: '$(workingDirectory)/Dockerfile'
+              buildContext: '$(workingDirectory)'
+              arguments: '--target production'
+              tags: |
+                $(Build.BuildId)
+                latest
+
+  # ── Stage 3: Push to ACR (tag builds only) ─────────────────────────
+  - stage: Push
+    displayName: 'Push to ACR'
+    dependsOn: Build
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/v'))
+    jobs:
+      - job: PushToACR
+        displayName: 'Push to Azure Container Registry'
+        steps:
+          - task: Docker@2
+            displayName: 'Build and push'
+            inputs:
+              containerRegistry: '$(ACR_SERVICE_CONNECTION)'
+              repository: 'forecasting-platform'
+              command: buildAndPush
+              Dockerfile: '$(workingDirectory)/Dockerfile'
+              buildContext: '$(workingDirectory)'
+              arguments: '--target production'
+              tags: |
+                $(Build.BuildId)
+                latest

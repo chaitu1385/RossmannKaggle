@@ -102,6 +102,51 @@ class OutputConfig:
 
 
 @dataclass
+class SourceConfig:
+    """Configuration for a single data source."""
+    name: str = ""
+    type: str = "file"                          # "file" | "database" | "api"
+    path: Optional[str] = None                  # file source
+    format: Optional[str] = None                # csv | parquet | delta
+    connection_string: Optional[str] = None     # database source
+    query: Optional[str] = None                 # database source
+    url: Optional[str] = None                   # api source
+    headers: Dict[str, str] = field(default_factory=dict)
+    csv_separator: str = ","
+    csv_has_header: bool = True
+
+
+@dataclass
+class QualityCheckConfig:
+    """Configuration for a single data quality check."""
+    name: str = ""
+    severity: str = "warn"                      # "block" | "warn" | "info"
+    threshold: Optional[float] = None
+    params: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ColumnSchemaConfig:
+    """Schema definition for a column."""
+    name: str = ""
+    dtype: str = "Utf8"
+    required: bool = True
+    nullable: bool = True
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+
+
+@dataclass
+class IngestionConfig:
+    """Data ingestion configuration — sources, schemas, and quality checks."""
+    sources: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    schemas: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
+    quality_checks: List[Dict[str, Any]] = field(default_factory=list)
+    report_path: str = "data/ingestion_reports/"
+    time_column: Optional[str] = None
+
+
+@dataclass
 class PlatformConfig:
     """
     Top-level configuration for the forecasting platform.
@@ -121,6 +166,7 @@ class PlatformConfig:
     backtest: BacktestConfig = field(default_factory=BacktestConfig)
     transition: TransitionConfig = field(default_factory=TransitionConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
+    ingestion: IngestionConfig = field(default_factory=IngestionConfig)
     metrics: List[str] = field(
         default_factory=lambda: ["wmape", "normalized_bias"]
     )

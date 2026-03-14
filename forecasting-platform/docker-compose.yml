@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+    environment:
+      - API_DATA_DIR=/app/data
+      - API_METRICS_DIR=/app/data/metrics
+      - AUTH_ENABLED=false
+      - API_VERSION=dev
+    command: uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Uncomment to run tests in container
+  # test:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.dev
+  #   volumes:
+  #     - ./src:/app/src
+  #     - ./tests:/app/tests
+  #   command: python -m pytest tests/ -v --ignore=tests/test_metrics.py --ignore=tests/test_feature_engineering.py

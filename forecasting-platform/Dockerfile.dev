@@ -1,0 +1,33 @@
+# Development image — all optional dependencies included, hot-reload enabled
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libgomp1 git curl && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Optional dependencies for full dev experience
+RUN pip install --no-cache-dir \
+    pytest pytest-cov httpx \
+    ruff \
+    pyjwt bcrypt \
+    holidays \
+    shap \
+    rapidfuzz \
+    "uvicorn[standard]"
+
+COPY src/ src/
+COPY setup.py pyproject.toml ./
+
+EXPOSE 8000
+
+ENV API_DATA_DIR=/app/data \
+    API_METRICS_DIR=/app/data/metrics \
+    AUTH_ENABLED=false
+
+CMD ["uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

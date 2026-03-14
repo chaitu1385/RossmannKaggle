@@ -1,0 +1,33 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+dist/
+build/
+.eggs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data (mount as volumes instead)
+data/
+*.duckdb
+
+# Test cache
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Docs
+*.md
+!README.md
+LICENSE
