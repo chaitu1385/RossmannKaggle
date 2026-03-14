@@ -1,6 +1,6 @@
 # Forecasting Platform — Technical Specification
 
-**Status:** Phase 4 complete
+**Status:** Phase 4 complete + Tier 1 features (External Regressors, RBAC + Audit Trail, FVA Analysis)
 **Last updated:** 2026-03-13
 
 ---
@@ -23,9 +23,15 @@ Weekly sales forecasting at scale for a retail / supply-chain S&OP process:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  REST API  (FastAPI)                  src/api/              │
+│  REST API  (FastAPI, JWT-protected)   src/api/              │
+│  POST /auth/token                                           │
 │  GET /health  /forecast/{lob}  /metrics/leaderboard/{lob}  │
 │  GET /forecast/{lob}/{series_id}  /metrics/drift/{lob}     │
+│  GET /audit                                                 │
+├─────────────────────────────────────────────────────────────┤
+│  Auth & Audit                         src/auth/ src/audit/  │
+│  RBAC (5 roles, 11 permissions) · JWT tokens                │
+│  AuditLogger (append-only, Parquet, date-partitioned)       │
 ├─────────────────────────────────────────────────────────────┤
 │  Analytics Layer                      src/analytics/        │
 │  ForecastAnalytics (notebook API)                           │
@@ -33,7 +39,7 @@ Weekly sales forecasting at scale for a retail / supply-chain S&OP process:
 │  ForecastComparator · ExceptionEngine                       │
 │  ForecastExplainer (STL + SHAP + narrative)                 │
 │  DriftDetector · ModelCard · ModelCardRegistry              │
-│  ForecastLineage                                            │
+│  ForecastLineage · FVAAnalyzer                              │
 ├─────────────────────────────────────────────────────────────┤
 │  Pipeline Layer                       src/pipeline/         │
 │  BacktestPipeline · ForecastPipeline                        │
@@ -57,7 +63,7 @@ Weekly sales forecasting at scale for a retail / supply-chain S&OP process:
 │  WeightedEnsemble · ForecasterRegistry                      │
 ├─────────────────────────────────────────────────────────────┤
 │  Metrics                              src/metrics/          │
-│  MetricStore · ForecastDriftDetector · metric functions     │
+│  MetricStore · ForecastDriftDetector · FVA engine           │
 ├─────────────────────────────────────────────────────────────┤
 │  SKU Mapping                          src/sku_mapping/      │
 │  AttributeMatching · NamingConvention · CurveFitting        │
@@ -69,6 +75,7 @@ Weekly sales forecasting at scale for a retail / supply-chain S&OP process:
 ├─────────────────────────────────────────────────────────────┤
 │  Data Layer                           src/data/             │
 │  DataLoader · DataPreprocessor · FeatureEngineer (pandas)   │
+│  ExternalRegressorLoader · HolidayCalendar · Validator      │
 ├─────────────────────────────────────────────────────────────┤
 │  Infrastructure                       src/fabric/ src/spark/│
 │  DeploymentOrchestrator · FabricLakehouse · DeltaWriter     │
@@ -168,10 +175,11 @@ class XGBoostDirectForecaster(_DirectMLBase)
 ```
 
 Both share `_DirectMLBase` which provides:
-- `fit()` using `mlforecast` or manual lag construction (fallback)
-- `predict()` for point forecasts
+- `fit()` using `mlforecast` or manual lag construction (fallback); auto-detects external feature columns
+- `predict()` for point forecasts; uses future features if set via `set_future_features()`
 - `predict_quantiles()` via quantile regression learner or empirical YoY residual bootstrap
 - Default lags: `[1, 2, 4, 8, 13, 26, 52]`; date features: week, month, quarter
+- External regressors: any extra columns (e.g. `promotion_flag`, `holiday_flag`, `price_index`) are automatically used as features when present in the training data
 
 Default hyperparameters:
 
@@ -695,13 +703,15 @@ updated_records = estimator.estimate(mapping_records)
 
 Built with FastAPI; Swagger UI at `/docs`, ReDoc at `/redoc`.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Liveness probe; returns `{"status": "ok", "version": "..."}` |
-| GET | `/forecast/{lob}` | Latest forecast Parquet for a LOB; query params: `series_id`, `horizon` |
-| GET | `/forecast/{lob}/{series_id}` | Latest forecast for a single series |
-| GET | `/metrics/leaderboard/{lob}` | Model leaderboard; query param: `run_type` (default `backtest`) |
-| GET | `/metrics/drift/{lob}` | Drift alerts; query params: `run_type`, `baseline_weeks` (26), `recent_weeks` (8) |
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/health` | Liveness probe; returns `{"status": "ok", "version": "..."}` | No |
+| POST | `/auth/token` | Obtain JWT access token; query params: `username`, `role` (default `viewer`) | No |
+| GET | `/forecast/{lob}` | Latest forecast Parquet for a LOB; query params: `series_id`, `horizon` | JWT |
+| GET | `/forecast/{lob}/{series_id}` | Latest forecast for a single series | JWT |
+| GET | `/metrics/leaderboard/{lob}` | Model leaderboard; query param: `run_type` (default `backtest`) | JWT |
+| GET | `/metrics/drift/{lob}` | Drift alerts; query params: `run_type`, `baseline_weeks` (26), `recent_weeks` (8) | JWT |
+| GET | `/audit` | Query audit log; params: `action`, `resource_type`, `limit` (1-1000) | JWT (`VIEW_AUDIT_LOG`) |
 
 ### 12.2 Response Schemas
 
@@ -719,7 +729,13 @@ DriftResponse:     lob, n_critical, n_warning, alerts: List[DriftAlertItem]
 
 ```python
 from src.api.app import create_app
-app = create_app(data_dir="data/", metrics_dir="data/metrics/")
+app = create_app(
+    data_dir="data/",
+    metrics_dir="data/metrics/",
+    auth_enabled=True,           # enable JWT authentication
+    jwt_secret="your-secret",    # HS256 signing key
+    audit_log_path="data/audit_log/",
+)
 # Or: uvicorn src.api.app:app --port 8000
 ```
 
@@ -816,7 +832,225 @@ spark = get_or_create_spark(app_name="ForecastingPlatform", config_overrides={})
 
 ---
 
-## 15. Configuration Schema (`src/config/schema.py`)
+## 15. External Regressors (`src/data/regressors.py` + `src/config/schema.py`)
+
+Enables ML models to use external features (promotions, holidays, price indices) for training and prediction.
+
+### 15.1 ExternalRegressorConfig
+
+```python
+@dataclass
+class ExternalRegressorConfig:
+    enabled: bool = False
+    feature_columns: List[str] = field(default_factory=list)
+    future_features_path: Optional[str] = None
+```
+
+Integrated into `ForecastConfig` as the `external_regressors` field.
+
+### 15.2 Data Flow
+
+```
+actuals (series_id, week, quantity)
+    +
+external_features (series_id, week, promotion_flag, holiday_flag, price_index)
+    ↓
+SeriesBuilder.build() — left join on [series_id, week], forward-fill nulls
+    ↓
+ML model — _DirectMLBase.fit() auto-detects external feature columns
+    ↓
+ML predict — model.set_future_features(future_df); model.predict(horizon)
+```
+
+### 15.3 Regressor Utilities
+
+| Function | Description |
+|----------|-------------|
+| `load_external_features(path)` | Load from Parquet or CSV |
+| `generate_holiday_calendar(country, start, end)` | Weekly holiday flags via `holidays` lib (optional dep) |
+| `validate_regressors(features, actuals, columns)` | Checks: column existence, null detection, time range coverage, series alignment |
+
+**Constraints:**
+- External features must be at `(series_id, week)` grain or broadcastable `(week)` grain for global features like holidays
+- Future feature values MUST be provided for the entire forecast horizon
+- Statistical/naïve models silently ignore external features
+- Backward compatible: if `external_regressors.enabled = false` or section absent, no behavior change
+
+---
+
+## 16. RBAC & Authentication (`src/auth/`)
+
+Role-based access control with JWT authentication for enterprise compliance (SOX, audit trails).
+
+### 16.1 Role Hierarchy
+
+```python
+class Role(str, Enum):
+    ADMIN          = "admin"           # full access, manage users
+    DATA_SCIENTIST = "data_scientist"  # run backtests, promote models
+    PLANNER        = "planner"         # create/edit overrides, view forecasts
+    MANAGER        = "manager"         # approve overrides, view reports
+    VIEWER         = "viewer"          # read-only access
+```
+
+### 16.2 Permissions (11 total)
+
+`VIEW_FORECASTS`, `VIEW_METRICS`, `VIEW_AUDIT_LOG`, `CREATE_OVERRIDE`, `DELETE_OVERRIDE`, `APPROVE_OVERRIDE`, `RUN_BACKTEST`, `RUN_PIPELINE`, `PROMOTE_MODEL`, `MODIFY_CONFIG`, `MANAGE_USERS`
+
+**Permission matrix:**
+
+| Action | ADMIN | DATA_SCIENTIST | PLANNER | MANAGER | VIEWER |
+|--------|-------|----------------|---------|---------|--------|
+| View forecasts/metrics | Y | Y | Y | Y | Y |
+| Create/delete overrides | Y | Y | Y | N | N |
+| Approve overrides | Y | N | N | Y | N |
+| Run backtest/pipeline | Y | Y | N | N | N |
+| Promote model | Y | Y | N | N | N |
+| View audit log | Y | Y | N | Y | N |
+| Manage users | Y | N | N | N | N |
+
+### 16.3 JWT Authentication (`src/auth/token.py`)
+
+```python
+token = create_token(user_id, email, role, secret_key, expiry_hours=24)
+# Algorithm: HS256, default 24h expiry
+# Payload: user_id, email, role, exp, iat
+
+claims = decode_token(token, secret_key)
+# Returns None on expired/invalid tokens (graceful degradation)
+# PyJWT is an optional dependency
+```
+
+### 16.4 FastAPI Integration (`src/auth/rbac.py`)
+
+```python
+# Dependency injection for endpoint protection
+@app.get("/forecast/{lob}")
+def get_forecast(lob: str, user: User = Depends(get_current_user)):
+    ...
+
+# Fine-grained permission check
+@app.get("/audit")
+def get_audit(user: User = Depends(require_permission(Permission.VIEW_AUDIT_LOG))):
+    ...
+
+# Role-based check
+@app.post("/pipeline/run")
+def run_pipeline(user: User = Depends(require_role(Role.ADMIN, Role.DATA_SCIENTIST))):
+    ...
+```
+
+Development mode: when `auth_enabled=False`, `get_current_user` returns a default admin user.
+
+---
+
+## 17. Audit Trail (`src/audit/`)
+
+Append-only, immutable audit log for compliance and change attribution.
+
+### 17.1 AuditEvent Schema (`src/audit/schemas.py`)
+
+```python
+@dataclass
+class AuditEvent:
+    action: str            # e.g., "create_override", "promote_model", "view_forecast"
+    resource_type: str     # e.g., "override", "model_card", "forecast"
+    resource_id: str
+    user_id: str
+    user_role: str
+    user_email: str
+    status: str            # "SUCCESS" | "DENIED" | "FAILED"
+    old_value: Optional[str] = None    # JSON, for updates
+    new_value: Optional[str] = None    # JSON, for creates/updates
+    ip_address: Optional[str] = None
+    request_id: Optional[str] = None
+    error_message: Optional[str] = None
+    timestamp: datetime    # auto-generated UTC
+    audit_id: str          # auto-generated 16-char hex
+```
+
+### 17.2 AuditLogger (`src/audit/logger.py`)
+
+```python
+logger = AuditLogger("data/audit_log/")
+logger.log(event)                          # single event write
+logger.log_batch(events)                   # batch write
+logger.query(                              # filtered reads
+    user_id=None, action=None,
+    resource_type=None, status=None,
+    start_date=None, end_date=None,
+    limit=100
+)
+logger.count_by_action()                   # aggregation by action + status
+```
+
+**Storage:** Date-partitioned Parquet files at `audit_log/date=YYYY-MM-DD/audit_YYYYMMDD_HHMMSS_ffffff.parquet`. No UPDATE or DELETE operations — append-only by design.
+
+---
+
+## 18. Forecast Value Added (FVA) Analysis (`src/metrics/fva.py` + `src/analytics/fva_analyzer.py`)
+
+Measures incremental accuracy contribution of each forecast layer.
+
+### 18.1 Layer Definitions
+
+| Layer | Models | Role |
+|-------|--------|------|
+| L1: Naive | `seasonal_naive` | Baseline (always computed) |
+| L2: Statistical | `auto_arima`, `auto_ets`, `croston`, `croston_sba`, `tsb` | Best statistical per series |
+| L3: ML | `lgbm_direct`, `xgboost_direct` | Best ML per series |
+| L4: Override | Planner-adjusted forecast | If override exists, else L4 = L3 |
+
+### 18.2 FVA Computation (`src/metrics/fva.py`)
+
+```python
+# Per (series_id, target_week, fold):
+fva_stat  = wmape_naive - wmape_stat      # stat over naive (positive = improvement)
+fva_ml    = wmape_stat  - wmape_ml        # ml over stat
+fva_ovr   = wmape_ml    - wmape_ovr       # override over ml
+fva_total = wmape_naive - wmape_ovr       # total improvement over baseline
+```
+
+**Classification thresholds:**
+
+| FVA value | Classification | Meaning |
+|-----------|---------------|---------|
+| > 0.02 | `ADDS_VALUE` | Layer improves accuracy by >2 percentage points |
+| −0.02 to 0.02 | `NEUTRAL` | Layer roughly same as parent |
+| < −0.02 | `DESTROYS_VALUE` | Layer makes forecast worse |
+
+**Core functions:**
+
+| Function | Description |
+|----------|-------------|
+| `classify_fva(value)` | Classify FVA as ADDS_VALUE / NEUTRAL / DESTROYS_VALUE |
+| `compute_layer_metrics(actual, forecast)` | WMAPE, bias, MAE for one layer |
+| `compute_fva_between_layers(actual, parent, child)` | Incremental FVA with classification |
+| `compute_fva_cascade(actual, forecasts)` | Full cascade across all layers |
+| `compute_total_fva(actual, forecasts)` | Total WMAPE reduction baseline → final |
+
+### 18.3 FVAAnalyzer (`src/analytics/fva_analyzer.py`)
+
+```python
+analyzer = FVAAnalyzer()
+
+# Per-series, per-fold FVA from backtest results
+fva_detail = analyzer.compute_fva_detail(backtest_results)
+
+# Aggregate by layer
+fva_summary = analyzer.summarize(fva_detail, group_by=["lob"])
+# Columns: layer, mean_wmape, mean_fva_wmape, total_fva_wmape,
+#           pct_adds_value, pct_neutral, pct_destroys_value, total_volume
+
+# Layer leaderboard with recommendations
+leaderboard = analyzer.layer_leaderboard(fva_detail)
+# Columns: layer, rank, mean_fva_wmape, cumulative_wmape_reduction,
+#           robustness_score (% of series improved), recommendation (Keep/Review/Remove)
+```
+
+---
+
+## 19. Configuration Schema (`src/config/schema.py`)
 
 ```yaml
 lob: retail
@@ -833,6 +1067,13 @@ forecast:
   sparse_adi_threshold: 1.32
   sparse_cv2_threshold: 0.49
   intermittent_forecasters: [croston_sba, tsb]
+  external_regressors:
+    enabled: true
+    feature_columns:
+      - promotion_flag
+      - holiday_flag
+      - price_index
+    future_features_path: data/future_features.parquet
 
 backtest:
   n_folds: 3
@@ -872,7 +1113,7 @@ All nested dicts deep-merged; LOB override values take precedence over base conf
 
 ---
 
-## 16. Test Coverage
+## 20. Test Coverage
 
 | Test file | Tests | Key classes / scenarios |
 |-----------|------:|------------------------|
@@ -880,9 +1121,12 @@ All nested dicts deep-merged; LOB override values take precedence over base conf
 | `test_sku_mapping.py` | 67 | MockGenerator, AttributeMatching, NamingConvention (base+marker extraction), CandidateFusion, MappingWriter, end-to-end pipeline, CurveFitting, TemporalComovement, BayesianProportionEstimator |
 | `test_forecast_explainability.py` | 59 | ForecastComparator (11), ExceptionEngine (12), ForecastExplainerDecompose (7), SHAP fallback (2), Narrative (5), ModelCard (5), ModelCardRegistry (4), DriftDetector (6), ForecastLineage (6) |
 | `test_intermittent_demand.py` | 55 | SparseDetectorClassify/Split, CrostonForecaster, CrostonSBAForecaster, TSBForecaster, `_croston_fit`, `_tsb_fit`, backtest routing, IntermittentRegistry |
-| `test_foundation_models.py` | 41 | ChronosForecaster fit/predict/quantiles, TimeGPTForecaster fit/predict/quantiles, error handling, FoundationModelRegistry, zero-shot property |
 | `test_mint_reconciliation.py` | 46 | S-matrix shape/identity/arithmetic, OLS output/non-neg/multi-level, WLS structural/residual, MinT no-residuals fallback/with-residuals/shrinkage/coherence, multi-value-columns, edge cases (single leaf, all-zero, missing levels), G·S=I property |
+| `test_foundation_models.py` | 41 | ChronosForecaster fit/predict/quantiles, TimeGPTForecaster fit/predict/quantiles, error handling, FoundationModelRegistry, zero-shot property |
 | `test_probabilistic_ensemble.py` | 24 | NaivePredictQuantiles, WeightedEnsembleForecaster, compute_ensemble_weights, SelectionStrategyConfig, ForecastConfigQuantiles, BacktestPipelineEnsemble |
+| `test_rbac.py` | 14 | Role permissions (5 roles), User model (has_permission, inactive denied, to_dict), AuditEvent creation/serialization, AuditLogger log/query/filters/count_by_action |
+| `test_fva.py` | 12 | FVA classification (adds/destroys/neutral), layer metrics, between-layers, full cascade, total FVA, FVAAnalyzer detail/summary/leaderboard, model layer classification |
+| `test_external_regressors.py` | 6 | Regressor validation (valid/missing/future coverage), SeriesBuilder with/without external features, broadcast features (no series_id) |
 | `test_feature_engineering.py` | 3 | FeatureEngineer (pandas) |
 | `test_metrics.py` | 6 | Metric functions (pandas) |
-| **Total** | **386 core + 9 pandas = 391** | |
+| **Total** | **418 core + 9 pandas = 423** | |
