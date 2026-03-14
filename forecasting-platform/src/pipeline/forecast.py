@@ -19,6 +19,7 @@ from typing import Dict, Optional, Union
 import polars as pl
 
 from ..config.schema import PlatformConfig
+from ..data.ingestion import IngestionPipeline
 from ..forecasting.base import BaseForecaster
 from ..forecasting.registry import registry
 from ..series.builder import SeriesBuilder
@@ -40,6 +41,17 @@ class ForecastPipeline:
     def __init__(self, config: PlatformConfig):
         self.config = config
         self._series_builder = SeriesBuilder(config)
+
+        # Build ingestion pipeline if configured
+        self._ingestion: Optional[IngestionPipeline] = None
+        if config.ingestion.sources:
+            self._ingestion = IngestionPipeline(
+                sources=config.ingestion.sources,
+                schemas=config.ingestion.schemas,
+                quality_checks=config.ingestion.quality_checks,
+                report_path=config.ingestion.report_path,
+                time_column=config.ingestion.time_column or config.forecast.time_column,
+            )
 
     def run(
         self,
@@ -79,6 +91,18 @@ class ForecastPipeline:
         """
         fc = self.config.forecast
         horizon = fc.horizon_weeks
+
+        # Step 0 (optional): Ingest via configured sources
+        if actuals is None and self._ingestion and "actuals" in self._ingestion._sources:
+            logger.info("Ingesting actuals from configured source...")
+            ing_result = self._ingestion.run("actuals")
+            if ing_result.blocked:
+                raise RuntimeError(
+                    f"Ingestion blocked for 'actuals': "
+                    f"schema_errors={ing_result.schema_result.errors}, "
+                    f"quality_failures={[f.detail for f in ing_result.quality_report.blocking_failures]}"
+                )
+            actuals = ing_result.data
 
         # Step 1: Build series
         logger.info("Building model-ready series...")

@@ -19,6 +19,7 @@ import polars as pl
 from ..backtesting.champion import ChampionSelector
 from ..backtesting.engine import BacktestEngine
 from ..config.schema import PlatformConfig
+from ..data.ingestion import IngestionPipeline
 from ..forecasting.ensemble import WeightedEnsembleForecaster
 from ..forecasting.registry import registry
 from ..metrics.store import MetricStore
@@ -46,6 +47,17 @@ class BacktestPipeline:
         self._backtest_engine = BacktestEngine(config, self._metric_store)
         self._champion_selector = ChampionSelector(config.backtest)
 
+        # Build ingestion pipeline if configured
+        self._ingestion: Optional[IngestionPipeline] = None
+        if config.ingestion.sources:
+            self._ingestion = IngestionPipeline(
+                sources=config.ingestion.sources,
+                schemas=config.ingestion.schemas,
+                quality_checks=config.ingestion.quality_checks,
+                report_path=config.ingestion.report_path,
+                time_column=config.ingestion.time_column or config.forecast.time_column,
+            )
+
     def run(
         self,
         actuals: pl.DataFrame,
@@ -66,6 +78,18 @@ class BacktestPipeline:
           - "leaderboard": aggregated model ranking
         """
         fc = self.config.forecast
+
+        # Step 0 (optional): Ingest via configured sources
+        if actuals is None and self._ingestion and "actuals" in self._ingestion._sources:
+            logger.info("Ingesting actuals from configured source...")
+            ing_result = self._ingestion.run("actuals")
+            if ing_result.blocked:
+                raise RuntimeError(
+                    f"Ingestion blocked for 'actuals': "
+                    f"schema_errors={ing_result.schema_result.errors}, "
+                    f"quality_failures={[f.detail for f in ing_result.quality_report.blocking_failures]}"
+                )
+            actuals = ing_result.data
 
         # Step 1: Build series
         logger.info("Building model-ready series...")

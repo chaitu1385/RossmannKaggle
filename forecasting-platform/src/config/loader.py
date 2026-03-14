@@ -16,6 +16,7 @@ from .schema import (
     ExternalRegressorConfig,
     ForecastConfig,
     HierarchyConfig,
+    IngestionConfig,
     OutputConfig,
     PlatformConfig,
     ReconciliationConfig,
@@ -105,6 +106,16 @@ def _dict_to_config(d: Dict[str, Any]) -> PlatformConfig:
         format=out_raw.get("format", "parquet"),
     )
 
+    # Ingestion config (optional)
+    ing_raw = d.get("ingestion", {})
+    ingestion = IngestionConfig(
+        sources=ing_raw.get("sources", {}),
+        schemas=ing_raw.get("schemas", {}),
+        quality_checks=ing_raw.get("quality_checks", []),
+        report_path=ing_raw.get("report_path", "data/ingestion_reports/"),
+        time_column=ing_raw.get("time_column"),
+    )
+
     return PlatformConfig(
         lob=d.get("lob", "default"),
         description=d.get("description", ""),
@@ -114,6 +125,7 @@ def _dict_to_config(d: Dict[str, Any]) -> PlatformConfig:
         backtest=backtest,
         transition=transition,
         output=output,
+        ingestion=ingestion,
         metrics=d.get("metrics", ["wmape", "normalized_bias"]),
     )
 

@@ -7,5 +7,6 @@ from .schema import (
     TransitionConfig,
     ReconciliationConfig,
     OutputConfig,
+    IngestionConfig,
 )
 from .loader import load_config, load_config_with_overrides

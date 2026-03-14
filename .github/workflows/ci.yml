@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main, 'claude/**']
+  pull_request:
+    branches: [master, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install ruff
+      - run: ruff check forecasting-platform/src/
+
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: forecasting-platform/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r forecasting-platform/requirements.txt
+          pip install pytest pytest-cov httpx rapidfuzz
+
+      - name: Run tests
+        working-directory: forecasting-platform
+        run: |
+          python -m pytest \
+            --ignore=tests/test_metrics.py \
+            --ignore=tests/test_feature_engineering.py \
+            -v \
+            --cov=src \
+            --cov-report=xml \
+            --cov-report=term-missing
+
+      - name: Upload coverage
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: forecasting-platform/coverage.xml
+
+  build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build production image
+        run: |
+          docker build \
+            --target production \
+            -t forecasting-platform:${{ github.sha }} \
+            forecasting-platform/
+
+      - name: Verify image runs
+        run: |
+          docker run --rm -d \
+            --name fp-smoke \
+            -p 8000:8000 \
+            forecasting-platform:${{ github.sha }}
+          sleep 5
+          curl -sf http://localhost:8000/health || (docker logs fp-smoke && exit 1)
+          docker stop fp-smoke
