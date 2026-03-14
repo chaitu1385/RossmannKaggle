@@ -1,300 +1,426 @@
 # Implementation Plan — Tier 1 Features
 
-## Feature 1: External Regressors / Promotional Calendar
-
-### Goal
-Enable ML models (LightGBM, XGBoost) to use external features — promotions, holidays, price, competitor events — for both training and prediction. This is the single biggest accuracy unlock (30-40% WMAPE reduction in retail).
-
-### Current State
-- ML models (`src/forecasting/ml.py`) use mlforecast with built-in lags [1,2,4,8,13,26,52] and date features [week, month, quarter]
-- `SeriesBuilder.build()` accepts actuals + product_master + mappings + overrides — no external features
-- `ForecastPipeline.run()` threads data through SeriesBuilder → fit → predict → reconcile
-- Statistical models (ARIMA, ETS) are univariate — they'll ignore external features (that's fine)
-- Config schema has no external regressor section
-
-### Files to Modify
-1. `src/config/schema.py` — add `ExternalRegressorConfig` dataclass
-2. `src/config/loader.py` — parse new config section
-3. `src/series/builder.py` — accept and join external features to actuals
-4. `src/forecasting/ml.py` — pass external features to mlforecast `fit(X=)` and `predict(X=)`
-5. `src/pipeline/forecast.py` — thread external features through pipeline
-6. `src/pipeline/backtest.py` — thread external features through backtest
-7. `configs/platform_config.yaml` — add example external_regressors section
-
-### New Files
-8. `src/data/regressors.py` — loader/validator for external feature data (holiday calendar generator, promo file reader, validation logic)
-9. `tests/test_external_regressors.py` — end-to-end test
-
-### Design
-
-**Config addition:**
-```yaml
-forecast:
-  external_regressors:
-    enabled: true
-    feature_columns:
-      - promotion_flag
-      - holiday_flag
-      - price_index
-    future_features_path: data/future_features.parquet  # known-in-advance features for forecast horizon
-```
-
-**Data flow:**
-```
-actuals (series_id, week, quantity)
-    +
-external_features (series_id, week, promotion_flag, holiday_flag, price_index)
-    ↓
-SeriesBuilder.build() — left join on [series_id, week], forward-fill nulls
-    ↓
-ML model — mlforecast.fit(df, X=external_features)
-    ↓
-ML predict — mlforecast.predict(h=horizon, X=future_features)
-```
-
-**Key constraints:**
-- All external features must be at same grain (series_id × week) or broadcastable (week-only for holidays)
-- Future feature values MUST be provided for the forecast horizon (you can't predict with unknown promos)
-- Statistical/naive models silently ignore external features — no code changes needed there
-- Backward compatible: if `external_regressors.enabled = false` or section absent, no behavior change
-
-**Regressor loader (`src/data/regressors.py`):**
-- `load_external_features(path) -> pl.DataFrame` — reads Parquet/CSV
-- `generate_holiday_calendar(country, start, end) -> pl.DataFrame` — uses Python `holidays` lib
-- `validate_regressors(features, actuals, config)` — checks grain alignment, no nulls in training window, future values present for horizon
-
-### Implementation Order
-1. Config schema + loader (foundation)
-2. Regressor loader/validator (data layer)
-3. SeriesBuilder changes (join features)
-4. ML model changes (pass X to mlforecast)
-5. Pipeline threading (forecast + backtest)
-6. Config YAML example
-7. Tests
-
-### Risks
-- mlforecast's `X` parameter behavior may vary across versions — need to pin/test
-- Holiday library adds a dependency — make it optional with graceful fallback
-- Users may provide features with missing future values — validator must catch this early
+> **Status:** Tier 1 complete. See `Future_Ideas.md` for Tier 2/3 roadmap.
+> **See also:** Data Ingestion and CI/CD plans below.
 
 ---
 
-## Feature 2: RBAC + Audit Trail
+## Tier 1 Features (COMPLETED)
 
-### Goal
-Add role-based access control and immutable audit logging so the platform meets enterprise procurement requirements (SOX compliance, access control, change attribution).
-
-### Current State
-- API (`src/api/app.py`) has 5 GET endpoints, zero authentication
-- OverrideStore has optional `created_by` field but it's unenforced
-- ForecastLineage records model runs but not WHO triggered them or approved them
-- ModelCard/ModelCardRegistry has no ownership or approval workflow
-- Logging is transient stdout — no persistent audit trail
-
-### Files to Modify
-1. `src/api/app.py` — add auth middleware, inject user context, protect endpoints
-2. `src/api/schemas.py` — add user/role response models, audit event schema
-3. `src/overrides/store.py` — enforce user context, add approval fields
-4. `src/analytics/governance.py` — add user_id to ForecastLineage, approval workflow to ModelCard
-
-### New Files
-5. `src/auth/models.py` — User, Role, Permission dataclasses
-6. `src/auth/rbac.py` — role definitions, permission checks, FastAPI dependency
-7. `src/auth/token.py` — JWT token creation/validation (pluggable for OAuth2 later)
-8. `src/audit/logger.py` — append-only audit log (Parquet-backed, immutable)
-9. `src/audit/schemas.py` — AuditEvent dataclass
-10. `tests/test_rbac.py` — RBAC enforcement tests
-11. `tests/test_audit.py` — audit trail tests
-
-### Design
-
-**Role hierarchy:**
-```
-ADMIN          — full access, manage users, approve model promotions
-DATA_SCIENTIST — run backtests, promote models, modify configs
-PLANNER        — create/edit overrides, view forecasts, cannot change model config
-MANAGER        — approve overrides above threshold, view reports
-VIEWER         — read-only access to forecasts, metrics, reports
-```
-
-**Permission matrix:**
-| Action                    | ADMIN | DATA_SCIENTIST | PLANNER | MANAGER | VIEWER |
-|---------------------------|-------|----------------|---------|---------|--------|
-| View forecasts/metrics    | Y     | Y              | Y       | Y       | Y      |
-| Create overrides          | Y     | Y              | Y       | N       | N      |
-| Approve overrides (>X%)   | Y     | N              | N       | Y       | N      |
-| Run backtest/pipeline     | Y     | Y              | N       | N       | N      |
-| Promote champion model    | Y     | Y              | N       | N       | N      |
-| Modify config             | Y     | Y              | N       | N       | N      |
-| View audit log            | Y     | Y              | N       | Y       | N      |
-| Manage users              | Y     | N              | N       | N       | N      |
-
-**Auth flow (JWT-based, pluggable):**
-```
-Client → POST /auth/token (username + password) → JWT
-Client → GET /forecast/lob (Authorization: Bearer <JWT>) → data
-```
-- JWT contains: user_id, email, role, exp
-- FastAPI `Depends(get_current_user)` extracts and validates on every request
-- Token provider is pluggable — swap JWT for OAuth2/SAML later without changing endpoint code
-
-**Audit log schema (append-only Parquet):**
-```
-audit_id:        str (UUID)
-timestamp:       datetime (UTC)
-user_id:         str
-user_role:       str
-action:          str (e.g., "create_override", "promote_model", "view_forecast")
-resource_type:   str (e.g., "override", "model_card", "forecast")
-resource_id:     str
-status:          str (SUCCESS | DENIED | FAILED)
-old_value:       str (JSON, nullable — for updates)
-new_value:       str (JSON, nullable — for creates/updates)
-ip_address:      str (nullable)
-request_id:      str (for tracing)
-```
-- Parquet files partitioned by date: `audit_log/date=2026-03-13/`
-- Append-only: no UPDATE or DELETE operations
-- Retention: configurable (default 2 years)
-
-**Override approval workflow enhancement:**
-```
-Planner creates override → status=DRAFT
-  → If override proportion > threshold (configurable, e.g., 20%):
-      → Requires MANAGER approval → status=PENDING_APPROVAL
-      → Manager approves → status=APPROVED (audit logged)
-      → Manager rejects → status=REJECTED (audit logged)
-  → If below threshold:
-      → Auto-approved → status=APPROVED
-```
-
-### Implementation Order
-1. Auth models + RBAC definitions (foundation)
-2. JWT token provider (auth mechanism)
-3. Audit logger (Parquet-backed, append-only)
-4. API middleware integration (protect endpoints)
-5. Override store enhancement (approval workflow)
-6. Governance enhancement (user tracking in lineage/model cards)
-7. Tests
-
-### Risks
-- JWT secret management — use env var, document rotation procedure
-- Password storage — use bcrypt; for MVP, a JSON user file; for prod, defer to external IdP
-- Audit log volume at scale — Parquet partitioning by date handles this well
-- Migration path — existing overrides/lineage records won't have user_id; handle gracefully with "system" default
+1. **External Regressors / Promotional Calendar** — ML models use promotions, holidays, price indices
+2. **RBAC + Audit Trail** — JWT auth, 5 roles, 11 permissions, append-only audit log
+3. **FVA Analysis** — Layer-by-layer accuracy attribution (naive → stat → ML → override)
 
 ---
 
-## Feature 3: Forecast Value Add (FVA) Analysis
+## Infrastructure Plan A: Data Ingestion Robustness
 
 ### Goal
-Measure how much accuracy each forecast layer contributes: naive baseline → statistical → ML → post-override. Shows stakeholders which layers justify their cost and which overrides help vs hurt.
+Replace the basic file-based `DataLoader` with a production-grade ingestion layer that supports multiple sources (files + databases), schema validation, configurable data quality scoring, and scheduled execution.
 
 ### Current State
-- BacktestEngine runs each model independently per fold — doesn't capture layered cascade
-- MetricStore schema has `model_id` but no `forecast_layer` concept
-- ChampionSelector ranks models by WMAPE but doesn't measure incremental improvement
-- ForecastComparator aligns system vs external forecasts — not layer vs layer
-- BIExporter produces model_leaderboard but no FVA tables
-- All metrics (WMAPE, bias, MAE) are already implemented in `src/metrics/definitions.py`
+- `src/data/loader.py` — 44-line class that reads `train.csv`, `test.csv`, `store.csv` via pandas
+- `src/data/preprocessor.py` — basic null-filling and filtering (Open==1, Sales>0)
+- No schema enforcement at load time (except `ProductMasterLoader` which checks required columns)
+- No data quality scoring, outlier detection, or profiling
+- `validate_regressors()` in `regressors.py` is the most sophisticated validation (5-point checks)
+- No database connectivity
+
+### Files to Create
+1. `src/data/sources.py` — Source connectors (file, database, API)
+2. `src/data/schema_validator.py` — Schema enforcement + type checking
+3. `src/data/quality.py` — Data quality scoring engine
+4. `src/data/ingestion.py` — Orchestrator (load → validate → score → preprocess)
+5. `src/config/ingestion_config.py` — Ingestion configuration dataclass (or extend schema.py)
+6. `tests/test_data_ingestion.py` — Tests
 
 ### Files to Modify
-1. `src/backtesting/engine.py` — add mode to run models in layer cascade, capture intermediate outputs
-2. `src/metrics/store.py` — add optional `forecast_layer` and `parent_forecast` columns
-3. `src/analytics/bi_export.py` — add FVA export tables
-
-### New Files
-4. `src/metrics/fva.py` — FVA computation engine (incremental WMAPE, bias, value-add classification)
-5. `src/analytics/fva_analyzer.py` — FVA aggregation and reporting (by LOB, layer, sparse class, time)
-6. `tests/test_fva.py` — FVA computation tests
+7. `src/config/schema.py` — Add `IngestionConfig` with source definitions, quality thresholds
+8. `src/data/__init__.py` — Export new classes
+9. `src/pipeline/forecast.py` — Use new ingestion layer instead of raw DataLoader
+10. `src/pipeline/backtest.py` — Same
 
 ### Design
 
-**Layer definitions:**
-```
-L1: Naive       — SeasonalNaiveForecaster (always the baseline)
-L2: Statistical — Best of [AutoARIMA, AutoETS] per series (or Croston/TSB for sparse)
-L3: ML          — Best of [LightGBM, XGBoost] per series
-L4: Override    — Planner-adjusted forecast (if override exists, else L4 = L3)
-```
-
-**FVA computation per (series_id, target_week, fold):**
+**Source connectors (`src/data/sources.py`):**
 ```python
-# Layer errors
-wmape_naive = wmape(actual, forecast_naive)
-wmape_stat  = wmape(actual, forecast_stat)
-wmape_ml    = wmape(actual, forecast_ml)
-wmape_ovr   = wmape(actual, forecast_override)
+class BaseSource(ABC):
+    def read(self) -> pl.DataFrame: ...
+    def probe(self) -> bool: ...       # connectivity check
 
-# FVA = error reduction from previous layer (positive = improvement)
-fva_stat  = wmape_naive - wmape_stat     # stat over naive
-fva_ml    = wmape_stat  - wmape_ml       # ml over stat
-fva_ovr   = wmape_ml    - wmape_ovr      # override over ml
-fva_total = wmape_naive - wmape_ovr      # total improvement over baseline
-```
+class FileSource(BaseSource):
+    """CSV, Parquet, Delta — auto-detected from extension."""
+    def __init__(self, path: str, format: Optional[str] = None): ...
 
-**FVA classification per series per layer:**
-```
-fva > 0.02  → "ADDS_VALUE"      (layer improves accuracy by >2pp)
-fva ∈ [-0.02, 0.02] → "NEUTRAL" (layer roughly same as parent)
-fva < -0.02 → "DESTROYS_VALUE"  (layer makes forecast worse)
+class DatabaseSource(BaseSource):
+    """SQL query execution via SQLAlchemy or connector string."""
+    def __init__(self, connection_string: str, query: str, params: dict = {}): ...
+
+class APISource(BaseSource):
+    """REST API with pagination support."""
+    def __init__(self, url: str, headers: dict, pagination: Optional[dict] = None): ...
 ```
 
-**Output tables:**
+**Schema validator (`src/data/schema_validator.py`):**
+```python
+@dataclass
+class ColumnSpec:
+    name: str
+    dtype: str                    # "Utf8", "Float64", "Date", etc.
+    required: bool = True
+    nullable: bool = False
+    allowed_values: Optional[set] = None
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
 
-1. **fva_detail** — one row per (lob, series_id, target_week, fold, layer):
-```
-lob, series_id, target_week, fold, layer, actual, forecast,
-parent_forecast, wmape, parent_wmape, fva_wmape, bias, parent_bias,
-fva_bias, fva_class, sparse_class
+class SchemaValidator:
+    def __init__(self, columns: List[ColumnSpec]): ...
+    def validate(self, df: pl.DataFrame) -> ValidationResult: ...
+
+@dataclass
+class ValidationResult:
+    is_valid: bool
+    errors: List[str]            # blocking issues
+    warnings: List[str]          # non-blocking issues
 ```
 
-2. **fva_summary** — one row per (lob, layer):
-```
-lob, layer, n_series, mean_wmape, mean_fva_wmape,
-pct_adds_value, pct_neutral, pct_destroys_value,
-mean_bias, total_volume_weighted_fva
+**Data quality scoring (`src/data/quality.py`):**
+```python
+@dataclass
+class QualityCheckConfig:
+    name: str
+    severity: str = "warn"       # "block" | "warn" | "info"
+    threshold: Optional[float] = None
+
+class DataQualityScorer:
+    def __init__(self, checks: List[QualityCheckConfig]): ...
+    def score(self, df: pl.DataFrame) -> QualityReport: ...
+
+@dataclass
+class QualityReport:
+    overall_score: float          # 0-100
+    passed: bool                  # True if no "block" checks failed
+    check_results: List[CheckResult]
+
+@dataclass
+class CheckResult:
+    check_name: str
+    passed: bool
+    severity: str
+    score: float
+    detail: str
 ```
 
-3. **fva_leaderboard** — layers ranked by aggregate FVA contribution:
-```
-lob, layer, rank, cumulative_wmape_reduction, robustness_score,
-recommendation (e.g., "Keep", "Review", "Remove")
+Built-in checks:
+- `completeness` — % non-null per column (threshold: e.g. 95%)
+- `uniqueness` — duplicate row detection
+- `freshness` — max date within expected recency window
+- `volume` — row count within expected range (±X% of historical mean)
+- `outlier` — IQR-based outlier % (configurable multiplier)
+- `schema_drift` — new/missing columns vs expected schema
+- `value_range` — values within configured min/max bounds
+
+**Ingestion config (addition to `src/config/schema.py`):**
+```yaml
+ingestion:
+  sources:
+    actuals:
+      type: file                  # file | database | api
+      path: data/actuals/
+      format: parquet             # csv | parquet | delta
+    store_metadata:
+      type: database
+      connection_string: ${DB_CONNECTION_STRING}
+      query: "SELECT * FROM store_dim WHERE active = 1"
+
+  schema:
+    actuals:
+      columns:
+        - {name: series_id, dtype: Utf8, required: true}
+        - {name: week, dtype: Date, required: true}
+        - {name: quantity, dtype: Float64, required: true, min_value: 0}
+        - {name: lob, dtype: Utf8, required: true}
+
+  quality:
+    checks:
+      - {name: completeness, severity: block, threshold: 95}
+      - {name: freshness, severity: block, threshold: 7}   # max 7 days stale
+      - {name: volume, severity: warn, threshold: 20}       # ±20% of expected
+      - {name: outlier, severity: warn, threshold: 5}       # max 5% outliers
+      - {name: uniqueness, severity: block}
+      - {name: schema_drift, severity: warn}
 ```
 
-**Integration with BacktestEngine:**
-- Add `run_fva=True` option to `BacktestEngine.run()`
-- When enabled, runs the 3 base layers (naive, best-stat, best-ML) for every fold
-- Stores intermediate forecasts with `forecast_layer` tag
-- FVA metrics computed after all folds complete
+**Orchestrator (`src/data/ingestion.py`):**
+```python
+class IngestionPipeline:
+    def __init__(self, config: IngestionConfig): ...
 
-**Integration with BIExporter:**
-- Add `export_fva()` method
-- Writes `fva_summary/lob=X/` and `fva_detail/lob=X/` Parquet tables
-- Power BI can build waterfall charts showing layer contribution
+    def run(self, source_name: str) -> IngestionResult:
+        """Load → validate schema → score quality → return result."""
+        ...
+
+    def run_all(self) -> Dict[str, IngestionResult]: ...
+
+@dataclass
+class IngestionResult:
+    source_name: str
+    data: pl.DataFrame
+    schema_result: ValidationResult
+    quality_report: QualityReport
+    ingested_at: datetime
+    row_count: int
+    blocked: bool                 # True if any "block" check failed
+```
 
 ### Implementation Order
-1. FVA computation engine (`src/metrics/fva.py`) — pure functions, no dependencies
-2. FVA analyzer (`src/analytics/fva_analyzer.py`) — aggregation logic
-3. BacktestEngine enhancement — cascade mode
-4. MetricStore schema extension — optional columns
-5. BIExporter integration — FVA export tables
-6. Tests
+1. Source connectors (FileSource first, DatabaseSource second)
+2. Schema validator
+3. Data quality scorer (built-in checks)
+4. Ingestion orchestrator
+5. Config schema extension
+6. Pipeline integration (forecast + backtest)
+7. Tests
 
-### Risks
-- Cascade backtest is ~3x slower (runs 3 models per fold instead of 1) — make it opt-in
-- Sparse series routing complicates layer comparison — use sparse_class to segment
-- Override layer (L4) only meaningful if planner overrides exist — handle L4=L3 case gracefully
-- Zero actuals make WMAPE undefined — fall back to MAE for those periods
+### Key Decisions
+- **Configurable per check**: Each quality check has a `severity` field (`block`/`warn`/`info`). The pipeline halts only on `block` failures.
+- **Database support**: SQLAlchemy for broad DB compatibility. Connection strings via environment variables (never in config files).
+- **Backward compatible**: If no `ingestion` section in config, falls back to current `DataLoader` behavior.
+- **Quality reports**: Written as JSON alongside ingested data for audit trail.
 
 ---
 
-## Summary — Implementation Sequence
+## Infrastructure Plan B: CI/CD & Containerization
 
-| Order | Feature | Estimated Scope | Key Deliverable |
-|-------|---------|-----------------|-----------------|
-| 1     | External Regressors | ~7 files modified, 2 new files | ML models use promos/holidays/price |
-| 2     | RBAC + Audit Trail | ~4 files modified, 7 new files | Auth-protected API, immutable audit log |
-| 3     | FVA Analysis | ~3 files modified, 3 new files | Layer-by-layer accuracy attribution |
+### Goal
+Add reproducible builds, automated testing, and deployment pipelines. Support both GitHub Actions and Azure DevOps. Container-first deployment targeting Azure and generic Docker.
 
-Each feature is independent — no cross-dependencies between the three. They can be implemented in any order, but the sequence above maximizes value delivery: accuracy first, then governance, then measurement.
+### Current State
+- No Dockerfile, docker-compose, CI pipeline, or Makefile
+- `setup.py` exists (basic package metadata)
+- `requirements.txt` exists (comprehensive)
+- Tests run via `pytest` manually
+- Deployment is Fabric notebook-driven (no container story)
+
+### Files to Create
+
+**Docker:**
+1. `forecasting-platform/Dockerfile` — Multi-stage build (test → production)
+2. `forecasting-platform/Dockerfile.dev` — Development image with all optional deps
+3. `forecasting-platform/docker-compose.yml` — Local dev stack (API + optional DuckDB)
+4. `forecasting-platform/.dockerignore` — Exclude tests, docs, data, .git
+
+**CI — GitHub Actions:**
+5. `.github/workflows/ci.yml` — Lint + test + build on push/PR
+6. `.github/workflows/deploy.yml` — Build image + push to registry + deploy (on tag/release)
+
+**CI — Azure DevOps:**
+7. `azure-pipelines.yml` — Equivalent pipeline for Azure DevOps
+
+**Build tooling:**
+8. `forecasting-platform/Makefile` — Common commands (test, lint, build, run)
+9. `forecasting-platform/pyproject.toml` — Modern Python packaging (replace/augment setup.py)
+
+### Design
+
+**Dockerfile (multi-stage):**
+```dockerfile
+# Stage 1: Base with dependencies
+FROM python:3.11-slim AS base
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY src/ src/
+COPY setup.py pyproject.toml ./
+
+# Stage 2: Test runner (CI only, not shipped)
+FROM base AS test
+COPY tests/ tests/
+RUN pip install pytest pytest-cov
+RUN python -m pytest --ignore=tests/test_metrics.py --ignore=tests/test_feature_engineering.py -v
+
+# Stage 3: Production image
+FROM base AS production
+RUN pip install --no-cache-dir gunicorn uvicorn[standard]
+EXPOSE 8000
+ENV API_DATA_DIR=/app/data API_METRICS_DIR=/app/data/metrics
+CMD ["uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+**GitHub Actions CI (`.github/workflows/ci.yml`):**
+```yaml
+name: CI
+on:
+  push:
+    branches: [master, main, 'claude/**']
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install ruff
+      - run: ruff check forecasting-platform/src/
+
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install -r forecasting-platform/requirements.txt
+      - run: pip install pytest pytest-cov
+      - working-directory: forecasting-platform
+        run: python -m pytest --ignore=tests/test_metrics.py --ignore=tests/test_feature_engineering.py -v --cov=src --cov-report=xml
+      - uses: actions/upload-artifact@v4
+        with: {name: coverage, path: forecasting-platform/coverage.xml}
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t forecasting-platform:${{ github.sha }} forecasting-platform/
+```
+
+**GitHub Actions Deploy (`.github/workflows/deploy.yml`):**
+```yaml
+name: Deploy
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Option A: Azure Container Registry
+      - uses: azure/docker-login@v2
+        with:
+          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+      - run: |
+          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/forecasting-platform:${{ github.ref_name }} forecasting-platform/
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/forecasting-platform:${{ github.ref_name }}
+
+      # Option B: GitHub Container Registry (uncomment to use instead)
+      # - uses: docker/login-action@v3
+      #   with:
+      #     registry: ghcr.io
+      #     username: ${{ github.actor }}
+      #     password: ${{ secrets.GITHUB_TOKEN }}
+      # - run: |
+      #     docker build -t ghcr.io/${{ github.repository }}:${{ github.ref_name }} forecasting-platform/
+      #     docker push ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+```
+
+**Azure DevOps Pipeline (`azure-pipelines.yml`):**
+```yaml
+trigger:
+  branches:
+    include: [master, main]
+  tags:
+    include: ['v*']
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+  - stage: Test
+    jobs:
+      - job: LintAndTest
+        steps:
+          - task: UsePythonVersion@0
+            inputs: {versionSpec: '3.11'}
+          - script: |
+              pip install -r forecasting-platform/requirements.txt
+              pip install pytest pytest-cov ruff
+          - script: ruff check forecasting-platform/src/
+            displayName: Lint
+          - script: |
+              cd forecasting-platform
+              python -m pytest --ignore=tests/test_metrics.py --ignore=tests/test_feature_engineering.py -v --cov=src
+            displayName: Test
+
+  - stage: Build
+    dependsOn: Test
+    jobs:
+      - job: DockerBuild
+        steps:
+          - task: Docker@2
+            inputs:
+              containerRegistry: $(ACR_SERVICE_CONNECTION)
+              repository: forecasting-platform
+              command: buildAndPush
+              Dockerfile: forecasting-platform/Dockerfile
+              tags: |
+                $(Build.BuildId)
+                latest
+```
+
+**Makefile:**
+```makefile
+.PHONY: test lint build run clean
+
+test:
+	cd forecasting-platform && python -m pytest --ignore=tests/test_metrics.py --ignore=tests/test_feature_engineering.py -v
+
+lint:
+	ruff check forecasting-platform/src/
+
+build:
+	docker build -t forecasting-platform:latest forecasting-platform/
+
+run:
+	docker run -p 8000:8000 -v $(PWD)/data:/app/data forecasting-platform:latest
+
+dev:
+	docker compose -f forecasting-platform/docker-compose.yml up --build
+
+clean:
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true
+	find . -name "*.pyc" -delete 2>/dev/null; true
+```
+
+**docker-compose.yml (local dev):**
+```yaml
+version: "3.9"
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+    environment:
+      - API_DATA_DIR=/app/data
+      - API_METRICS_DIR=/app/data/metrics
+      - AUTH_ENABLED=false
+    command: uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### Implementation Order
+1. Dockerfile + .dockerignore (production image)
+2. Makefile (local dev shortcuts)
+3. docker-compose.yml + Dockerfile.dev (local dev)
+4. GitHub Actions CI (lint + test + build)
+5. GitHub Actions Deploy (tag-triggered)
+6. Azure DevOps pipeline (equivalent)
+7. pyproject.toml (modern packaging)
+
+### Key Decisions
+- **Multi-stage Docker**: Test stage runs in CI but isn't shipped to prod (smaller image)
+- **Both CI providers**: GitHub Actions as primary, Azure DevOps as alternative — same test/build logic
+- **Configurable deploy targets**: Azure ACR and GHCR as options; Azure AKS/ACA deployment via Helm or `az container` (documented, not automated yet)
+- **No secrets in repo**: Connection strings, JWT secrets, registry credentials all via environment variables / CI secrets
+- **Backward compatible**: Existing manual `pytest` workflow still works; CI is additive
