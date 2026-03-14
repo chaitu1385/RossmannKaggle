@@ -32,3 +32,13 @@ Thumbs.db
 # Project outputs
 output/
 *.csv.bak
+
+# Data directories (mount as volumes, don't commit)
+data/
+forecasting-platform/data/
+
+# Ingestion reports
+ingestion_reports/
+
+# DuckDB files
+*.duckdb
