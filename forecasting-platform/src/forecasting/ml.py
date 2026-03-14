@@ -139,7 +139,10 @@ class _DirectMLBase(BaseForecaster):
             result_pdf = self._mlf.predict(h=horizon, X_df=self._future_features)
         else:
             result_pdf = self._mlf.predict(h=horizon)
-        result_pdf = result_pdf.reset_index()
+
+        # Bring index columns back if needed
+        if "unique_id" not in result_pdf.columns or "ds" not in result_pdf.columns:
+            result_pdf = result_pdf.reset_index()
 
         result = pl.from_pandas(result_pdf)
 
@@ -233,7 +236,9 @@ class _DirectMLBase(BaseForecaster):
             mlf_q.fit(self._train_pdf)
             self._quantile_mlfs[q] = mlf_q
 
-        result_pdf = self._quantile_mlfs[q].predict(h=horizon).reset_index()
+        result_pdf = self._quantile_mlfs[q].predict(h=horizon)
+        if "unique_id" not in result_pdf.columns or "ds" not in result_pdf.columns:
+            result_pdf = result_pdf.reset_index()
         result = pl.from_pandas(result_pdf)
         pred_cols = [c for c in result.columns if c not in ("unique_id", "ds")]
         result = result.rename({pred_cols[0]: "forecast", "unique_id": id_col, "ds": time_col})

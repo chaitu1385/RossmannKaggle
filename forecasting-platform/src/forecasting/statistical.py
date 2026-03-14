@@ -86,7 +86,10 @@ class _StatsforecastBase(BaseForecaster):
             raise RuntimeError(f"{self.name}: call fit() before predict()")
 
         result_pdf = self._sf.predict(h=horizon)
-        result_pdf = result_pdf.reset_index()
+
+        # Bring index columns (unique_id, ds) back if they're in the index
+        if "unique_id" not in result_pdf.columns or "ds" not in result_pdf.columns:
+            result_pdf = result_pdf.reset_index()
 
         # Map back to original column names
         result = pl.from_pandas(result_pdf)
@@ -128,7 +131,10 @@ class _StatsforecastBase(BaseForecaster):
         levels = sorted({int(round((1 - 2 * q) * 100)) for q in lower_qs}) if lower_qs else [80]
 
         result_pdf = self._sf.predict(h=horizon, level=levels)
-        result_pdf = result_pdf.reset_index()
+
+        # Bring index columns back if needed
+        if "unique_id" not in result_pdf.columns or "ds" not in result_pdf.columns:
+            result_pdf = result_pdf.reset_index()
 
         result = pl.from_pandas(result_pdf)
         result = result.rename({"unique_id": id_col, "ds": time_col})
