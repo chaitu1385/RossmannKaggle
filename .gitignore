@@ -32,3 +32,6 @@ Thumbs.db
 # Project outputs
 output/
 *.csv.bak
+
+# Data artifacts (metric store, forecasts)
+forecasting-platform/data/
