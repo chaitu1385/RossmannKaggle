@@ -9,6 +9,7 @@ Responsibilities:
   5. Return a clean DataFrame ready for forecasting.
 """
 
+import logging
 from datetime import date
 from typing import Optional
 
@@ -16,6 +17,8 @@ import polars as pl
 
 from ..config.schema import PlatformConfig
 from .transition import TransitionEngine
+
+logger = logging.getLogger(__name__)
 
 
 class SeriesBuilder:
@@ -31,6 +34,7 @@ class SeriesBuilder:
     def __init__(self, config: PlatformConfig):
         self.config = config
         self._transition_engine = TransitionEngine(config.transition)
+        self._last_cleansing_report = None
 
     def build(
         self,
@@ -96,6 +100,20 @@ class SeriesBuilder:
         dq = self.config.data_quality
         if dq.fill_gaps:
             df = self._fill_gaps(df, time_col, sid_col, value_col, dq.fill_value)
+
+        # Step 3-cleanse: Demand cleansing (after gap-fill, before filtering)
+        if dq.cleansing.enabled:
+            from ..data.cleanser import DemandCleanser
+            cleanser = DemandCleanser(dq.cleansing)
+            result = cleanser.cleanse(df, time_col, value_col, sid_col)
+            df = result.df
+            self._last_cleansing_report = result.report
+            logger.info(
+                "Cleansing: %d outliers in %d series, %d stockout periods",
+                result.report.total_outliers,
+                result.report.series_with_outliers,
+                result.report.total_stockout_periods,
+            )
 
         # Step 3a: Drop short series
         if dq.min_series_length_weeks > 0:
