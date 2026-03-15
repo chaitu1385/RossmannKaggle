@@ -4,13 +4,18 @@ External feature lifecycle management for mlforecast-based models.
 Handles:
   1. Detection of external feature columns during fit.
   2. Merging features into the training DataFrame.
-  3. Generating future feature values for prediction (forward-fill fallback).
+  3. Generating future feature values for prediction (forward-fill fallback
+     for known-ahead features only; contemporaneous features require explicit
+     future values or are dropped).
   4. Accepting user-provided future features via ``set_future_features``.
 """
 
+import logging
 from typing import Any, Dict, List, Optional
 
 import polars as pl
+
+logger = logging.getLogger(__name__)
 
 try:
     import pandas as pd
@@ -27,10 +32,12 @@ class MLForecastFeatureManager:
     so that ``_DirectMLBase`` doesn't need inline feature plumbing.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, feature_types: Optional[Dict[str, str]] = None) -> None:
         self._feature_cols: List[str] = []
         self._train_pdf: Optional[Any] = None  # pandas DataFrame
         self._future_features: Optional[Any] = None  # pandas DataFrame
+        # Maps column name → "known_ahead" | "contemporaneous"
+        self._feature_types: Dict[str, str] = feature_types or {}
 
     @property
     def feature_cols(self) -> List[str]:
@@ -89,13 +96,44 @@ class MLForecastFeatureManager:
         )
         return pdf_with_features
 
+    def _get_feature_type(self, col: str) -> str:
+        """Return the temporal type for a feature column."""
+        return self._feature_types.get(col, "known_ahead")
+
+    def _eligible_predict_cols(self) -> List[str]:
+        """
+        Return feature columns eligible for prediction.
+
+        Contemporaneous features (e.g. actual promo ratio) are dropped
+        unless explicit future values were provided via set_future_features.
+        """
+        if self._future_features is not None:
+            # User provided explicit future values — all features are usable
+            return list(self._feature_cols)
+
+        eligible = []
+        for col in self._feature_cols:
+            if self._get_feature_type(col) == "contemporaneous":
+                logger.warning(
+                    "Dropping contemporaneous feature '%s' at prediction time: "
+                    "no future values provided. Use set_future_features() or "
+                    "mark as 'known_ahead' in config if this feature is "
+                    "plannable.",
+                    col,
+                )
+            else:
+                eligible.append(col)
+        return eligible
+
     def prepare_predict(self, horizon: int) -> Optional["pd.DataFrame"]:
         """
         Build future feature DataFrame for mlforecast predict.
 
         Returns None if no external features are present.
         Uses user-provided future features if available, otherwise
-        forward-fills the last known values per series.
+        forward-fills the last known values per series for known-ahead
+        features only. Contemporaneous features without explicit future
+        values are dropped with a warning.
         """
         if not self._feature_cols:
             return None
@@ -104,7 +142,12 @@ class MLForecastFeatureManager:
         if self._future_features is not None:
             return self._future_features
 
-        # Forward-fill fallback
+        # Determine which features can be forward-filled
+        eligible_cols = self._eligible_predict_cols()
+        if not eligible_cols:
+            return None
+
+        # Forward-fill fallback (known-ahead features only)
         if self._train_pdf is None:
             return None
 
@@ -119,7 +162,7 @@ class MLForecastFeatureManager:
                     "unique_id": uid,
                     "ds": last_ds + pd.Timedelta(weeks=h),
                 }
-                for col in self._feature_cols:
+                for col in eligible_cols:
                     row[col] = (
                         float(last_row.get(col, 0))
                         if col in uid_data.columns

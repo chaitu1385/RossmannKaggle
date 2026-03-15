@@ -128,6 +128,7 @@ def validate_regressors(
     time_column: str = "week",
     id_column: Optional[str] = None,
     horizon_weeks: int = 0,
+    feature_types: Optional[dict] = None,
 ) -> List[str]:
     """
     Validate external regressor data against actuals.
@@ -137,6 +138,9 @@ def validate_regressors(
     2. Time column alignment (same grain as actuals).
     3. No nulls in feature columns during training period.
     4. If horizon_weeks > 0, future feature values must be present.
+    5. Series ID alignment (if series-level features).
+    6. Temporal causality — contemporaneous features without future values
+       cannot be used for forecasting.
 
     Parameters
     ----------
@@ -152,12 +156,16 @@ def validate_regressors(
         Optional series ID column (for series-level features).
     horizon_weeks:
         If > 0, validates that future feature values exist for this many weeks.
+    feature_types:
+        Optional dict mapping column name to ``"known_ahead"`` or
+        ``"contemporaneous"``.  Unlisted columns default to ``"known_ahead"``.
 
     Returns
     -------
     List of warning/error messages. Empty list means all checks passed.
     """
     issues: List[str] = []
+    feature_types = feature_types or {}
 
     # Check 1: Feature columns exist
     missing_cols = [c for c in feature_columns if c not in external_features.columns]
@@ -212,5 +220,25 @@ def validate_regressors(
                 f"{len(missing_ids)} series in actuals have no external features. "
                 f"These series will get null feature values (filled with 0)."
             )
+
+    # Check 6: Temporal causality — contemporaneous features need future values
+    if horizon_weeks > 0 and time_column in actuals.columns:
+        actuals_max = actuals[time_column].max()
+        features_max = external_features[time_column].max()
+        for col in feature_columns:
+            ftype = feature_types.get(col, "known_ahead")
+            if ftype == "contemporaneous":
+                if (
+                    actuals_max is not None
+                    and features_max is not None
+                    and features_max <= actuals_max
+                ):
+                    issues.append(
+                        f"Feature '{col}' is marked as contemporaneous but has "
+                        f"no future values beyond the training period "
+                        f"(features end: {features_max}, actuals end: {actuals_max}). "
+                        f"This feature will be dropped at prediction time. "
+                        f"Either provide future values or remove it from the model."
+                    )
 
     return issues

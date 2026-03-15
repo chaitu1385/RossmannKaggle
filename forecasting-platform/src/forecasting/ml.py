@@ -34,13 +34,18 @@ class _DirectMLBase(BaseForecaster):
     manually in Polars.
     """
 
+    # Default lags: dense coverage at short horizons, key seasonal multiples
+    DEFAULT_LAGS = [1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 16, 20, 24, 26, 36, 40, 48, 52]
+
     def __init__(
         self,
         lags: Optional[List[int]] = None,
         lag_transforms: Optional[Dict] = None,
         num_threads: int = 1,
+        **kwargs,
     ):
-        self.lags = lags or [1, 2, 4, 8, 13, 26, 52]
+        self.lags = lags or self.DEFAULT_LAGS
+        self.lag_transforms = lag_transforms or self._default_lag_transforms()
         self.num_threads = num_threads
         self._id_col: str = "series_id"
         self._time_col: str = "week"
@@ -62,6 +67,26 @@ class _DirectMLBase(BaseForecaster):
         # Quantile regression state (lazily populated by predict_quantiles)
         self._quantile_mlfs: Dict[float, Any] = {}     # q -> fitted MLForecast
 
+    @staticmethod
+    def _default_lag_transforms():
+        """Default rolling window transforms applied to lag features."""
+        try:
+            from mlforecast.lag_transforms import RollingMean, RollingStd
+            return {
+                1: [
+                    RollingMean(window_size=4),
+                    RollingMean(window_size=8),
+                    RollingMean(window_size=13),
+                    RollingMean(window_size=26),
+                    RollingMean(window_size=52),
+                    RollingStd(window_size=4),
+                    RollingStd(window_size=13),
+                    RollingStd(window_size=52),
+                ],
+            }
+        except ImportError:
+            return {}
+
     def _get_learner(self):
         raise NotImplementedError
 
@@ -76,8 +101,10 @@ class _DirectMLBase(BaseForecaster):
         time_col: str = "week",
         id_col: str = "series_id",
     ) -> pl.DataFrame:
-        """Fill weekly gaps — mlforecast requires contiguous dates."""
-        return self.fill_weekly_gaps(df, time_col, id_col, target_col)
+        """Fill weekly gaps with forward-fill — avoids zero-contamination for tree models."""
+        return self.fill_weekly_gaps(
+            df, time_col, id_col, target_col, strategy="forward_fill"
+        )
 
     def fit(
         self,
@@ -109,6 +136,21 @@ class _DirectMLBase(BaseForecaster):
 
     # ── mlforecast path ───────────────────────────────────────────────────
 
+    @staticmethod
+    def _week_of_year(dates):
+        """Extract ISO week-of-year as an integer feature for mlforecast."""
+        return dates.isocalendar().week.astype(int)
+
+    @staticmethod
+    def _month(dates):
+        """Extract month as an integer feature."""
+        return dates.month
+
+    @staticmethod
+    def _quarter(dates):
+        """Extract quarter as an integer feature."""
+        return dates.quarter
+
     def _fit_mlforecast(self, df, target_col, time_col, id_col):
         train_pdf = self._feature_mgr.prepare_fit(df, id_col, time_col, target_col)
 
@@ -116,7 +158,8 @@ class _DirectMLBase(BaseForecaster):
             models=[self._get_learner()],
             freq="W",
             lags=self.lags,
-            date_features=["week", "month", "quarter"],
+            lag_transforms=self.lag_transforms,
+            date_features=[self._month, self._quarter, self._week_of_year],
             num_threads=self.num_threads,
         )
 
@@ -216,7 +259,8 @@ class _DirectMLBase(BaseForecaster):
                 models=[q_learner],
                 freq="W",
                 lags=self.lags,
-                date_features=["week", "month", "quarter"],
+                lag_transforms=self.lag_transforms,
+                date_features=[self._month, self._quarter, self._week_of_year],
                 num_threads=self.num_threads,
             )
             mlf_q.fit(self._feature_mgr.train_pdf, validate_data=False)
@@ -315,31 +359,34 @@ class LGBMDirectForecaster(_DirectMLBase):
 
     name = "lgbm_direct"
 
-    def __init__(self, **kwargs):
+    # Tuned defaults: more trees + lower lr + regularization to prevent overfitting
+    DEFAULT_PARAMS = dict(
+        n_estimators=500,
+        learning_rate=0.03,
+        num_leaves=31,
+        min_child_samples=20,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        reg_alpha=0.1,
+        reg_lambda=0.1,
+        verbose=-1,
+    )
+
+    def __init__(self, lgbm_params: Optional[Dict[str, Any]] = None, **kwargs):
         super().__init__(**kwargs)
+        self._lgbm_params = {**self.DEFAULT_PARAMS, **(lgbm_params or {})}
 
     def _get_learner(self):
         import lightgbm as lgb
-        return lgb.LGBMRegressor(
-            n_estimators=200,
-            learning_rate=0.05,
-            num_leaves=31,
-            verbose=-1,
-        )
+        return lgb.LGBMRegressor(**self._lgbm_params)
 
     def _get_quantile_learner(self, alpha: float):
         import lightgbm as lgb
-        return lgb.LGBMRegressor(
-            n_estimators=200,
-            learning_rate=0.05,
-            num_leaves=31,
-            verbose=-1,
-            objective="quantile",
-            alpha=alpha,
-        )
+        params = {**self._lgbm_params, "objective": "quantile", "alpha": alpha}
+        return lgb.LGBMRegressor(**params)
 
     def get_params(self) -> Dict[str, Any]:
-        return {"model": "LightGBM", "lags": self.lags}
+        return {"model": "LightGBM", "lags": self.lags, **self._lgbm_params}
 
 
 @registry.register("xgboost_direct")
@@ -348,38 +395,38 @@ class XGBoostDirectForecaster(_DirectMLBase):
 
     name = "xgboost_direct"
 
-    def __init__(self, **kwargs):
+    # Tuned defaults: more trees + lower lr + regularization to prevent overfitting
+    DEFAULT_PARAMS = dict(
+        n_estimators=500,
+        learning_rate=0.03,
+        max_depth=6,
+        min_child_weight=20,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        reg_alpha=0.1,
+        reg_lambda=0.1,
+        verbosity=0,
+    )
+
+    def __init__(self, xgb_params: Optional[Dict[str, Any]] = None, **kwargs):
         super().__init__(**kwargs)
+        self._xgb_params = {**self.DEFAULT_PARAMS, **(xgb_params or {})}
 
     def _get_learner(self):
         import xgboost as xgb
-        return xgb.XGBRegressor(
-            n_estimators=200,
-            learning_rate=0.05,
-            max_depth=6,
-            verbosity=0,
-        )
+        return xgb.XGBRegressor(**self._xgb_params)
 
     def _get_quantile_learner(self, alpha: float):
         import xgboost as xgb
         try:
-            # XGBoost ≥ 1.6 supports reg:quantileerror
-            return xgb.XGBRegressor(
-                n_estimators=200,
-                learning_rate=0.05,
-                max_depth=6,
-                verbosity=0,
-                objective="reg:quantileerror",
-                quantile_alpha=alpha,
-            )
+            params = {
+                **self._xgb_params,
+                "objective": "reg:quantileerror",
+                "quantile_alpha": alpha,
+            }
+            return xgb.XGBRegressor(**params)
         except TypeError:
-            # Older XGBoost: fall back to pseudo-Huber (approximate)
-            return xgb.XGBRegressor(
-                n_estimators=200,
-                learning_rate=0.05,
-                max_depth=6,
-                verbosity=0,
-            )
+            return xgb.XGBRegressor(**self._xgb_params)
 
     def get_params(self) -> Dict[str, Any]:
-        return {"model": "XGBoost", "lags": self.lags}
+        return {"model": "XGBoost", "lags": self.lags, **self._xgb_params}

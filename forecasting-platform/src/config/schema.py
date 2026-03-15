@@ -17,6 +17,12 @@ class ExternalRegressorConfig:
     enabled: bool = False
     feature_columns: List[str] = field(default_factory=list)
     future_features_path: Optional[str] = None
+    # Maps column name → "known_ahead" | "contemporaneous".
+    # "known_ahead" features (holidays, planned promos) can be forward-filled.
+    # "contemporaneous" features (actual promo ratio, foot traffic) MUST have
+    # explicit future values or they are dropped at prediction time.
+    # Columns not listed default to "known_ahead" for backward compatibility.
+    feature_types: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
