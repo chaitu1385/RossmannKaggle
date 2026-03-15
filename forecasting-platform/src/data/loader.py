@@ -1,9 +1,52 @@
 """Data loading utilities for the forecasting platform."""
 
 from pathlib import Path
-from typing import Tuple
+from typing import Dict, Optional, Tuple
 
 import pandas as pd
+import polars as pl
+
+
+def read_csv_with_dates(
+    path: str,
+    date_columns: Optional[Dict[str, str]] = None,
+    schema_overrides: Optional[Dict[str, pl.DataType]] = None,
+    **kwargs,
+) -> pl.DataFrame:
+    """
+    Read a CSV with explicit date format parsing.
+
+    Avoids relying on ``try_parse_dates=True`` which can silently fail
+    when combined with ``schema_overrides`` or on ambiguous formats.
+
+    Parameters
+    ----------
+    path:
+        Path to the CSV file.
+    date_columns:
+        Mapping of column name to strftime format string.
+        E.g. ``{"Date": "%Y-%m-%d", "week": "%m/%d/%Y"}``.
+    schema_overrides:
+        Polars dtype overrides for columns with mixed types
+        (e.g. ``{"StateHoliday": pl.Utf8}``).
+    **kwargs:
+        Passed through to ``pl.read_csv``.
+
+    Returns
+    -------
+    Polars DataFrame with date columns correctly typed.
+    """
+    df = pl.read_csv(
+        path,
+        try_parse_dates=False,
+        schema_overrides=schema_overrides,
+        **kwargs,
+    )
+    if date_columns:
+        for col, fmt in date_columns.items():
+            if col in df.columns:
+                df = df.with_columns(pl.col(col).str.to_date(fmt))
+    return df
 
 
 class DataLoader:

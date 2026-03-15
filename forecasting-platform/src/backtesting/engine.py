@@ -18,7 +18,7 @@ import polars as pl
 from ..config.schema import PlatformConfig
 from ..forecasting.base import BaseForecaster
 from ..metrics.definitions import compute_all_metrics
-from ..metrics.store import MetricStore
+from ..metrics.store import METRIC_SCHEMA, MetricStore
 from .cross_validator import WalkForwardCV
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,7 @@ class BacktestEngine:
     Run walk-forward backtesting for multiple models.
 
     Produces a detailed metric table and writes to the metric store.
+    Model failures are tracked and returned alongside results.
     """
 
     def __init__(
@@ -46,6 +47,7 @@ class BacktestEngine:
             val_weeks=self.bt_config.val_weeks,
             gap_weeks=self.bt_config.gap_weeks,
         )
+        self._failures: List[dict] = []
 
     def run(
         self,
@@ -108,6 +110,7 @@ class BacktestEngine:
         run_id = f"backtest-{uuid.uuid4().hex[:8]}"
         run_date = date.today()
         all_results: List[pl.DataFrame] = []
+        self._failures = []
 
         for fold, _train_full, _val_full in splits:
             logger.info(
@@ -158,10 +161,27 @@ class BacktestEngine:
                             "  Model %s fold %d failed: %s",
                             forecaster.name, fold.fold_index, e,
                         )
+                        self._failures.append({
+                            "model_id": forecaster.name,
+                            "fold": fold.fold_index,
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                        })
+
+        if self._failures:
+            logger.warning(
+                "Backtest had %d model-fold failure(s): %s",
+                len(self._failures),
+                ", ".join(
+                    f"{f['model_id']}(fold {f['fold']}): {f['error_type']}"
+                    for f in self._failures
+                ),
+            )
 
         if not all_results:
             return pl.DataFrame()
 
+        all_results = [self._normalize_result_schema(r) for r in all_results]
         combined = pl.concat(all_results, how="diagonal")
 
         # Write to metric store
@@ -176,6 +196,32 @@ class BacktestEngine:
         )
 
         return combined
+
+    @property
+    def failures(self) -> List[dict]:
+        """Return list of model-fold failures from the most recent run."""
+        return list(self._failures)
+
+    def get_failure_summary(self) -> pl.DataFrame:
+        """Return failures as a DataFrame for reporting."""
+        if not self._failures:
+            return pl.DataFrame(schema={
+                "model_id": pl.Utf8,
+                "fold": pl.Int32,
+                "error_type": pl.Utf8,
+                "error_message": pl.Utf8,
+            })
+        return pl.DataFrame(self._failures)
+
+    @staticmethod
+    def _normalize_result_schema(df: pl.DataFrame) -> pl.DataFrame:
+        """Ensure result DataFrame conforms to METRIC_SCHEMA before concat."""
+        if df.is_empty():
+            return df
+        for col, dtype in METRIC_SCHEMA.items():
+            if col not in df.columns:
+                df = df.with_columns(pl.lit(None).cast(dtype).alias(col))
+        return df
 
     def _run_one(
         self,
