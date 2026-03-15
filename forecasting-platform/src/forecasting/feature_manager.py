@@ -53,7 +53,27 @@ class MLForecastFeatureManager:
     ) -> List[str]:
         """Detect external feature columns (anything beyond id, time, target)."""
         core_cols = {id_col, time_col, target_col}
-        self._feature_cols = [c for c in df.columns if c not in core_cols]
+        all_extra = [c for c in df.columns if c not in core_cols]
+
+        # Strip contemporaneous features that have no future values —
+        # training on features unavailable at prediction time hurts accuracy.
+        if self._future_features is None:
+            usable = []
+            for col in all_extra:
+                if self._get_feature_type(col) == "contemporaneous":
+                    logger.warning(
+                        "Dropping contemporaneous feature '%s' from training: "
+                        "no future values provided. The model will not use "
+                        "this feature. Use set_future_features() or mark as "
+                        "'known_ahead' in config if this feature is plannable.",
+                        col,
+                    )
+                else:
+                    usable.append(col)
+            self._feature_cols = usable
+        else:
+            self._feature_cols = all_extra
+
         return self._feature_cols
 
     def prepare_fit(
@@ -68,6 +88,10 @@ class MLForecastFeatureManager:
 
         Returns the full DataFrame (core + features) renamed to
         mlforecast conventions (unique_id, ds, y).
+
+        Contemporaneous features without future values are excluded from
+        training to prevent the model from learning on features that
+        won't be available at prediction time.
         """
         self.detect_features(df, id_col, time_col, target_col)
 
@@ -83,7 +107,7 @@ class MLForecastFeatureManager:
         if not self._feature_cols:
             return pdf
 
-        # Merge external features
+        # Merge external features (only usable ones)
         exog_pdf = (
             df.select([id_col, time_col] + self._feature_cols)
             .rename({id_col: "unique_id", time_col: "ds"})
