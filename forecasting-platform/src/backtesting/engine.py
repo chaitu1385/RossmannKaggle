@@ -162,7 +162,7 @@ class BacktestEngine:
         if not all_results:
             return pl.DataFrame()
 
-        combined = pl.concat(all_results, how="vertical_relaxed")
+        combined = pl.concat(all_results, how="diagonal")
 
         # Write to metric store
         self.metric_store.write(
