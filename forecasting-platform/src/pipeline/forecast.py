@@ -96,6 +96,12 @@ class ForecastPipeline:
             overrides=overrides,
         )
 
+        # Step 1b: Log data quality warnings (if report enabled)
+        qr = self._series_builder._last_quality_report
+        if qr is not None:
+            for w in qr.warnings:
+                logger.warning("Data quality: %s", w)
+
         # Step 2: Resolve forecaster (name → registry lookup, or use directly)
         if isinstance(champion_model, str):
             forecaster: BaseForecaster = registry.build(champion_model)

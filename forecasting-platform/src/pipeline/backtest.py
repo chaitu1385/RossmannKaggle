@@ -180,4 +180,5 @@ class BacktestPipeline:
             "failures": failures,
             "calibration_report": calibration_report,
             "conformal_residuals": conformal_residuals,
+            "data_quality_report": self._series_builder._last_quality_report,
         }
