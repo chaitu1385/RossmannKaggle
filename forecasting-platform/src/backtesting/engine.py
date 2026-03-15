@@ -243,6 +243,21 @@ class BacktestEngine:
         horizon = self.bt_config.val_weeks
         predictions = forecaster.predict(horizon, id_col=id_col, time_col=time_col)
 
+        # Quantile predictions (if calibration enabled)
+        quantiles = self.config.forecast.quantiles
+        if quantiles and self.config.forecast.calibration.enabled:
+            qdf = forecaster.predict_quantiles(
+                horizon=horizon, quantiles=quantiles,
+                id_col=id_col, time_col=time_col,
+            )
+            # Drop point forecast column from quantile df to avoid join conflict
+            q_cols = [c for c in qdf.columns if c.startswith("forecast_p")]
+            predictions = predictions.join(
+                qdf.select([id_col, time_col] + q_cols),
+                on=[id_col, time_col],
+                how="left",
+            )
+
         # Join predictions with actuals
         merged = val.join(
             predictions,
@@ -265,6 +280,9 @@ class BacktestEngine:
                 metric_names=self.config.metrics,
             )
 
+            # Detect quantile columns present in merged data
+            q_cols = [c for c in s.columns if c.startswith("forecast_p")]
+
             for row in s.iter_rows(named=True):
                 record = {
                     "run_id": run_id,
@@ -281,6 +299,9 @@ class BacktestEngine:
                     "forecast": float(row["forecast"]),
                 }
                 record.update(metrics)
+                for qc in q_cols:
+                    if row[qc] is not None:
+                        record[qc] = float(row[qc])
                 results.append(record)
 
         return pl.DataFrame(results)
