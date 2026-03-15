@@ -6,7 +6,7 @@ features, and validating that external regressors align with actuals data.
 """
 
 import logging
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import List, Optional
 
@@ -107,7 +107,6 @@ def generate_holiday_calendar(
             else:
                 # Handle polars date type
                 try:
-                    from datetime import timedelta
                     py_date = week_start + timedelta(days=day_offset)
                     if py_date in country_holidays:
                         count += 1
@@ -195,7 +194,6 @@ def validate_regressors(
                 )
 
         if horizon_weeks > 0 and actuals_max is not None and features_max is not None:
-            from datetime import timedelta
             required_end = actuals_max + timedelta(weeks=horizon_weeks)
             if features_max < required_end:
                 issues.append(
