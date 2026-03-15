@@ -98,12 +98,20 @@ class BacktestPipeline:
             series, forecasters, sparse_forecasters=sparse_forecasters
         )
 
+        # Surface any model failures
+        failures = self._backtest_engine.get_failure_summary()
+        if not failures.is_empty():
+            logger.warning(
+                "Model failures during backtest:\n%s", failures
+            )
+
         if results.is_empty():
             logger.warning("Backtesting produced no results.")
             return {
                 "backtest_results": results,
                 "champions": pl.DataFrame(),
                 "leaderboard": pl.DataFrame(),
+                "failures": failures,
             }
 
         # Step 4: Select champion / build ensemble
@@ -143,4 +151,5 @@ class BacktestPipeline:
             "champions": champions,
             "leaderboard": leaderboard,
             "ensemble": ensemble,           # None unless selection_strategy="weighted_ensemble"
+            "failures": failures,
         }

@@ -91,6 +91,16 @@ class TransitionConfig:
 
 
 @dataclass
+class DataQualityConfig:
+    """Data quality and preprocessing settings."""
+    fill_gaps: bool = True               # fill missing weeks with fill_value
+    fill_value: float = 0.0              # value to use for gap-filling
+    min_series_length_weeks: int = 52    # drop series shorter than this
+    drop_zero_series: bool = False       # drop series with all-zero target
+    validate_frequency: bool = False     # if True, raise on non-weekly gaps
+
+
+@dataclass
 class OutputConfig:
     """What the pipeline produces and where it writes."""
     grain: Dict[str, str] = field(default_factory=dict)
@@ -120,6 +130,9 @@ class PlatformConfig:
     forecast: ForecastConfig = field(default_factory=ForecastConfig)
     backtest: BacktestConfig = field(default_factory=BacktestConfig)
     transition: TransitionConfig = field(default_factory=TransitionConfig)
+    data_quality: DataQualityConfig = field(
+        default_factory=DataQualityConfig
+    )
     output: OutputConfig = field(default_factory=OutputConfig)
     metrics: List[str] = field(
         default_factory=lambda: ["wmape", "normalized_bias"]

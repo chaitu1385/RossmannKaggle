@@ -89,9 +89,9 @@ class TestLGBMDirectForecaster(unittest.TestCase):
                 })
         future_df = pl.DataFrame(future_rows)
         f.set_future_features(future_df)
-        # Verify it was stored (converted to pandas)
-        self.assertTrue(hasattr(f, "_future_features"))
-        self.assertEqual(len(f._future_features), 8)
+        # Verify it was stored in the feature manager (converted to pandas)
+        self.assertIsNotNone(f._feature_mgr._future_features)
+        self.assertEqual(len(f._feature_mgr._future_features), 8)
 
 
 # --------------------------------------------------------------------------- #

@@ -14,6 +14,7 @@ import numpy as np
 import polars as pl
 
 from .base import BaseForecaster
+from .feature_manager import MLForecastFeatureManager
 from .registry import registry
 
 # Attempt to import mlforecast; fall back to manual implementation
@@ -51,15 +52,14 @@ class _DirectMLBase(BaseForecaster):
         # mlforecast instance (if available)
         self._mlf: Optional[Any] = None
 
-        # External feature columns detected during fit
-        self._external_feature_cols: List[str] = []
+        # Feature manager handles external feature lifecycle
+        self._feature_mgr = MLForecastFeatureManager()
 
         # Manual fallback state
         self._fitted_data: Optional[pl.DataFrame] = None
         self._models_per_step: Dict[int, Any] = {}
 
         # Quantile regression state (lazily populated by predict_quantiles)
-        self._train_pdf: Optional[Any] = None          # pandas df stored for quantile refit
         self._quantile_mlfs: Dict[float, Any] = {}     # q -> fitted MLForecast
 
     def _get_learner(self):
@@ -68,6 +68,16 @@ class _DirectMLBase(BaseForecaster):
     def _get_quantile_learner(self, alpha: float):
         """Return a quantile regression version of the base learner. Override in subclasses."""
         raise NotImplementedError
+
+    def validate_and_prepare(
+        self,
+        df: pl.DataFrame,
+        target_col: str = "quantity",
+        time_col: str = "week",
+        id_col: str = "series_id",
+    ) -> pl.DataFrame:
+        """Fill weekly gaps — mlforecast requires contiguous dates."""
+        return self.fill_weekly_gaps(df, time_col, id_col, target_col)
 
     def fit(
         self,
@@ -79,6 +89,8 @@ class _DirectMLBase(BaseForecaster):
         self._id_col = id_col
         self._time_col = time_col
         self._target_col = target_col
+
+        df = self.validate_and_prepare(df, target_col, time_col, id_col)
 
         if _HAS_MLFORECAST:
             self._fit_mlforecast(df, target_col, time_col, id_col)
@@ -98,18 +110,7 @@ class _DirectMLBase(BaseForecaster):
     # ── mlforecast path ───────────────────────────────────────────────────
 
     def _fit_mlforecast(self, df, target_col, time_col, id_col):
-        # Detect external feature columns (anything beyond id, time, target)
-        core_cols = {id_col, time_col, target_col}
-        feature_cols = [c for c in df.columns if c not in core_cols]
-        self._external_feature_cols = feature_cols
-
-        pdf = (
-            df.select([id_col, time_col, target_col])
-            .rename({id_col: "unique_id", time_col: "ds", target_col: "y"})
-            .to_pandas()
-        )
-        pdf["ds"] = pdf["ds"].astype("datetime64[ns]")
-        self._train_pdf = pdf  # store for lazy quantile model training
+        train_pdf = self._feature_mgr.prepare_fit(df, id_col, time_col, target_col)
 
         self._mlf = MLForecast(
             models=[self._get_learner()],
@@ -119,40 +120,15 @@ class _DirectMLBase(BaseForecaster):
             num_threads=self.num_threads,
         )
 
-        if feature_cols:
-            # Prepare exogenous features for mlforecast
-            exog_pdf = (
-                df.select([id_col, time_col] + feature_cols)
-                .rename({id_col: "unique_id", time_col: "ds"})
-                .to_pandas()
-            )
-            exog_pdf["ds"] = exog_pdf["ds"].astype("datetime64[ns]")
-            # Merge features into the main dataframe
-            pdf_with_features = pdf.merge(exog_pdf, on=["unique_id", "ds"], how="left")
-            pdf_with_features[feature_cols] = pdf_with_features[feature_cols].fillna(0)
-            self._mlf.fit(pdf_with_features, validate_data=False, static_features=[])
+        if self._feature_mgr.has_features:
+            self._mlf.fit(train_pdf, validate_data=False, static_features=[])
         else:
-            self._mlf.fit(pdf, validate_data=False)
+            self._mlf.fit(train_pdf, validate_data=False)
 
     def _predict_mlforecast(self, horizon, id_col, time_col):
-        if self._external_feature_cols and hasattr(self, '_future_features'):
-            result_pdf = self._mlf.predict(h=horizon, X_df=self._future_features)
-        elif self._external_feature_cols and self._train_pdf is not None:
-            # Generate placeholder future features (forward-fill last values)
-            import pandas as pd
-            last_ds = self._train_pdf["ds"].max()
-            uids = self._train_pdf["unique_id"].unique()
-            future_rows = []
-            for uid in uids:
-                uid_data = self._train_pdf[self._train_pdf["unique_id"] == uid]
-                last_row = uid_data.iloc[-1]
-                for h in range(1, horizon + 1):
-                    row = {"unique_id": uid, "ds": last_ds + pd.Timedelta(weeks=h)}
-                    for col in self._external_feature_cols:
-                        row[col] = float(last_row.get(col, 0)) if col in uid_data.columns else 0.0
-                    future_rows.append(row)
-            X_df = pd.DataFrame(future_rows)
-            result_pdf = self._mlf.predict(h=horizon, X_df=X_df)
+        future_X = self._feature_mgr.prepare_predict(horizon)
+        if future_X is not None:
+            result_pdf = self._mlf.predict(h=horizon, X_df=future_X)
         else:
             result_pdf = self._mlf.predict(h=horizon)
 
@@ -177,13 +153,7 @@ class _DirectMLBase(BaseForecaster):
 
     def set_future_features(self, future_features: pl.DataFrame, id_col: str = "series_id", time_col: str = "week") -> None:
         """Set external feature values for the forecast horizon."""
-        if future_features is not None and not future_features.is_empty():
-            self._future_features = (
-                future_features
-                .rename({id_col: "unique_id", time_col: "ds"})
-                .to_pandas()
-            )
-            self._future_features["ds"] = self._future_features["ds"].astype("datetime64[ns]")
+        self._feature_mgr.set_future_features(future_features, id_col, time_col)
 
     # ── Probabilistic forecasting ─────────────────────────────────────────
 
@@ -214,7 +184,7 @@ class _DirectMLBase(BaseForecaster):
                 output = output.with_columns(point["forecast"].alias(col))
                 continue
 
-            if _HAS_MLFORECAST and self._train_pdf is not None:
+            if _HAS_MLFORECAST and self._feature_mgr.train_pdf is not None:
                 try:
                     q_preds = self._predict_quantile_mlforecast(
                         q, horizon, id_col, time_col
@@ -249,7 +219,7 @@ class _DirectMLBase(BaseForecaster):
                 date_features=["week", "month", "quarter"],
                 num_threads=self.num_threads,
             )
-            mlf_q.fit(self._train_pdf, validate_data=False)
+            mlf_q.fit(self._feature_mgr.train_pdf, validate_data=False)
             self._quantile_mlfs[q] = mlf_q
 
         result_pdf = self._quantile_mlfs[q].predict(h=horizon)

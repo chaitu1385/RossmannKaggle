@@ -92,10 +92,32 @@ class SeriesBuilder:
                 value_column=value_col,
             )
 
-        # Step 3: Fill missing weeks
-        df = self._fill_gaps(df, time_col, sid_col, value_col)
+        # Step 3: Fill missing weeks (controlled by data_quality config)
+        dq = self.config.data_quality
+        if dq.fill_gaps:
+            df = self._fill_gaps(df, time_col, sid_col, value_col, dq.fill_value)
 
-        # Step 3b: Join external features (if provided and enabled)
+        # Step 3a: Drop short series
+        if dq.min_series_length_weeks > 0:
+            series_lengths = (
+                df.group_by(sid_col)
+                .agg(pl.col(time_col).count().alias("_len"))
+            )
+            valid_ids = series_lengths.filter(
+                pl.col("_len") >= dq.min_series_length_weeks
+            )[sid_col].to_list()
+            df = df.filter(pl.col(sid_col).is_in(valid_ids))
+
+        # Step 3b: Drop all-zero series
+        if dq.drop_zero_series:
+            nonzero = (
+                df.group_by(sid_col)
+                .agg(pl.col(value_col).abs().sum().alias("_total"))
+                .filter(pl.col("_total") > 0)
+            )[sid_col].to_list()
+            df = df.filter(pl.col(sid_col).is_in(nonzero))
+
+        # Step 3c: Join external features (if provided and enabled)
         if external_features is not None and self.config.forecast.external_regressors.enabled:
             feature_cols = self.config.forecast.external_regressors.feature_columns
             available_cols = [c for c in feature_cols if c in external_features.columns]
@@ -158,37 +180,33 @@ class SeriesBuilder:
         time_col: str,
         sid_col: str,
         value_col: str,
+        fill_value: float = 0.0,
     ) -> pl.DataFrame:
-        """Fill missing weeks with zero values for each series."""
+        """Fill missing weeks for each series."""
         if df.is_empty():
             return df
 
-        # Get the full date range
         min_date = df[time_col].min()
         max_date = df[time_col].max()
 
         if min_date is None or max_date is None:
             return df
 
-        # Generate all weeks in range
         all_weeks = pl.date_range(
             min_date, max_date, interval="1w", eager=True
         ).alias(time_col)
         all_weeks_df = pl.DataFrame({time_col: all_weeks})
 
-        # Cross join with all series IDs
         series_ids = df.select(sid_col).unique()
         complete_grid = series_ids.join(all_weeks_df, how="cross")
 
-        # Left join to fill gaps
         filled = complete_grid.join(
             df, on=[sid_col, time_col], how="left"
         )
 
-        # Fill nulls in value column with 0
         if value_col in filled.columns:
             filled = filled.with_columns(
-                pl.col(value_col).fill_null(0.0)
+                pl.col(value_col).fill_null(fill_value)
             )
 
         return filled

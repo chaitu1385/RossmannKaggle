@@ -7,6 +7,7 @@ The interface is designed to work with Polars DataFrames in a multi-series
 """
 
 from abc import ABC, abstractmethod
+from datetime import timedelta
 from typing import Any, Dict, List
 
 import polars as pl
@@ -18,9 +19,76 @@ class BaseForecaster(ABC):
 
     Subclasses must implement ``fit`` and ``predict``.  The registry
     discovers forecasters by their ``name`` attribute.
+
+    Subclasses may override ``validate_and_prepare`` to add model-specific
+    data preprocessing (e.g. gap-filling for backends that require
+    contiguous weekly dates).
     """
 
     name: str = "base"
+
+    def validate_and_prepare(
+        self,
+        df: pl.DataFrame,
+        target_col: str = "quantity",
+        time_col: str = "week",
+        id_col: str = "series_id",
+    ) -> pl.DataFrame:
+        """
+        Pre-fit validation and preparation hook.
+
+        Called automatically before ``fit``.  The default implementation
+        returns the data unchanged.  Override in subclasses to add
+        model-specific requirements (e.g. filling missing weeks).
+
+        Parameters
+        ----------
+        df:
+            Panel DataFrame with columns [id_col, time_col, target_col].
+        target_col, time_col, id_col:
+            Column names.
+
+        Returns
+        -------
+        Cleaned / validated DataFrame ready for fitting.
+        """
+        return df
+
+    @staticmethod
+    def fill_weekly_gaps(
+        df: pl.DataFrame,
+        time_col: str = "week",
+        id_col: str = "series_id",
+        target_col: str = "quantity",
+    ) -> pl.DataFrame:
+        """
+        Fill missing weeks with zeros for each series.
+
+        Utility method available to any forecaster that needs contiguous
+        weekly dates (e.g. mlforecast, statsforecast).
+        """
+        if df.is_empty():
+            return df
+
+        min_date = df[time_col].min()
+        max_date = df[time_col].max()
+        if min_date is None or max_date is None:
+            return df
+
+        all_weeks = pl.date_range(
+            min_date, max_date, interval="1w", eager=True
+        ).alias(time_col)
+        all_weeks_df = pl.DataFrame({time_col: all_weeks})
+        series_ids = df.select(id_col).unique()
+        grid = series_ids.join(all_weeks_df, how="cross")
+
+        filled = grid.join(df, on=[id_col, time_col], how="left")
+        if target_col in filled.columns:
+            filled = filled.with_columns(
+                pl.col(target_col).fill_null(0.0)
+            )
+
+        return filled.sort([id_col, time_col])
 
     @abstractmethod
     def fit(
