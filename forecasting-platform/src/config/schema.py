@@ -97,6 +97,30 @@ class TransitionConfig:
 
 
 @dataclass
+class CleansingConfig:
+    """Demand cleansing settings — outlier detection, stockout imputation, period exclusion."""
+    enabled: bool = False                          # opt-in; existing pipelines unaffected
+
+    # Outlier detection
+    outlier_method: str = "iqr"                    # "iqr" | "zscore"
+    iqr_multiplier: float = 1.5                    # IQR fence multiplier (1.5 = standard)
+    zscore_threshold: float = 3.0                  # z-score cutoff
+    outlier_action: str = "clip"                   # "clip" | "interpolate" | "flag_only"
+
+    # Stockout imputation
+    stockout_detection: bool = True                # detect consecutive-zero runs → recovery
+    min_zero_run: int = 2                          # min consecutive zeros to flag as stockout
+    stockout_imputation: str = "seasonal"          # "seasonal" | "interpolate" | "none"
+
+    # Period exclusion (COVID, warehouse fire, etc.)
+    exclude_periods: List[Dict[str, str]] = field(default_factory=list)
+    # Each entry: {"start": "2020-03-15", "end": "2020-06-30", "action": "interpolate"|"drop"|"flag"}
+
+    # Output
+    add_flag_columns: bool = True                  # add _outlier_flag, _stockout_flag, _excluded_flag
+
+
+@dataclass
 class DataQualityConfig:
     """Data quality and preprocessing settings."""
     fill_gaps: bool = True               # fill missing weeks with fill_value
@@ -104,6 +128,7 @@ class DataQualityConfig:
     min_series_length_weeks: int = 52    # drop series shorter than this
     drop_zero_series: bool = False       # drop series with all-zero target
     validate_frequency: bool = False     # if True, raise on non-weekly gaps
+    cleansing: CleansingConfig = field(default_factory=CleansingConfig)
 
 
 @dataclass
