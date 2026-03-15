@@ -130,13 +130,29 @@ class _DirectMLBase(BaseForecaster):
             # Merge features into the main dataframe
             pdf_with_features = pdf.merge(exog_pdf, on=["unique_id", "ds"], how="left")
             pdf_with_features[feature_cols] = pdf_with_features[feature_cols].fillna(0)
-            self._mlf.fit(pdf_with_features)
+            self._mlf.fit(pdf_with_features, validate_data=False, static_features=[])
         else:
-            self._mlf.fit(pdf)
+            self._mlf.fit(pdf, validate_data=False)
 
     def _predict_mlforecast(self, horizon, id_col, time_col):
         if self._external_feature_cols and hasattr(self, '_future_features'):
             result_pdf = self._mlf.predict(h=horizon, X_df=self._future_features)
+        elif self._external_feature_cols and self._train_pdf is not None:
+            # Generate placeholder future features (forward-fill last values)
+            import pandas as pd
+            last_ds = self._train_pdf["ds"].max()
+            uids = self._train_pdf["unique_id"].unique()
+            future_rows = []
+            for uid in uids:
+                uid_data = self._train_pdf[self._train_pdf["unique_id"] == uid]
+                last_row = uid_data.iloc[-1]
+                for h in range(1, horizon + 1):
+                    row = {"unique_id": uid, "ds": last_ds + pd.Timedelta(weeks=h)}
+                    for col in self._external_feature_cols:
+                        row[col] = float(last_row.get(col, 0)) if col in uid_data.columns else 0.0
+                    future_rows.append(row)
+            X_df = pd.DataFrame(future_rows)
+            result_pdf = self._mlf.predict(h=horizon, X_df=X_df)
         else:
             result_pdf = self._mlf.predict(h=horizon)
 
@@ -233,7 +249,7 @@ class _DirectMLBase(BaseForecaster):
                 date_features=["week", "month", "quarter"],
                 num_threads=self.num_threads,
             )
-            mlf_q.fit(self._train_pdf)
+            mlf_q.fit(self._train_pdf, validate_data=False)
             self._quantile_mlfs[q] = mlf_q
 
         result_pdf = self._quantile_mlfs[q].predict(h=horizon)
