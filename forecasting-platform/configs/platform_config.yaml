@@ -69,12 +69,26 @@ forecast:
   # When enabled, external feature columns are joined to the training data
   # and passed to ML models (LightGBM, XGBoost).  Statistical models
   # (ARIMA, ETS) ignore external features.
+  #
+  # IMPORTANT: each feature must be classified as "known_ahead" or
+  # "contemporaneous" via the feature_types mapping.
+  #   - known_ahead:      plannable features whose future values are known
+  #                        (holiday calendars, planned promotions). Safe to
+  #                        forward-fill at prediction time.
+  #   - contemporaneous:   features derived from actual observations (e.g.
+  #                        actual promo ratio, foot traffic).  These REQUIRE
+  #                        explicit future values or they are dropped at
+  #                        prediction time to prevent data leakage.
   external_regressors:
     enabled: false                         # set to true when feature data is available
     feature_columns: []                    # e.g. [promotion_flag, holiday_flag, price_index]
     future_features_path: null             # path to Parquet with future feature values for prediction
+    feature_types: {}                      # e.g. {holiday_flag: known_ahead, promo_ratio: contemporaneous}
 
 # ── Backtesting ───────────────────────────────────────────────────────────────
+# NOTE: For datasets with < 3 years of history, consider reducing n_folds
+# and val_weeks to preserve enough training data after lag consumption.
+# Recommended for short histories: n_folds: 2, val_weeks: 8
 backtest:
   n_folds: 3
   val_weeks: 13                          # 3 months per fold

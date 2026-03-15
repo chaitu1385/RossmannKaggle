@@ -59,12 +59,22 @@ class BaseForecaster(ABC):
         time_col: str = "week",
         id_col: str = "series_id",
         target_col: str = "quantity",
+        strategy: str = "zero",
     ) -> pl.DataFrame:
         """
-        Fill missing weeks with zeros for each series.
+        Fill missing weeks for each series to ensure contiguous weekly dates.
 
         Utility method available to any forecaster that needs contiguous
         weekly dates (e.g. mlforecast, statsforecast).
+
+        Parameters
+        ----------
+        strategy:
+            ``"zero"`` — fill gaps with 0.0 (original behaviour, good for
+            statistical models where zero demand is meaningful).
+            ``"forward_fill"`` — propagate last known value forward, then
+            back-fill any leading nulls with the first known value.  Better
+            for tree-based models where artificial zeros contaminate splits.
         """
         if df.is_empty():
             return df
@@ -82,10 +92,27 @@ class BaseForecaster(ABC):
         grid = series_ids.join(all_weeks_df, how="cross")
 
         filled = grid.join(df, on=[id_col, time_col], how="left")
+
         if target_col in filled.columns:
-            filled = filled.with_columns(
-                pl.col(target_col).fill_null(0.0)
-            )
+            if strategy == "forward_fill":
+                # Forward-fill per series, then back-fill leading nulls
+                filled = filled.sort([id_col, time_col])
+                filled = filled.with_columns(
+                    pl.col(target_col)
+                    .forward_fill()
+                    .over(id_col)
+                    .alias(target_col)
+                )
+                filled = filled.with_columns(
+                    pl.col(target_col)
+                    .backward_fill()
+                    .over(id_col)
+                    .alias(target_col)
+                )
+            else:
+                filled = filled.with_columns(
+                    pl.col(target_col).fill_null(0.0)
+                )
 
         return filled.sort([id_col, time_col])
 
