@@ -51,6 +51,18 @@ class HierarchyConfig:
 
 
 @dataclass
+class CalibrationConfig:
+    """Prediction interval calibration settings."""
+    enabled: bool = False                          # opt-in
+    conformal_correction: bool = True              # apply conformal adjustment to production forecasts
+    coverage_targets: Dict[str, float] = field(    # interval label → nominal coverage
+        default_factory=lambda: {"80": 0.80}       # P10–P90 should cover 80%
+    )
+    # coverage_targets maps a label to a nominal rate. The quantile pair is inferred:
+    # "80" → (0.10, 0.90), "90" → (0.05, 0.95), "50" → (0.25, 0.75)
+
+
+@dataclass
 class ForecastConfig:
     """Forecast horizon and model selection."""
     horizon_weeks: int = 39              # 9 months
@@ -72,6 +84,9 @@ class ForecastConfig:
     sparse_cv2_threshold: float = 0.49   # CV² threshold for SBC classification
     external_regressors: ExternalRegressorConfig = field(
         default_factory=ExternalRegressorConfig
+    )
+    calibration: CalibrationConfig = field(
+        default_factory=CalibrationConfig
     )
 
 

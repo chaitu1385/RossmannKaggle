@@ -40,6 +40,11 @@ class ForecastPipeline:
     def __init__(self, config: PlatformConfig):
         self.config = config
         self._series_builder = SeriesBuilder(config)
+        self._conformal_residuals: Optional[pl.DataFrame] = None
+
+    def set_conformal_residuals(self, residuals: pl.DataFrame) -> None:
+        """Set conformal residuals from backtest for interval correction."""
+        self._conformal_residuals = residuals
 
     def run(
         self,
@@ -140,6 +145,21 @@ class ForecastPipeline:
             forecast = forecast.join(
                 qdf, on=[fc.series_id_column, fc.time_column], how="left"
             )
+
+        # Step 4c: Conformal prediction correction (if calibration configured)
+        cal = fc.calibration
+        if (fc.quantiles and cal.enabled and cal.conformal_correction
+                and self._conformal_residuals is not None):
+            from ..evaluation.calibration import apply_conformal_correction
+            forecast = apply_conformal_correction(
+                forecast,
+                self._conformal_residuals,
+                fc.quantiles,
+                cal.coverage_targets,
+                fc.series_id_column,
+                model_id=forecaster.name if isinstance(champion_model, str) else None,
+            )
+            logger.info("Applied conformal prediction correction to intervals")
 
         # Step 5: Write to output
         output_path = Path(self.config.output.forecast_path)

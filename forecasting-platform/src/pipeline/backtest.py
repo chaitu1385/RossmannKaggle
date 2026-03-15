@@ -145,6 +145,32 @@ class BacktestPipeline:
             secondary_metric=self.config.backtest.secondary_metric,
         )
 
+        # Step 5b: Calibration report (if quantiles + calibration enabled)
+        calibration_report = None
+        conformal_residuals = None
+        if fc.quantiles and fc.calibration.enabled and not results.is_empty():
+            from ..evaluation.calibration import (
+                compute_calibration_report,
+                compute_conformal_residuals,
+            )
+            calibration_report = compute_calibration_report(
+                results, fc.quantiles, fc.calibration.coverage_targets,
+            )
+            for model_id, coverages in calibration_report.model_reports.items():
+                for cov in coverages:
+                    logger.info(
+                        "Calibration [%s] %s%%: nominal=%.0f%%, empirical=%.1f%%, "
+                        "miscalibration=%+.1f%%, sharpness=%.1f",
+                        model_id, cov.label, cov.nominal * 100,
+                        cov.empirical * 100, cov.miscalibration * 100,
+                        cov.sharpness,
+                    )
+            if fc.calibration.conformal_correction:
+                conformal_residuals = compute_conformal_residuals(
+                    results, fc.quantiles, fc.calibration.coverage_targets,
+                    id_col=fc.series_id_column,
+                )
+
         logger.info("Backtest pipeline complete.")
         return {
             "backtest_results": results,
@@ -152,4 +178,6 @@ class BacktestPipeline:
             "leaderboard": leaderboard,
             "ensemble": ensemble,           # None unless selection_strategy="weighted_ensemble"
             "failures": failures,
+            "calibration_report": calibration_report,
+            "conformal_residuals": conformal_residuals,
         }
