@@ -103,6 +103,8 @@ def main():
         train_sdf, _, store_sdf = loader.read_rossmann_all()
         actuals_raw = train_sdf.join(store_sdf, on="Store", how="left")
 
+    from pyspark.sql import functions as F
+
     # Build canonical series panel via config — no hard-coded column names
     builder = SparkSeriesBuilder.from_config(fabric_yaml["series_builder"])
     actuals_sdf = builder.build(actuals_raw)

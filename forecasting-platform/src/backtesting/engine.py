@@ -265,7 +265,7 @@ class BacktestEngine:
                 metric_names=self.config.metrics,
             )
 
-            for _, row in enumerate(s.iter_rows(named=True)):
+            for row in s.iter_rows(named=True):
                 record = {
                     "run_id": run_id,
                     "run_type": "backtest",
