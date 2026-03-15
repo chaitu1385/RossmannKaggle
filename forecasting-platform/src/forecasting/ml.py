@@ -34,19 +34,24 @@ class _DirectMLBase(BaseForecaster):
     manually in Polars.
     """
 
-    # Default lags: dense coverage at short horizons, key seasonal multiples
-    DEFAULT_LAGS = [1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 16, 20, 24, 26, 36, 40, 48, 52]
+    # Default lags: dense short-horizon + seasonal multiples.
+    # Lag-52 provides direct year-ago signal; week_of_year date feature
+    # captures cyclical pattern.  Rolling windows capped at 26 to preserve
+    # training rows on shorter histories.
+    DEFAULT_LAGS = [1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 16, 20, 26, 52]
 
     def __init__(
         self,
         lags: Optional[List[int]] = None,
         lag_transforms: Optional[Dict] = None,
         num_threads: int = 1,
+        freq: Optional[str] = None,
         **kwargs,
     ):
         self.lags = lags or self.DEFAULT_LAGS
         self.lag_transforms = lag_transforms or self._default_lag_transforms()
         self.num_threads = num_threads
+        self._freq = freq  # auto-detected from data if None
         self._id_col: str = "series_id"
         self._time_col: str = "week"
         self._target_col: str = "quantity"
@@ -78,10 +83,8 @@ class _DirectMLBase(BaseForecaster):
                     RollingMean(window_size=8),
                     RollingMean(window_size=13),
                     RollingMean(window_size=26),
-                    RollingMean(window_size=52),
                     RollingStd(window_size=4),
                     RollingStd(window_size=13),
-                    RollingStd(window_size=52),
                 ],
             }
         except ImportError:
@@ -151,12 +154,33 @@ class _DirectMLBase(BaseForecaster):
         """Extract quarter as an integer feature."""
         return dates.quarter
 
+    @staticmethod
+    def _detect_weekly_freq(df, time_col: str) -> str:
+        """Detect the pandas-compatible weekly frequency from data dates.
+
+        Polars ``truncate("1w")`` produces Monday-start weeks, but pandas
+        ``"W"`` anchors on Sunday.  Using the wrong anchor shifts all date
+        features and predicted dates.  This helper infers the correct
+        ``W-<DAY>`` offset from the actual dates in the data.
+        """
+        dates = df[time_col].unique().sort()
+        if len(dates) < 2:
+            return "W"
+        # Use the weekday of the first date as the anchor
+        first_date = dates[0]
+        if hasattr(first_date, "weekday"):
+            day_name = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"][first_date.weekday()]
+            return f"W-{day_name}"
+        return "W"
+
     def _fit_mlforecast(self, df, target_col, time_col, id_col):
         train_pdf = self._feature_mgr.prepare_fit(df, id_col, time_col, target_col)
 
+        freq = self._freq or self._detect_weekly_freq(df, time_col)
+
         self._mlf = MLForecast(
             models=[self._get_learner()],
-            freq="W",
+            freq=freq,
             lags=self.lags,
             lag_transforms=self.lag_transforms,
             date_features=[self._month, self._quarter, self._week_of_year],
@@ -255,9 +279,10 @@ class _DirectMLBase(BaseForecaster):
         """Lazily train + predict a quantile regression model via mlforecast."""
         if q not in self._quantile_mlfs:
             q_learner = self._get_quantile_learner(q)  # raises NotImplementedError if unsupported
+            freq = self._freq or (self._mlf.freq if self._mlf else "W")
             mlf_q = MLForecast(
                 models=[q_learner],
-                freq="W",
+                freq=freq,
                 lags=self.lags,
                 lag_transforms=self.lag_transforms,
                 date_features=[self._month, self._quarter, self._week_of_year],
