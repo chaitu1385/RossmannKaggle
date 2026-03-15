@@ -136,6 +136,14 @@ class CleansingConfig:
 
 
 @dataclass
+class DataQualityReportConfig:
+    """Pre-training data quality report settings."""
+    enabled: bool = False                    # opt-in
+    include_series_detail: bool = True       # per-series breakdown
+    sparse_classification: bool = True       # run SBC demand classification
+
+
+@dataclass
 class DataQualityConfig:
     """Data quality and preprocessing settings."""
     fill_gaps: bool = True               # fill missing weeks with fill_value
@@ -144,6 +152,7 @@ class DataQualityConfig:
     drop_zero_series: bool = False       # drop series with all-zero target
     validate_frequency: bool = False     # if True, raise on non-weekly gaps
     cleansing: CleansingConfig = field(default_factory=CleansingConfig)
+    report: DataQualityReportConfig = field(default_factory=DataQualityReportConfig)
 
 
 @dataclass

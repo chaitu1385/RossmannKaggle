@@ -35,6 +35,7 @@ class SeriesBuilder:
         self.config = config
         self._transition_engine = TransitionEngine(config.transition)
         self._last_cleansing_report = None
+        self._last_quality_report = None
 
     def build(
         self,
@@ -114,6 +115,18 @@ class SeriesBuilder:
                 result.report.series_with_outliers,
                 result.report.total_stockout_periods,
             )
+
+        # Step 3-report: Data quality report (after gap-fill + cleanse, before drops)
+        self._last_quality_report = None
+        if dq.report.enabled:
+            from ..data.quality_report import DataQualityAnalyzer
+            analyzer = DataQualityAnalyzer(self.config)
+            self._last_quality_report = analyzer.analyze(
+                df, time_col, value_col, sid_col,
+                cleansing_report=self._last_cleansing_report,
+            )
+            for w in self._last_quality_report.warnings:
+                logger.warning("Data quality: %s", w)
 
         # Step 3a: Drop short series
         if dq.min_series_length_weeks > 0:
