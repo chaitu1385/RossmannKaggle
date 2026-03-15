@@ -311,14 +311,16 @@ for layer in ["naive", "statistical", "ml"]:
         continue
     w = row["mean_wmape"][0]
     d = row["mean_fva_wmape"][0]
-    marker = "✓" if d <= 0 else "✗"
+    # fva_wmape = parent - child: positive means child improved over parent
+    marker = "✓" if d >= 0 else "✗"
     print(f"  {layer:12s}  WMAPE: {w*100:6.2f}%  FVA delta: {d*100:+6.2f} pp  {marker}")
 
 # ML adds value?
 ml_row = fva_summary.filter(pl.col("layer") == "ml")
 if not ml_row.is_empty():
     ml_delta = ml_row["mean_fva_wmape"][0]
-    if ml_delta < 0:
+    # fva_wmape = parent - child: positive means ML improved over statistical
+    if ml_delta > 0:
         print(f"\n  ✓ ML layer ADDS value (improves by {abs(ml_delta)*100:.1f} pp)")
     else:
         print(f"\n  ✗ ML layer DESTROYS value (worsens by {abs(ml_delta)*100:.1f} pp)")
