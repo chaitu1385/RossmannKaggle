@@ -34,4 +34,5 @@ output/
 *.csv.bak
 
 # Data artifacts (metric store, forecasts)
+data/
 forecasting-platform/data/
