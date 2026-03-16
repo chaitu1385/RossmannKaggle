@@ -189,6 +189,19 @@ class OutputConfig:
 
 
 @dataclass
+class AnalysisConfig:
+    """Data analysis module settings."""
+    enabled: bool = True
+    season_length: int = 52
+    forecastability_signals: List[str] = field(
+        default_factory=lambda: ["cv", "apen", "spectral_entropy", "snr",
+                                  "trend_strength", "seasonal_strength"]
+    )
+    llm_enabled: bool = False            # opt-in for Anthropic API calls
+    llm_model: str = "claude-sonnet-4-20250514"
+
+
+@dataclass
 class PlatformConfig:
     """
     Top-level configuration for the forecasting platform.
@@ -211,6 +224,7 @@ class PlatformConfig:
         default_factory=DataQualityConfig
     )
     output: OutputConfig = field(default_factory=OutputConfig)
+    analysis: AnalysisConfig = field(default_factory=AnalysisConfig)
     metrics: List[str] = field(
         default_factory=lambda: ["wmape", "normalized_bias"]
     )
