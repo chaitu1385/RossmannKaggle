@@ -8,7 +8,12 @@ from .intermittent import TSBForecaster as TSBForecaster
 from .ml import LGBMDirectForecaster as LGBMDirectForecaster
 from .ml import XGBoostDirectForecaster as XGBoostDirectForecaster
 from .naive import SeasonalNaiveForecaster as SeasonalNaiveForecaster
+from .neural import NBEATSForecaster as NBEATSForecaster
+from .neural import NHITSForecaster as NHITSForecaster
+from .neural import TFTForecaster as TFTForecaster
 from .registry import ForecasterRegistry as ForecasterRegistry
 from .registry import registry as registry
 from .statistical import AutoARIMAForecaster as AutoARIMAForecaster
 from .statistical import AutoETSForecaster as AutoETSForecaster
+from .statistical import AutoThetaForecaster as AutoThetaForecaster
+from .statistical import MSTLForecaster as MSTLForecaster

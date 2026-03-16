@@ -49,6 +49,15 @@ forecast:
     - auto_ets
     - lgbm_direct
     - xgboost_direct
+    # Statistical models (statsforecast):
+    # - auto_theta       # Automatic Theta method (competitive with ETS/ARIMA)
+    # - mstl             # Multi-seasonal STL decomposition (weekly + yearly)
+
+    # Neural models (neuralforecast — pip install neuralforecast):
+    # - nbeats           # N-BEATS: pure DL with trend/seasonality stacks
+    # - nhits            # N-HiTS: hierarchical interpolation, faster than N-BEATS
+    # - tft              # Temporal Fusion Transformer: attention + external features
+
     # Foundation models (zero-shot — no training required):
     # - chronos          # Amazon Chronos (local, open-source); pip install chronos-forecasting torch
     # - timegpt          # Nixtla TimeGPT (API); pip install nixtla; set NIXTLA_API_KEY
