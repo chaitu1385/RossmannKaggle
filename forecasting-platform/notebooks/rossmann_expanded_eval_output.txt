@@ -6,31 +6,180 @@ Store types: ['a', 'b', 'c', 'd']
 EXPANDED MODEL ZOO BENCHMARK: Walk-Forward Backtest
   46 stores × 2 folds × 13-week horizon
 ================================================================================
-  neuralforecast not installed — skipping N-BEATS, NHITS, TFT
-  (pip install neuralforecast to enable)
+  neuralforecast detected — including N-BEATS, NHITS, TFT
 
-Models to evaluate: ['naive_seasonal', 'auto_ets', 'auto_arima', 'auto_theta', 'mstl', 'lgbm_direct', 'xgboost_direct']
+Models to evaluate: ['naive_seasonal', 'auto_ets', 'auto_arima', 'auto_theta', 'mstl', 'lgbm_direct', 'xgboost_direct', 'nbeats', 'nhits', 'tft']
 
   Running naive_seasonal... WMAPE: 10.68%  (0.1s)
-  Running auto_ets... WMAPE: 14.00%  (17.5s)
-  Running auto_arima... WMAPE: 8.95%  (142.5s)
+  Running auto_ets... WMAPE: 14.00%  (17.2s)
+  Running auto_arima... WMAPE: 8.95%  (142.7s)
   Running auto_theta... WMAPE: 11.81%  (4.3s)
-  Running mstl... WMAPE: 11.68%  (2.0s)
+  Running mstl... WMAPE: 11.68%  (2.1s)
   Running lgbm_direct... WMAPE: 10.68%  (0.1s)
   Running xgboost_direct... WMAPE: 10.68%  (0.1s)
+  Running nbeats... Seed set to 42
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+
+  | Name         | Type          | Params | Mode  | FLOPs
+---------------------------------------------------------------
+0 | loss         | MAE           | 0      | train | 0    
+1 | padder_train | ConstantPad1d | 0      | train | 0    
+2 | scaler       | TemporalNorm  | 0      | train | 0    
+3 | blocks       | ModuleList    | 1.6 M  | train | 0    
+---------------------------------------------------------------
+1.6 M     Trainable params
+1.1 K     Non-trainable params
+1.6 M     Total params
+6.529     Total estimated model params size (MB)
+22        Modules in train mode
+0         Modules in eval mode
+0         Total Flops
+`Trainer.fit` stopped: `max_steps=200` reached.
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+Seed set to 42
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+
+  | Name         | Type          | Params | Mode  | FLOPs
+---------------------------------------------------------------
+0 | loss         | MAE           | 0      | train | 0    
+1 | padder_train | ConstantPad1d | 0      | train | 0    
+2 | scaler       | TemporalNorm  | 0      | train | 0    
+3 | blocks       | ModuleList    | 1.6 M  | train | 0    
+---------------------------------------------------------------
+1.6 M     Trainable params
+1.1 K     Non-trainable params
+1.6 M     Total params
+6.529     Total estimated model params size (MB)
+22        Modules in train mode
+0         Modules in eval mode
+0         Total Flops
+`Trainer.fit` stopped: `max_steps=200` reached.
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+WMAPE: 13.46%  (21.0s)
+  Running nhits... Seed set to 42
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+
+  | Name         | Type          | Params | Mode  | FLOPs
+---------------------------------------------------------------
+0 | loss         | MAE           | 0      | train | 0    
+1 | padder_train | ConstantPad1d | 0      | train | 0    
+2 | scaler       | TemporalNorm  | 0      | train | 0    
+3 | blocks       | ModuleList    | 2.4 M  | train | 0    
+---------------------------------------------------------------
+2.4 M     Trainable params
+0         Non-trainable params
+2.4 M     Total params
+9.773     Total estimated model params size (MB)
+34        Modules in train mode
+0         Modules in eval mode
+0         Total Flops
+`Trainer.fit` stopped: `max_steps=200` reached.
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+Seed set to 42
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+
+  | Name         | Type          | Params | Mode  | FLOPs
+---------------------------------------------------------------
+0 | loss         | MAE           | 0      | train | 0    
+1 | padder_train | ConstantPad1d | 0      | train | 0    
+2 | scaler       | TemporalNorm  | 0      | train | 0    
+3 | blocks       | ModuleList    | 2.4 M  | train | 0    
+---------------------------------------------------------------
+2.4 M     Trainable params
+0         Non-trainable params
+2.4 M     Total params
+9.773     Total estimated model params size (MB)
+34        Modules in train mode
+0         Modules in eval mode
+0         Total Flops
+`Trainer.fit` stopped: `max_steps=200` reached.
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+WMAPE: 14.03%  (31.3s)
+  Running tft... Seed set to 42
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+
+  | Name                    | Type                     | Params | Mode  | FLOPs
+-------------------------------------------------------------------------------------
+0 | loss                    | MAE                      | 0      | train | 0    
+1 | padder_train            | ConstantPad1d            | 0      | train | 0    
+2 | scaler                  | TemporalNorm             | 0      | train | 0    
+3 | embedding               | TFTEmbedding             | 256    | train | 0    
+4 | temporal_encoder        | TemporalCovariateEncoder | 154 K  | train | 0    
+5 | temporal_fusion_decoder | TemporalFusionDecoder    | 64.8 K | train | 0    
+6 | output_adapter          | Linear                   | 65     | train | 0    
+-------------------------------------------------------------------------------------
+220 K     Trainable params
+0         Non-trainable params
+220 K     Total params
+0.880     Total estimated model params size (MB)
+88        Modules in train mode
+0         Modules in eval mode
+0         Total Flops
+`Trainer.fit` stopped: `max_steps=200` reached.
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+Seed set to 42
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+
+  | Name                    | Type                     | Params | Mode  | FLOPs
+-------------------------------------------------------------------------------------
+0 | loss                    | MAE                      | 0      | train | 0    
+1 | padder_train            | ConstantPad1d            | 0      | train | 0    
+2 | scaler                  | TemporalNorm             | 0      | train | 0    
+3 | embedding               | TFTEmbedding             | 256    | train | 0    
+4 | temporal_encoder        | TemporalCovariateEncoder | 154 K  | train | 0    
+5 | temporal_fusion_decoder | TemporalFusionDecoder    | 64.8 K | train | 0    
+6 | output_adapter          | Linear                   | 65     | train | 0    
+-------------------------------------------------------------------------------------
+220 K     Trainable params
+0         Non-trainable params
+220 K     Total params
+0.880     Total estimated model params size (MB)
+88        Modules in train mode
+0         Modules in eval mode
+0         Total Flops
+`Trainer.fit` stopped: `max_steps=200` reached.
+GPU available: False, used: False
+TPU available: False, using: 0 TPU cores
+💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+WMAPE: 18.25%  (195.7s)
 
 ================================================================================
 LEADERBOARD (sorted by WMAPE)
 ================================================================================
   Rank  Model                   WMAPE     Time  Notes
   ───── ──────────────────── ──────── ────────  ─────────────────────────
-  1     auto_arima              8.95%   142.5s  (−1.7pp vs naive)
-  2     naive_seasonal         10.68%     0.1s  (baseline)
-  3     lgbm_direct            10.68%     0.1s  (+0.0pp vs naive)
-  4     xgboost_direct         10.68%     0.1s  (+0.0pp vs naive)
-  5     mstl                   11.68%     2.0s  (+1.0pp vs naive) *NEW*
+  1     auto_arima              8.95%   142.7s  (−1.7pp vs naive)
+  2     xgboost_direct         10.68%     0.1s  (−0.0pp vs naive)
+  3     naive_seasonal         10.68%     0.1s  (baseline)
+  4     lgbm_direct            10.68%     0.1s  (+0.0pp vs naive)
+  5     mstl                   11.68%     2.1s  (+1.0pp vs naive) *NEW*
   6     auto_theta             11.81%     4.3s  (+1.1pp vs naive) *NEW*
-  7     auto_ets               14.00%    17.5s  (+3.3pp vs naive)
+  7     nbeats                 13.46%    21.0s  (+2.8pp vs naive) *NEW*
+  8     auto_ets               14.00%    17.2s  (+3.3pp vs naive)
+  9     nhits                  14.03%    31.3s  (+3.3pp vs naive) *NEW*
+  10    tft                    18.25%   195.7s  (+7.6pp vs naive) *NEW*
 
 ================================================================================
 FVA CASCADE — Which layers add value?
@@ -39,10 +188,12 @@ FVA CASCADE — Which layers add value?
   Layer champions:
     Baseline:     naive_seasonal  (10.68%)
     Statistical:  auto_arima       (8.95%)
-    ML:           lgbm_direct      (10.68%)
+    ML:           xgboost_direct   (10.68%)
+    Neural:       nbeats           (13.46%)
 
   Statistical → Naive FVA: +1.73 pp  ✓ adds value
   ML → Statistical FVA:    -1.73 pp  ✗ no value
+  Neural → ML FVA:         -2.78 pp  ✗ no value
 
 ================================================================================
 HEAD-TO-HEAD: New models vs originals (per-store win rate)
@@ -55,19 +206,31 @@ HEAD-TO-HEAD: New models vs originals (per-store win rate)
   mstl             vs auto_ets        : wins 37/46 (80%) ✓
   mstl             vs lgbm_direct     : wins 13/46 (28%) ✗
 
+  nbeats           vs naive_seasonal  : wins 10/46 (22%) ✗
+  nbeats           vs auto_ets        : wins 22/46 (48%) ✗
+  nbeats           vs lgbm_direct     : wins 10/46 (22%) ✗
+
+  nhits            vs naive_seasonal  : wins 10/46 (22%) ✗
+  nhits            vs auto_ets        : wins 13/46 (28%) ✗
+  nhits            vs lgbm_direct     : wins 10/46 (22%) ✗
+
+  tft              vs naive_seasonal  : wins 10/46 (22%) ✗
+  tft              vs auto_ets        : wins 2/46 (4%) ✗
+  tft              vs lgbm_direct     : wins 10/46 (22%) ✗
+
 ================================================================================
 FULL BACKTEST PIPELINE — Champion selection with expanded zoo
 ================================================================================
 
   Models evaluated: ['naive_seasonal', 'lgbm_direct', 'xgboost_direct']
   Champion: shape: (1, 4)
-┌───────────┬─────────────┬──────────┬─────────────────┐
-│ group_key ┆ model_id    ┆ wmape    ┆ normalized_bias │
-│ ---       ┆ ---         ┆ ---      ┆ ---             │
-│ str       ┆ str         ┆ f64      ┆ f64             │
-╞═══════════╪═════════════╪══════════╪═════════════════╡
-│ rossmann  ┆ lgbm_direct ┆ 0.106841 ┆ -0.044485       │
-└───────────┴─────────────┴──────────┴─────────────────┘
+┌───────────┬────────────────┬──────────┬─────────────────┐
+│ group_key ┆ model_id       ┆ wmape    ┆ normalized_bias │
+│ ---       ┆ ---            ┆ ---      ┆ ---             │
+│ str       ┆ str            ┆ f64      ┆ f64             │
+╞═══════════╪════════════════╪══════════╪═════════════════╡
+│ rossmann  ┆ xgboost_direct ┆ 0.106841 ┆ -0.044485       │
+└───────────┴────────────────┴──────────┴─────────────────┘
 
   Pipeline Leaderboard:
     xgboost_direct        WMAPE: 10.68%
@@ -77,21 +240,24 @@ FULL BACKTEST PIPELINE — Champion selection with expanded zoo
 ================================================================================
 SUMMARY
 ================================================================================
-  Total wall time:     331.5s (5.5 min)
-  Models evaluated:    7
+  Total wall time:     580.2s (9.7 min)
+  Models evaluated:    10
   Dataset:             46 stores × 135 weeks
   Backtest:            2 folds × 13-week horizon
 
   Overall champion:    auto_arima (8.95%)
-  Runner-up:           naive_seasonal (10.68%)
+  Runner-up:           xgboost_direct (10.68%)
 
   No new models in top-3 (new models serve horizon/data-specific niches)
 
   Per-model timings:
     naive_seasonal        0.1s
-    xgboost_direct        0.1s
     lgbm_direct           0.1s
-    mstl                  2.0s
+    xgboost_direct        0.1s
+    mstl                  2.1s
     auto_theta            4.3s
-    auto_ets              17.5s
-    auto_arima            142.5s
+    auto_ets              17.2s
+    nbeats                21.0s
+    nhits                 31.3s
+    auto_arima            142.7s
+    tft                   195.7s
