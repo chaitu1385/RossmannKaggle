@@ -33,6 +33,9 @@ Thumbs.db
 output/
 *.csv.bak
 
+# PyTorch Lightning logs
+lightning_logs/
+
 # Data artifacts (metric store, forecasts)
 data/
 forecasting-platform/data/
