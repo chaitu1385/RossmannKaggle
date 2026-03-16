@@ -16,7 +16,21 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+# Load .env from project root (if present) so ANTHROPIC_API_KEY is available
+try:
+    from dotenv import load_dotenv
+    # Walk up from this file to find project root .env
+    _project_root = Path(__file__).resolve().parents[3]  # src/analytics/ → forecasting-platform/ → repo root
+    for _candidate in [_project_root, _project_root / "forecasting-platform"]:
+        _env_path = _candidate / ".env"
+        if _env_path.exists():
+            load_dotenv(_env_path)
+            break
+except ImportError:
+    pass
 
 logger = logging.getLogger(__name__)
 

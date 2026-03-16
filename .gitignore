@@ -36,6 +36,10 @@ output/
 # PyTorch Lightning logs
 lightning_logs/
 
+# Environment variables / secrets
+.env
+.env.*
+
 # Data artifacts (metric store, forecasts)
 data/
 forecasting-platform/data/
