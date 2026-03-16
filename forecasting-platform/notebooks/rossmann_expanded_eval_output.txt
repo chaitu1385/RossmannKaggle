@@ -1,0 +1,97 @@
+Data loaded: 46 stores × 135 weeks = 6,210 rows
+Date range: 2012-12-31 → 2015-07-27
+Store types: ['a', 'b', 'c', 'd']
+
+================================================================================
+EXPANDED MODEL ZOO BENCHMARK: Walk-Forward Backtest
+  46 stores × 2 folds × 13-week horizon
+================================================================================
+  neuralforecast not installed — skipping N-BEATS, NHITS, TFT
+  (pip install neuralforecast to enable)
+
+Models to evaluate: ['naive_seasonal', 'auto_ets', 'auto_arima', 'auto_theta', 'mstl', 'lgbm_direct', 'xgboost_direct']
+
+  Running naive_seasonal... WMAPE: 10.68%  (0.1s)
+  Running auto_ets... WMAPE: 14.00%  (17.5s)
+  Running auto_arima... WMAPE: 8.95%  (142.5s)
+  Running auto_theta... WMAPE: 11.81%  (4.3s)
+  Running mstl... WMAPE: 11.68%  (2.0s)
+  Running lgbm_direct... WMAPE: 10.68%  (0.1s)
+  Running xgboost_direct... WMAPE: 10.68%  (0.1s)
+
+================================================================================
+LEADERBOARD (sorted by WMAPE)
+================================================================================
+  Rank  Model                   WMAPE     Time  Notes
+  ───── ──────────────────── ──────── ────────  ─────────────────────────
+  1     auto_arima              8.95%   142.5s  (−1.7pp vs naive)
+  2     naive_seasonal         10.68%     0.1s  (baseline)
+  3     lgbm_direct            10.68%     0.1s  (+0.0pp vs naive)
+  4     xgboost_direct         10.68%     0.1s  (+0.0pp vs naive)
+  5     mstl                   11.68%     2.0s  (+1.0pp vs naive) *NEW*
+  6     auto_theta             11.81%     4.3s  (+1.1pp vs naive) *NEW*
+  7     auto_ets               14.00%    17.5s  (+3.3pp vs naive)
+
+================================================================================
+FVA CASCADE — Which layers add value?
+================================================================================
+
+  Layer champions:
+    Baseline:     naive_seasonal  (10.68%)
+    Statistical:  auto_arima       (8.95%)
+    ML:           lgbm_direct      (10.68%)
+
+  Statistical → Naive FVA: +1.73 pp  ✓ adds value
+  ML → Statistical FVA:    -1.73 pp  ✗ no value
+
+================================================================================
+HEAD-TO-HEAD: New models vs originals (per-store win rate)
+================================================================================
+  auto_theta       vs naive_seasonal  : wins 13/46 (28%) ✗
+  auto_theta       vs auto_ets        : wins 38/46 (83%) ✓
+  auto_theta       vs lgbm_direct     : wins 13/46 (28%) ✗
+
+  mstl             vs naive_seasonal  : wins 13/46 (28%) ✗
+  mstl             vs auto_ets        : wins 37/46 (80%) ✓
+  mstl             vs lgbm_direct     : wins 13/46 (28%) ✗
+
+================================================================================
+FULL BACKTEST PIPELINE — Champion selection with expanded zoo
+================================================================================
+
+  Models evaluated: ['naive_seasonal', 'lgbm_direct', 'xgboost_direct']
+  Champion: shape: (1, 4)
+┌───────────┬─────────────┬──────────┬─────────────────┐
+│ group_key ┆ model_id    ┆ wmape    ┆ normalized_bias │
+│ ---       ┆ ---         ┆ ---      ┆ ---             │
+│ str       ┆ str         ┆ f64      ┆ f64             │
+╞═══════════╪═════════════╪══════════╪═════════════════╡
+│ rossmann  ┆ lgbm_direct ┆ 0.106841 ┆ -0.044485       │
+└───────────┴─────────────┴──────────┴─────────────────┘
+
+  Pipeline Leaderboard:
+    xgboost_direct        WMAPE: 10.68%
+    lgbm_direct           WMAPE: 10.68%
+    naive_seasonal        WMAPE: 10.68%
+
+================================================================================
+SUMMARY
+================================================================================
+  Total wall time:     331.5s (5.5 min)
+  Models evaluated:    7
+  Dataset:             46 stores × 135 weeks
+  Backtest:            2 folds × 13-week horizon
+
+  Overall champion:    auto_arima (8.95%)
+  Runner-up:           naive_seasonal (10.68%)
+
+  No new models in top-3 (new models serve horizon/data-specific niches)
+
+  Per-model timings:
+    naive_seasonal        0.1s
+    xgboost_direct        0.1s
+    lgbm_direct           0.1s
+    mstl                  2.0s
+    auto_theta            4.3s
+    auto_ets              17.5s
+    auto_arima            142.5s
