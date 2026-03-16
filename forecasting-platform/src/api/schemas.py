@@ -5,7 +5,7 @@ Pydantic response models for the forecasting platform REST API.
 from __future__ import annotations
 
 from datetime import date
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -61,6 +61,33 @@ class DriftResponse(BaseModel):
     n_critical: int
     n_warning: int
     alerts: List[DriftAlertItem]
+
+
+class AnalysisResponse(BaseModel):
+    """Response from the /analyze endpoint."""
+    lob_name: str
+    # Schema detection
+    time_column: str
+    target_column: str
+    id_columns: List[str]
+    n_series: int
+    n_rows: int
+    date_range_start: str
+    date_range_end: str
+    frequency: str
+    # Forecastability
+    overall_forecastability: float
+    forecastability_distribution: Dict[str, int]
+    demand_classes: Dict[str, int]
+    # Hierarchy
+    detected_hierarchies: List[Dict[str, Any]]
+    # Config recommendation
+    recommended_config_yaml: str
+    config_reasoning: List[str]
+    hypotheses: List[str]
+    # LLM insights (null if not enabled)
+    llm_narrative: Optional[str] = None
+    llm_risk_factors: Optional[List[str]] = None
 
 
 class AuditEventResponse(BaseModel):

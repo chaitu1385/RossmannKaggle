@@ -35,9 +35,10 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 
 from .schemas import (
+    AnalysisResponse,
     DriftAlertItem,
     DriftResponse,
     ForecastPoint,
@@ -309,6 +310,91 @@ def create_app(
             n_critical=sum(1 for a in alerts if a.severity.value == "critical"),
             n_warning=sum(1 for a in alerts if a.severity.value == "warning"),
             alerts=alert_items,
+        )
+
+    @app.post("/analyze", response_model=AnalysisResponse, tags=["analytics"])
+    async def analyze_data(
+        file: UploadFile = File(...),
+        lob_name: str = Query("analyzed", description="Name for this analysis"),
+        llm_enabled: bool = Query(False, description="Use Claude for interpretation"),
+        user: User = Depends(require_permission(Permission.RUN_PIPELINE)),
+    ):
+        """Upload a CSV or Parquet file for automated analysis and config recommendation.
+
+        Returns schema detection, forecastability signals, hierarchy detection,
+        hypotheses, and a ready-to-use PlatformConfig YAML.
+        """
+        import io
+        import yaml
+        from dataclasses import asdict
+
+        import polars as pl
+
+        from ..analytics.analyzer import DataAnalyzer
+        from ..analytics.llm_analyzer import LLMAnalyzer
+
+        # Read uploaded file
+        content = await file.read()
+        filename = file.filename or ""
+
+        try:
+            if filename.endswith(".parquet"):
+                df = pl.read_parquet(io.BytesIO(content))
+            else:
+                # Default to CSV
+                df = pl.read_csv(io.BytesIO(content), try_parse_dates=True)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to read uploaded file: {exc}",
+            )
+
+        if df.is_empty():
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+        # Run analysis
+        analyzer = DataAnalyzer(lob_name=lob_name)
+        report = analyzer.analyze(df)
+
+        # LLM interpretation (optional)
+        llm_narrative = None
+        llm_risk_factors = None
+        if llm_enabled:
+            llm = LLMAnalyzer()
+            if llm.available:
+                insight = llm.interpret(report)
+                llm_narrative = insight.narrative or None
+                llm_risk_factors = insight.risk_factors or None
+
+        # Serialize config to YAML
+        config_dict = asdict(report.recommended_config)
+        config_yaml = yaml.dump(config_dict, default_flow_style=False, sort_keys=False)
+
+        schema = report.schema
+        fc = report.forecastability
+
+        return AnalysisResponse(
+            lob_name=lob_name,
+            time_column=schema.time_column,
+            target_column=schema.target_column,
+            id_columns=schema.id_columns,
+            n_series=schema.n_series,
+            n_rows=schema.n_rows,
+            date_range_start=schema.date_range[0],
+            date_range_end=schema.date_range[1],
+            frequency=schema.frequency_guess,
+            overall_forecastability=round(fc.overall_score, 3),
+            forecastability_distribution=fc.score_distribution,
+            demand_classes=fc.demand_class_distribution,
+            detected_hierarchies=[
+                {"name": h.name, "levels": h.levels, "id_column": h.id_column, "fixed": h.fixed}
+                for h in report.hierarchy.hierarchies
+            ],
+            recommended_config_yaml=config_yaml,
+            config_reasoning=report.config_reasoning,
+            hypotheses=report.hypotheses,
+            llm_narrative=llm_narrative,
+            llm_risk_factors=llm_risk_factors,
         )
 
     return app
