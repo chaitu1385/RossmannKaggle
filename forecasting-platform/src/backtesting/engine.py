@@ -269,21 +269,30 @@ class BacktestEngine:
             return pl.DataFrame()
 
         # Compute per-series metrics
+        val_start = val[time_col].min()
         results = []
         for sid in merged[id_col].unique().to_list():
             s = merged.filter(pl.col(id_col) == sid)
             actual = s[target_col]
             forecast = s["forecast"]
 
+            # Build context for context-dependent metrics (e.g. MASE)
+            insample = train.filter(pl.col(id_col) == sid)[target_col]
+            context = {"insample": insample}
+
             metrics = compute_all_metrics(
                 actual, forecast,
                 metric_names=self.config.metrics,
+                context=context,
             )
 
             # Detect quantile columns present in merged data
             q_cols = [c for c in s.columns if c.startswith("forecast_p")]
 
             for row in s.iter_rows(named=True):
+                # forecast_step: 1-indexed week offset from validation start
+                forecast_step = (row[time_col] - val_start).days // 7 + 1
+
                 record = {
                     "run_id": run_id,
                     "run_type": "backtest",
@@ -295,6 +304,7 @@ class BacktestEngine:
                     "series_id": sid,
                     "channel": "",
                     "target_week": row[time_col],
+                    "forecast_step": forecast_step,
                     "actual": float(row[target_col]),
                     "forecast": float(row["forecast"]),
                 }

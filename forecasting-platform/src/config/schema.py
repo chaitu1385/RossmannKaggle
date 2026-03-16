@@ -91,6 +91,14 @@ class ForecastConfig:
 
 
 @dataclass
+class HorizonBucket:
+    """A named range of forecast steps for multi-horizon model selection."""
+    name: str                    # "short", "medium", "long"
+    start_step: int              # inclusive, 1-based
+    end_step: int                # inclusive
+
+
+@dataclass
 class BacktestConfig:
     """Walk-forward cross-validation settings."""
     n_folds: int = 3
@@ -100,6 +108,7 @@ class BacktestConfig:
     primary_metric: str = "wmape"
     secondary_metric: str = "normalized_bias"
     selection_strategy: str = "champion" # "champion" | "weighted_ensemble"
+    horizon_buckets: List[HorizonBucket] = field(default_factory=list)  # empty = single champion
 
 
 @dataclass
@@ -136,6 +145,18 @@ class CleansingConfig:
 
 
 @dataclass
+class StructuralBreakConfig:
+    """Structural break detection settings."""
+    enabled: bool = False                    # opt-in
+    method: str = "cusum"                    # "pelt" | "cusum"
+    min_segment_length: int = 13             # minimum weeks between breaks
+    penalty: float = 3.0                     # PELT penalty (higher = fewer breaks)
+    max_breakpoints: int = 5                 # cap on detected breaks per series
+    truncate_to_last_break: bool = False     # if True, discard pre-break history
+    cost_model: str = "rbf"                  # PELT cost function: "l2" | "rbf" | "normal"
+
+
+@dataclass
 class DataQualityReportConfig:
     """Pre-training data quality report settings."""
     enabled: bool = False                    # opt-in
@@ -152,6 +173,7 @@ class DataQualityConfig:
     drop_zero_series: bool = False       # drop series with all-zero target
     validate_frequency: bool = False     # if True, raise on non-weekly gaps
     cleansing: CleansingConfig = field(default_factory=CleansingConfig)
+    structural_breaks: StructuralBreakConfig = field(default_factory=StructuralBreakConfig)
     report: DataQualityReportConfig = field(default_factory=DataQualityReportConfig)
 
 

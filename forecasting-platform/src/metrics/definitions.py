@@ -6,7 +6,7 @@ Primary metrics:
   - Normalized Bias  (directional error — over vs. under forecasting)
 
 Secondary metrics (available for deeper analysis):
-  - MAPE, MAE, RMSE
+  - MAPE, MAE, RMSE, MASE
 
 All functions operate on Polars Series for vectorised computation.
 """
@@ -76,6 +76,48 @@ def rmse(actual: pl.Series, forecast: pl.Series) -> float:
     return float(((actual - forecast) ** 2).mean() ** 0.5)
 
 
+# ── MASE helpers ─────────────────────────────────────────────────────────────
+
+def _naive_seasonal_mae(insample: pl.Series, m: int = 52) -> float:
+    """MAE of the naive seasonal forecast on in-sample data."""
+    if len(insample) <= m:
+        return float("inf")
+    diffs = (insample[m:] - insample[:len(insample) - m]).abs()
+    return float(diffs.mean())
+
+
+def make_mase(
+    insample: pl.Series, seasonal_period: int = 52
+) -> Callable[[pl.Series, pl.Series], float]:
+    """
+    Factory: returns a 2-arg MASE function with frozen denominator.
+
+    MASE = mean(|actual - forecast|) / mean(|y_t - y_{t-m}|)
+
+    The denominator is the MAE of the naive seasonal forecast on the
+    *training* (in-sample) data, so it must be provided at construction time.
+
+    Parameters
+    ----------
+    insample : pl.Series
+        Training data used to compute the naive seasonal MAE denominator.
+    seasonal_period : int
+        Seasonal period in the same units as the data (default 52 for weekly).
+
+    Returns
+    -------
+    Callable that takes (actual, forecast) and returns the MASE score.
+    """
+    denom = _naive_seasonal_mae(insample, seasonal_period)
+
+    def mase(actual: pl.Series, forecast: pl.Series) -> float:
+        if denom == 0 or denom == float("inf"):
+            return float("inf")
+        return float((actual - forecast).abs().mean() / denom)
+
+    return mase
+
+
 # ── Registry ──────────────────────────────────────────────────────────────────
 
 METRIC_REGISTRY: Dict[str, Callable[[pl.Series, pl.Series], float]] = {
@@ -86,11 +128,18 @@ METRIC_REGISTRY: Dict[str, Callable[[pl.Series, pl.Series], float]] = {
     "rmse": rmse,
 }
 
+# Metrics that require extra context (e.g. in-sample data) beyond actual/forecast.
+# Key = metric name, value = context key expected in the ``context`` dict.
+CONTEXT_METRICS: Dict[str, str] = {
+    "mase": "insample",
+}
+
 
 def compute_all_metrics(
     actual: pl.Series,
     forecast: pl.Series,
     metric_names: Optional[List[str]] = None,
+    context: Optional[Dict[str, pl.Series]] = None,
 ) -> Dict[str, float]:
     """
     Compute multiple metrics at once.
@@ -101,6 +150,9 @@ def compute_all_metrics(
         Polars Series of equal length.
     metric_names:
         Which metrics to compute.  Defaults to all registered.
+    context:
+        Optional dict of extra data for context-dependent metrics.
+        For MASE, pass ``{"insample": <training series>}``.
 
     Returns
     -------
@@ -112,9 +164,22 @@ def compute_all_metrics(
     results = {}
     for name in metric_names:
         fn = METRIC_REGISTRY.get(name)
-        if fn is None:
-            raise KeyError(
-                f"Unknown metric {name!r}. Available: {list(METRIC_REGISTRY.keys())}"
-            )
-        results[name] = fn(actual, forecast)
+        if fn is not None:
+            results[name] = fn(actual, forecast)
+            continue
+
+        # Context-dependent metric (e.g. MASE)
+        if name in CONTEXT_METRICS:
+            ctx_key = CONTEXT_METRICS[name]
+            if context and ctx_key in context:
+                fn = make_mase(context[ctx_key])
+                results[name] = fn(actual, forecast)
+            else:
+                results[name] = float("nan")
+            continue
+
+        raise KeyError(
+            f"Unknown metric {name!r}. "
+            f"Available: {list(METRIC_REGISTRY.keys()) + list(CONTEXT_METRICS.keys())}"
+        )
     return results

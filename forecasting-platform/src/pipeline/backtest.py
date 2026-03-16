@@ -133,6 +133,11 @@ class BacktestPipeline:
                 self.config.backtest.secondary_metric: [0.0],
             })
             logger.info("Ensemble: %s", ensemble)
+        elif self.config.backtest.horizon_buckets:
+            logger.info("Selecting champion model(s) per horizon bucket...")
+            champions = self._champion_selector.select_by_horizon(
+                results, self.config.backtest.horizon_buckets
+            )
         else:
             logger.info("Selecting champion model(s)...")
             champions = self._champion_selector.select(results)
