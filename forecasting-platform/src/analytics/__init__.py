@@ -1,5 +1,6 @@
 from .analyzer import DataAnalyzer as DataAnalyzer
 from .bi_export import BIExporter as BIExporter
+from .causal import CausalAnalyzer as CausalAnalyzer
 from .forecastability import ForecastabilityAnalyzer as ForecastabilityAnalyzer
 from .llm_analyzer import LLMAnalyzer as LLMAnalyzer
 from .comparator import ForecastComparator as ForecastComparator
