@@ -20,6 +20,9 @@ try:
     from statsforecast import StatsForecast
     from statsforecast.models import AutoARIMA as _AutoARIMA
     from statsforecast.models import AutoETS as _AutoETS
+    from statsforecast.models import AutoTheta as _AutoTheta
+    from statsforecast.models import MSTL as _MSTL
+    from statsforecast.models import SeasonalNaive as _SeasonalNaive
     _HAS_STATSFORECAST = True
 except ImportError:
     _HAS_STATSFORECAST = False
@@ -191,3 +194,90 @@ class AutoETSForecaster(_StatsforecastBase):
 
     def get_params(self) -> Dict[str, Any]:
         return {"model": "AutoETS", "season_length": self.season_length}
+
+
+@registry.register("auto_theta")
+class AutoThetaForecaster(_StatsforecastBase):
+    """
+    AutoTheta via statsforecast (Nixtla).
+
+    Automatic Theta method selection (Standard Theta, Optimised Theta,
+    Dynamic Optimised Theta, Dynamic Standard Theta) with multiplicative
+    or additive seasonality.  Typically competitive with ETS/ARIMA on
+    monthly and weekly retail data.
+
+    Parameters
+    ----------
+    season_length:
+        Seasonal period.  52 for weekly data with yearly seasonality.
+    decomposition_type:
+        ``"multiplicative"`` (default) or ``"additive"``.
+    """
+
+    name = "auto_theta"
+
+    def __init__(
+        self,
+        season_length: int = 52,
+        decomposition_type: str = "multiplicative",
+    ):
+        super().__init__(season_length=season_length)
+        self.decomposition_type = decomposition_type
+
+    def _get_model(self):
+        return _AutoTheta(
+            season_length=self.season_length,
+            decomposition_type=self.decomposition_type,
+        )
+
+    def get_params(self) -> Dict[str, Any]:
+        return {
+            "model": "AutoTheta",
+            "season_length": self.season_length,
+            "decomposition_type": self.decomposition_type,
+        }
+
+
+@registry.register("mstl")
+class MSTLForecaster(_StatsforecastBase):
+    """
+    MSTL (Multiple Seasonal-Trend decomposition using LOESS) via statsforecast.
+
+    Decomposes the series into multiple seasonal components (e.g. weekly +
+    yearly) plus trend/remainder, then forecasts each component separately.
+    Particularly useful for data with multiple overlapping seasonal patterns.
+
+    The trend component is forecast using AutoETS by default.  Seasonal
+    components are projected forward using the last observed cycle (SeasonalNaive).
+
+    Parameters
+    ----------
+    season_length:
+        Primary seasonal period for the outer STL pass (52 for yearly).
+    secondary_season_length:
+        Optional additional seasonal period (e.g. 13 for quarterly).
+        If ``None``, only one seasonal component is extracted.
+    """
+
+    name = "mstl"
+
+    def __init__(
+        self,
+        season_length: int = 52,
+        secondary_season_length: Optional[int] = None,
+    ):
+        super().__init__(season_length=season_length)
+        self.secondary_season_length = secondary_season_length
+
+    def _get_model(self):
+        season_lengths = [self.season_length]
+        if self.secondary_season_length is not None:
+            season_lengths.append(self.secondary_season_length)
+        return _MSTL(season_length=season_lengths)
+
+    def get_params(self) -> Dict[str, Any]:
+        return {
+            "model": "MSTL",
+            "season_length": self.season_length,
+            "secondary_season_length": self.secondary_season_length,
+        }
