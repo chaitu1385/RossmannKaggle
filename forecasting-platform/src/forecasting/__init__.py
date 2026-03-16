@@ -2,6 +2,7 @@ from .base import BaseForecaster as BaseForecaster
 from .ensemble import WeightedEnsembleForecaster as WeightedEnsembleForecaster
 from .foundation import ChronosForecaster as ChronosForecaster
 from .foundation import TimeGPTForecaster as TimeGPTForecaster
+from .hierarchical import HierarchicalForecaster as HierarchicalForecaster
 from .intermittent import CrostonForecaster as CrostonForecaster
 from .intermittent import CrostonSBAForecaster as CrostonSBAForecaster
 from .intermittent import TSBForecaster as TSBForecaster

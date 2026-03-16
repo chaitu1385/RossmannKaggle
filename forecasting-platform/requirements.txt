@@ -7,7 +7,7 @@ pyyaml>=5.4.0
 # ── Forecasting (Nixtla stack) ───────────────────────────────────────────────
 statsforecast>=1.6.0
 mlforecast>=0.12.0
-# hierarchicalforecast>=0.4.0    # Phase 2: MinT, OLS, WLS reconciliation
+hierarchicalforecast>=0.4.0     # Hierarchical reconciliation (MinT, OLS, WLS, ERM)
 
 # ── ML models ────────────────────────────────────────────────────────────────
 lightgbm>=3.3.0

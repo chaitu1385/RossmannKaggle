@@ -636,6 +636,16 @@ class DataAnalyzer:
             forecasters.extend(["lgbm_direct", "xgboost_direct"])
             reasoning.append(f"lgbm_direct, xgboost_direct added (≥78 weeks, {n_series} series)")
 
+        # Neural models — recommend when sufficient data and series
+        if data_weeks >= 156 and n_series >= 30:
+            forecasters.extend(["nhits", "nbeats"])
+            reasoning.append(
+                f"nhits, nbeats added (≥156 weeks, {n_series} series). "
+                "NOTE: Neural models evaluated at CPU defaults; "
+                "production performance requires GPU training with "
+                "max_steps≥2000"
+            )
+
         # Intermittent models
         sparse_count = sum(
             forecastability.demand_class_distribution.get(c, 0)

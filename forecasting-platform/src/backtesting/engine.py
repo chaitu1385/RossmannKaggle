@@ -178,6 +178,17 @@ class BacktestEngine:
                 ),
             )
 
+        # Log neural model training notes (CPU-vs-GPU advisory)
+        self._neural_notes = []
+        for forecaster in forecasters:
+            if hasattr(forecaster, "training_notes"):
+                notes = forecaster.training_notes()
+                self._neural_notes.append(notes)
+                if not notes.get("is_production_quality", True):
+                    logger.warning(
+                        "NEURAL MODEL ADVISORY: %s", notes["recommendation"]
+                    )
+
         if not all_results:
             return pl.DataFrame()
 
@@ -201,6 +212,16 @@ class BacktestEngine:
     def failures(self) -> List[dict]:
         """Return list of model-fold failures from the most recent run."""
         return list(self._failures)
+
+    @property
+    def neural_training_notes(self) -> List[dict]:
+        """Return neural model training advisories from the most recent run.
+
+        Each entry contains current settings, whether the configuration is
+        production-quality, and recommended GPU settings.  Useful for
+        backtest reports and model cards.
+        """
+        return list(getattr(self, "_neural_notes", []))
 
     def get_failure_summary(self) -> pl.DataFrame:
         """Return failures as a DataFrame for reporting."""
