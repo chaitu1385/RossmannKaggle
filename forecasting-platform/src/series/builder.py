@@ -35,6 +35,7 @@ class SeriesBuilder:
         self.config = config
         self._transition_engine = TransitionEngine(config.transition)
         self._last_cleansing_report = None
+        self._last_break_report = None
         self._last_quality_report = None
 
     def build(
@@ -102,6 +103,23 @@ class SeriesBuilder:
         if dq.fill_gaps:
             df = self._fill_gaps(df, time_col, sid_col, value_col, dq.fill_value)
 
+        # Step 3-breaks: Structural break detection (after gap-fill, before cleansing)
+        self._last_break_report = None
+        if dq.structural_breaks.enabled:
+            from .break_detector import StructuralBreakDetector
+            detector = StructuralBreakDetector(dq.structural_breaks)
+            self._last_break_report = detector.detect(df, value_col, time_col, sid_col)
+            for w in self._last_break_report.warnings:
+                logger.warning("Structural break: %s", w)
+            if dq.structural_breaks.truncate_to_last_break:
+                df = detector.truncate(
+                    df, self._last_break_report, time_col, sid_col
+                )
+                logger.info(
+                    "Truncated %d series to post-break data",
+                    self._last_break_report.series_with_breaks,
+                )
+
         # Step 3-cleanse: Demand cleansing (after gap-fill, before filtering)
         if dq.cleansing.enabled:
             from ..data.cleanser import DemandCleanser
@@ -124,6 +142,7 @@ class SeriesBuilder:
             self._last_quality_report = analyzer.analyze(
                 df, time_col, value_col, sid_col,
                 cleansing_report=self._last_cleansing_report,
+                break_report=self._last_break_report,
             )
             for w in self._last_quality_report.warnings:
                 logger.warning("Data quality: %s", w)

@@ -4,16 +4,19 @@ Champion model selection.
 After backtesting, selects the best model based on the primary metric
 (WMAPE by default) at the configured granularity (per-LOB to start).
 
+Supports multi-horizon selection: different champion models per forecast
+horizon bucket (e.g. short/medium/long term).
+
 The champion table is consumed by the inference pipeline to decide
 which model generates the final forecast.
 """
 
 import logging
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import polars as pl
 
-from ..config.schema import BacktestConfig
+from ..config.schema import BacktestConfig, HorizonBucket
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +128,140 @@ class ChampionSelector:
                 row["model_id"],
                 row.get(self.primary_metric, 0),
                 row.get(self.secondary_metric, 0),
+            )
+
+        return champions
+
+    def select_by_horizon(
+        self,
+        backtest_results: pl.DataFrame,
+        horizon_buckets: List[HorizonBucket],
+        granularity_col: Optional[str] = None,
+    ) -> pl.DataFrame:
+        """
+        Select champion model per horizon bucket.
+
+        Each horizon bucket (e.g. short=1-4, medium=5-13, long=14-39)
+        gets its own champion model based on the primary metric computed
+        only over the forecast steps within that bucket.
+
+        Parameters
+        ----------
+        backtest_results :
+            Output from BacktestEngine.run(), must include ``forecast_step``.
+        horizon_buckets :
+            List of HorizonBucket defining step ranges.
+
+        Returns
+        -------
+        DataFrame with columns:
+          [group_key, horizon_bucket, start_step, end_step, model_id,
+           primary_metric, secondary_metric]
+        """
+        if backtest_results.is_empty() or not horizon_buckets:
+            return self.select(backtest_results, granularity_col)
+
+        if "forecast_step" not in backtest_results.columns:
+            logger.warning(
+                "forecast_step column missing; falling back to single champion"
+            )
+            return self.select(backtest_results, granularity_col)
+
+        # Assign horizon bucket to each row
+        bucket_expr = pl.lit("unassigned")
+        for bucket in horizon_buckets:
+            bucket_expr = (
+                pl.when(
+                    pl.col("forecast_step").is_between(
+                        bucket.start_step, bucket.end_step
+                    )
+                )
+                .then(pl.lit(bucket.name))
+                .otherwise(bucket_expr)
+            )
+
+        enriched = backtest_results.with_columns(
+            bucket_expr.alias("horizon_bucket")
+        ).filter(pl.col("horizon_bucket") != "unassigned")
+
+        if enriched.is_empty():
+            logger.warning("No rows matched any horizon bucket; falling back")
+            return self.select(backtest_results, granularity_col)
+
+        # Determine group column
+        if granularity_col and granularity_col in backtest_results.columns:
+            group_col = granularity_col
+        elif self.granularity == "lob" and "lob" in backtest_results.columns:
+            group_col = "lob"
+        elif self.granularity == "series" and "series_id" in backtest_results.columns:
+            group_col = "series_id"
+        else:
+            group_col = None
+
+        # Build group keys list
+        group_keys = ["horizon_bucket", "model_id"]
+        if group_col:
+            group_keys = [group_col] + group_keys
+
+        # Aggregate metrics per (group, bucket, model)
+        leaderboard = (
+            enriched
+            .group_by(group_keys)
+            .agg([
+                pl.col(self.primary_metric).mean().alias(self.primary_metric),
+                pl.col(self.secondary_metric).mean().alias(self.secondary_metric),
+            ])
+        )
+
+        # Select best model per (group, bucket)
+        sort_keys = (
+            ([group_col] if group_col else [])
+            + ["horizon_bucket", self.primary_metric]
+        )
+        rank_keys = ([group_col] if group_col else []) + ["horizon_bucket"]
+
+        champions = (
+            leaderboard
+            .with_columns(
+                pl.col(self.secondary_metric).abs().alias("_abs_bias")
+            )
+            .sort(sort_keys + ["_abs_bias"])
+            .group_by(rank_keys)
+            .first()
+            .drop("_abs_bias")
+        )
+
+        # Add start_step / end_step from bucket config
+        bucket_map = {b.name: b for b in horizon_buckets}
+        champions = champions.with_columns([
+            pl.col("horizon_bucket").replace_strict(
+                {b.name: b.start_step for b in horizon_buckets}
+            ).alias("start_step"),
+            pl.col("horizon_bucket").replace_strict(
+                {b.name: b.end_step for b in horizon_buckets}
+            ).alias("end_step"),
+        ])
+
+        # Add group_key column
+        if group_col:
+            champions = champions.rename({group_col: "group_key"})
+        else:
+            champions = champions.with_columns(
+                pl.lit("global").alias("group_key")
+            )
+
+        logger.info(
+            "Multi-horizon champion selection: %d bucket(s), %d champion(s)",
+            len(horizon_buckets), len(champions),
+        )
+        for row in champions.iter_rows(named=True):
+            logger.info(
+                "  %s / %s → %s (%s=%.4f)",
+                row["group_key"],
+                row["horizon_bucket"],
+                row["model_id"],
+                self.primary_metric,
+                row.get(self.primary_metric, 0),
             )
 
         return champions

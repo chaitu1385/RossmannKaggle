@@ -49,7 +49,7 @@ class ForecastPipeline:
     def run(
         self,
         actuals: pl.DataFrame,
-        champion_model: Union[str, BaseForecaster] = "naive_seasonal",
+        champion_model: Union[str, BaseForecaster, pl.DataFrame] = "naive_seasonal",
         product_master: Optional[pl.DataFrame] = None,
         mapping_table: Optional[pl.DataFrame] = None,
         forecast_origin: Optional[date] = None,
@@ -64,9 +64,9 @@ class ForecastPipeline:
         actuals:
             Historical data.
         champion_model:
-            Either the registered model name (str) or a pre-built
-            ``BaseForecaster`` instance (e.g. a ``WeightedEnsembleForecaster``
-            returned by ``BacktestPipeline.run()["ensemble"]``).
+            Either the registered model name (str), a pre-built
+            ``BaseForecaster`` instance, or a multi-horizon champion
+            DataFrame (from ``ChampionSelector.select_by_horizon()``).
         product_master:
             Product metadata for transitions.
         mapping_table:
@@ -101,6 +101,12 @@ class ForecastPipeline:
         if qr is not None:
             for w in qr.warnings:
                 logger.warning("Data quality: %s", w)
+
+        # Multi-horizon stitching: champion_model is a DataFrame
+        if isinstance(champion_model, pl.DataFrame):
+            return self._run_multi_horizon(
+                series, champion_model, forecast_origin
+            )
 
         # Step 2: Resolve forecaster (name → registry lookup, or use directly)
         if isinstance(champion_model, str):
@@ -168,6 +174,87 @@ class ForecastPipeline:
             logger.info("Applied conformal prediction correction to intervals")
 
         # Step 5: Write to output
+        forecast = self._write_forecast(forecast, forecast_origin)
+
+        return forecast
+
+    def _run_multi_horizon(
+        self,
+        series: pl.DataFrame,
+        champion_table: pl.DataFrame,
+        forecast_origin: Optional[date],
+    ) -> pl.DataFrame:
+        """
+        Generate a stitched forecast from multiple champion models.
+
+        Each model is fit on the full training data, predicts the full
+        horizon, and its predictions are sliced to the steps in its
+        assigned bucket.  The slices are concatenated into the final
+        forecast.
+        """
+        fc = self.config.forecast
+        horizon = fc.horizon_weeks
+        id_col = fc.series_id_column
+        time_col = fc.time_column
+
+        logger.info(
+            "Multi-horizon forecast: %d bucket(s)", len(champion_table)
+        )
+
+        forecast_parts = []
+        for row in champion_table.iter_rows(named=True):
+            model_name = row["model_id"]
+            start_step = row["start_step"]
+            end_step = row["end_step"]
+            bucket_name = row["horizon_bucket"]
+
+            logger.info(
+                "  Bucket %s (steps %d-%d): model %s",
+                bucket_name, start_step, end_step, model_name,
+            )
+
+            forecaster = registry.build(model_name)
+            forecaster.fit(
+                series,
+                target_col=fc.target_column,
+                time_col=time_col,
+                id_col=id_col,
+            )
+            preds = forecaster.predict(
+                horizon=horizon, id_col=id_col, time_col=time_col
+            )
+
+            # Add forecast_step: rank by time within each series
+            preds = preds.with_columns(
+                pl.col(time_col)
+                .rank("ordinal")
+                .over(id_col)
+                .cast(pl.Int32)
+                .alias("forecast_step")
+            )
+
+            # Slice to this bucket's step range
+            bucket_preds = preds.filter(
+                pl.col("forecast_step").is_between(start_step, end_step)
+            )
+            forecast_parts.append(bucket_preds)
+
+        if not forecast_parts:
+            return pl.DataFrame()
+
+        forecast = pl.concat(forecast_parts).sort([id_col, time_col])
+
+        # Drop the forecast_step helper column
+        if "forecast_step" in forecast.columns:
+            forecast = forecast.drop("forecast_step")
+
+        forecast = self._write_forecast(forecast, forecast_origin)
+        return forecast
+
+    def _write_forecast(
+        self, forecast: pl.DataFrame, forecast_origin: Optional[date]
+    ) -> pl.DataFrame:
+        """Write forecast to output path."""
         output_path = Path(self.config.output.forecast_path)
         output_path.mkdir(parents=True, exist_ok=True)
 

@@ -44,6 +44,10 @@ class DataQualityReport:
     # Demand patterns (SBC classification)
     demand_classes: Dict[str, int] = field(default_factory=dict)
 
+    # Structural breaks
+    series_with_breaks: int = 0
+    total_breaks: int = 0
+
     # Warnings
     warnings: List[str] = field(default_factory=list)
 
@@ -74,6 +78,7 @@ class DataQualityAnalyzer:
         value_col: str,
         sid_col: str,
         cleansing_report=None,
+        break_report=None,
     ) -> DataQualityReport:
         """
         Run all quality checks.
@@ -88,6 +93,9 @@ class DataQualityAnalyzer:
             Optional ``CleansingReport`` from a prior cleansing step.
             When provided, outlier counts are pulled from it instead of
             re-running detection.
+        break_report :
+            Optional ``BreakReport`` from structural break detection.
+            When provided, break counts are included in the report.
         """
         if df.is_empty():
             return DataQualityReport(warnings=["Empty dataset"])
@@ -157,6 +165,11 @@ class DataQualityAnalyzer:
         report_cfg = dq.report
         if report_cfg.sparse_classification and report.total_series > 0:
             report.demand_classes = self._classify_demand(df, value_col, sid_col)
+
+        # ---- Step 4b: Structural breaks ---------------------------------- #
+        if break_report is not None:
+            report.series_with_breaks = break_report.series_with_breaks
+            report.total_breaks = break_report.total_breaks
 
         # ---- Step 5: Per-series detail ----------------------------------- #
         if report_cfg.include_series_detail:
@@ -288,5 +301,10 @@ class DataQualityAnalyzer:
         if report.outlier_pct > 5:
             warnings.append(
                 f"High outlier rate: {report.outlier_pct:.1f}% of values flagged as outliers"
+            )
+        if report.series_with_breaks > 0:
+            warnings.append(
+                f"{report.series_with_breaks} series have structural breaks "
+                f"({report.total_breaks} total break points)"
             )
         return warnings

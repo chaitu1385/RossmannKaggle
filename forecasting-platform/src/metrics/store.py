@@ -23,6 +23,7 @@ METRIC_SCHEMA = {
     "series_id": pl.Utf8,
     "channel": pl.Utf8,
     "target_week": pl.Date,
+    "forecast_step": pl.Int32,
     "actual": pl.Float64,
     "forecast": pl.Float64,
     "wmape": pl.Float64,
@@ -30,6 +31,7 @@ METRIC_SCHEMA = {
     "mape": pl.Float64,
     "mae": pl.Float64,
     "rmse": pl.Float64,
+    "mase": pl.Float64,
 }
 
 
