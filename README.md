@@ -4,7 +4,77 @@ A production-grade, modular weekly sales forecasting platform. Covers the full l
 
 ---
 
-## Architecture Overview
+## System Layers
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  REST API  (FastAPI, JWT-protected)   src/api/              │
+│  POST /auth/token                                           │
+│  GET /health  /forecast/{lob}  /metrics/leaderboard/{lob}  │
+│  GET /forecast/{lob}/{series_id}  /metrics/drift/{lob}     │
+│  GET /audit                                                 │
+├─────────────────────────────────────────────────────────────┤
+│  Auth & Audit                         src/auth/ src/audit/  │
+│  RBAC (5 roles, 11 permissions) · JWT tokens                │
+│  AuditLogger (append-only, Parquet, date-partitioned)       │
+├─────────────────────────────────────────────────────────────┤
+│  Analytics Layer                      src/analytics/        │
+│  ForecastAnalytics (notebook API)                           │
+│  BIExporter (Power BI / Parquet)                            │
+│  ForecastComparator · ExceptionEngine                       │
+│  ForecastExplainer (STL + SHAP + narrative)                 │
+│  DriftDetector · ModelCard · ModelCardRegistry              │
+│  ForecastLineage · FVAAnalyzer                              │
+├─────────────────────────────────────────────────────────────┤
+│  Pipeline Layer                       src/pipeline/         │
+│  BacktestPipeline · ForecastPipeline                        │
+├─────────────────────────────────────────────────────────────┤
+│  Backtest Engine                      src/backtesting/      │
+│  BacktestEngine · WalkForwardCV · ChampionSelector          │
+├─────────────────────────────────────────────────────────────┤
+│  Override Store                       src/overrides/        │
+│  OverrideStore (DuckDB)                                     │
+├─────────────────────────────────────────────────────────────┤
+│  Hierarchy Layer                      src/hierarchy/        │
+│  HierarchyTree · HierarchyNode · HierarchyAggregator       │
+│  Reconciler (bottom_up · top_down · middle_out)             │
+│            (ols · wls · mint)                               │
+├─────────────────────────────────────────────────────────────┤
+│  Model Library                        src/forecasting/      │
+│  SeasonalNaive · AutoARIMA · AutoETS · AutoTheta · MSTL    │
+│  LGBMDirect · XGBoostDirect                                 │
+│  Chronos · TimeGPT (zero-shot foundation)                   │
+│  N-BEATS · NHITS · TFT (neural)                             │
+│  Croston · CrostonSBA · TSB (intermittent)                  │
+│  WeightedEnsemble · HierarchicalForecaster                  │
+│  ConstrainedDemandEstimator · ForecasterRegistry            │
+├─────────────────────────────────────────────────────────────┤
+│  Metrics                              src/metrics/          │
+│  MetricStore · ForecastDriftDetector · FVA engine           │
+├─────────────────────────────────────────────────────────────┤
+│  SKU Mapping                          src/sku_mapping/      │
+│  AttributeMatching · NamingConvention · CurveFitting        │
+│  TemporalComovement · CandidateFusion                       │
+│  BayesianProportionEstimator                                │
+├─────────────────────────────────────────────────────────────┤
+│  Series Management                    src/series/           │
+│  SeriesBuilder · SparseDetector · TransitionEngine          │
+├─────────────────────────────────────────────────────────────┤
+│  Data Layer                           src/data/             │
+│  DataLoader · DataPreprocessor · FeatureEngineer            │
+│  ExternalRegressorLoader · HolidayCalendar                  │
+│  DataValidator · DemandCleanser                             │
+├─────────────────────────────────────────────────────────────┤
+│  Infrastructure                       src/fabric/ src/spark/│
+│  DeploymentOrchestrator · FabricLakehouse · DeltaWriter     │
+│  SparkForecastPipeline · SparkSeriesBuilder                 │
+│  SparkFeatureEngineer · SparkDataLoader                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Directory Structure
 
 ```
 forecasting-platform/
@@ -15,10 +85,10 @@ forecasting-platform/
 │   ├── auth/               # RBAC, JWT authentication, role/permission models
 │   ├── backtesting/        # Walk-forward backtest engine, champion selection
 │   ├── config/             # YAML config schema + loader (incl. external regressor config)
-│   ├── data/               # Data loading, preprocessing, feature engineering, external regressors
+│   ├── data/               # Data loading, preprocessing, validation, demand cleansing, external regressors
 │   ├── evaluation/         # Metrics (WMAPE, RMSPE, bias, MAE) + evaluator
 │   ├── fabric/             # Microsoft Fabric / Delta Lake deployment
-│   ├── forecasting/        # Model implementations + registry (ML models support external regressors)
+│   ├── forecasting/        # Model implementations + registry (statistical, ML, neural, foundation, intermittent)
 │   ├── hierarchy/          # Hierarchy tree, aggregation, reconciliation (OLS/WLS/MinT)
 │   ├── metrics/            # MetricStore, drift detection, metric definitions, FVA computation
 │   ├── models/             # LightGBM + XGBoost wrappers (legacy)
@@ -28,7 +98,11 @@ forecasting-platform/
 │   ├── sku_mapping/        # New/discontinued SKU mapping (4 methods + Bayesian fusion)
 │   ├── spark/              # PySpark distributed execution layer
 │   └── utils/              # Logger, config utilities
-├── tests/                  # 423 unit + integration tests
+├── tests/                  # 710+ unit + integration tests
+├── configs/                # YAML configuration files
+├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
+├── notebooks/              # Jupyter notebooks for exploration
+├── data/rossmann/          # Rossmann dataset for demos
 ├── requirements.txt
 └── setup.py
 ```
@@ -47,22 +121,58 @@ def predict(self, horizon: int, ...) -> pl.DataFrame               # P50 point f
 def predict_quantiles(self, horizon: int, quantiles: list[float]) -> pl.DataFrame
 ```
 
+**Statistical & Naive:**
+
 | Class | Description |
 |-------|-------------|
-| `SeasonalNaiveForecaster` | Last-year same-week seasonal naïve baseline; `season_length=52` |
+| `SeasonalNaiveForecaster` | Last-year same-week seasonal naive baseline; `season_length=52` |
 | `AutoARIMAForecaster` | Auto-ARIMA via statsforecast; `season_length=52` |
 | `AutoETSForecaster` | ETS (Error/Trend/Season) via statsforecast; `season_length=52` |
-| `LGBMDirectForecaster` | LightGBM direct multi-step with lag/rolling features |
-| `XGBoostDirectForecaster` | XGBoost direct multi-step with lag/rolling features |
+| `AutoThetaForecaster` | AutoTheta via statsforecast; automatic trend/seasonality decomposition |
+| `MSTLForecaster` | Multiple Seasonal-Trend decomposition via statsforecast; multi-period seasonality |
+
+**ML (gradient boosting):**
+
+| Class | Description |
+|-------|-------------|
+| `LGBMDirectForecaster` | LightGBM direct multi-step with lag/rolling features; supports external regressors |
+| `XGBoostDirectForecaster` | XGBoost direct multi-step with lag/rolling features; supports external regressors |
+
+**Neural (deep learning):**
+
+| Class | Description |
+|-------|-------------|
+| `NBEATSForecaster` | N-BEATS neural forecaster via neuralforecast; basis expansion architecture |
+| `NHITSForecaster` | N-HiTS neural forecaster via neuralforecast; hierarchical interpolation |
+| `TFTForecaster` | Temporal Fusion Transformer via neuralforecast; attention-based with interpretable components |
+
+**Foundation models (zero-shot):**
+
+| Class | Description |
+|-------|-------------|
 | `ChronosForecaster` | Zero-shot foundation model (Amazon Chronos); no fine-tuning needed |
 | `TimeGPTForecaster` | Zero-shot foundation model (Nixtla TimeGPT) via REST API |
+
+**Intermittent demand:**
+
+| Class | Description |
+|-------|-------------|
 | `CrostonForecaster` | Croston's method for intermittent demand |
 | `CrostonSBAForecaster` | Croston-SBA (bias-corrected variant) |
 | `TSBForecaster` | Teunter-Syntetos-Babai method for lumpy demand |
+
+**Ensemble, hierarchical & constrained:**
+
+| Class | Description |
+|-------|-------------|
 | `WeightedEnsembleForecaster` | Weighted mixture of any base models; bootstrapped P10/P50/P90 |
+| `HierarchicalForecaster` | Forecaster that produces coherent hierarchical forecasts with built-in reconciliation |
+| `ConstrainedDemandEstimator` | Wraps any base forecaster; enforces non-negativity, capacity limits, aggregate budgets; preserves quantile monotonicity |
 | `ForecasterRegistry` | Register, retrieve, and instantiate models by name |
 
-### `src/data/` — External Regressors
+### `src/data/` — Data Layer
+
+#### External Regressors
 
 | Function | Description |
 |----------|-------------|
@@ -70,7 +180,27 @@ def predict_quantiles(self, horizon: int, quantiles: list[float]) -> pl.DataFram
 | `generate_holiday_calendar(country, start, end)` | Generate weekly holiday flags using the `holidays` library (optional dep) |
 | `validate_regressors(features, actuals, columns)` | Validate grain alignment, null checks, future coverage for forecast horizon |
 
-ML models (`LGBMDirectForecaster`, `XGBoostDirectForecaster`) automatically detect and use external feature columns during `fit()` and `predict()`. Statistical and naïve models silently ignore them. Future feature values for the forecast horizon are set via `model.set_future_features(df)`.
+ML models (`LGBMDirectForecaster`, `XGBoostDirectForecaster`) automatically detect and use external feature columns during `fit()` and `predict()`. Statistical and naive models silently ignore them.
+
+#### DataValidator (schema enforcement)
+
+| Class/Dataclass | Description |
+|-----------------|-------------|
+| `DataValidator` | Validates input DataFrames: schema checks, duplicate detection, frequency validation, value range enforcement, completeness checks |
+| `ValidationReport` | Result with `passed` flag, `issues` list, counts for duplicates/negatives/frequency violations |
+| `ValidationIssue` | Single issue with `level` (error/warning), `check` name, `message`, optional `series_id` |
+
+Runs as the first step in `SeriesBuilder.build()` when `validation.enabled = True`. Raises `ValueError` on errors in strict mode.
+
+#### DemandCleanser (outlier & stockout correction)
+
+| Class/Dataclass | Description |
+|-----------------|-------------|
+| `DemandCleanser` | Detects outliers (IQR/z-score), identifies stockout periods, applies corrections per-series |
+| `CleansingResult` | Contains cleaned DataFrame + `CleansingReport` summary |
+| `CleansingReport` | Counts: outliers, stockout periods/weeks, rows modified, per-series breakdown |
+
+Runs after gap-filling in `SeriesBuilder.build()` when `cleansing.enabled = True`. All statistics computed per-series (not globally). Supports period exclusion (e.g., COVID) with interpolate/drop/flag actions.
 
 ### `src/auth/` — RBAC & Authentication
 
@@ -78,7 +208,7 @@ ML models (`LGBMDirectForecaster`, `XGBoostDirectForecaster`) automatically dete
 |----------------|-------------|
 | `Role` (enum) | `ADMIN`, `DATA_SCIENTIST`, `PLANNER`, `MANAGER`, `VIEWER` |
 | `Permission` (enum) | 11 permissions: `VIEW_FORECASTS`, `VIEW_METRICS`, `VIEW_AUDIT_LOG`, `CREATE_OVERRIDE`, `DELETE_OVERRIDE`, `APPROVE_OVERRIDE`, `RUN_BACKTEST`, `RUN_PIPELINE`, `PROMOTE_MODEL`, `MODIFY_CONFIG`, `MANAGE_USERS` |
-| `ROLE_PERMISSIONS` | Complete role → permission mapping |
+| `ROLE_PERMISSIONS` | Complete role -> permission mapping |
 | `User` | Dataclass with `user_id`, `email`, `role`, `is_active`; `has_permission()` method |
 | `get_current_user()` | FastAPI dependency — extracts/validates JWT from `Authorization: Bearer` header |
 | `require_permission(perm)` | FastAPI dependency factory for fine-grained permission checks |
@@ -119,25 +249,25 @@ No UPDATE or DELETE operations — append-only by design for SOX compliance.
 
 | Class | Description |
 |-------|-------------|
-| `SeriesBuilder` | Builds weekly panel DataFrames from raw transactional data; fills gaps |
-| `SparseDetector` | Classifies series as smooth / intermittent / erratic / lumpy using CV² and ADI |
+| `SeriesBuilder` | Builds weekly panel DataFrames from raw transactional data; fills gaps; integrates validation and cleansing |
+| `SparseDetector` | Classifies series as smooth / intermittent / erratic / lumpy using CV-squared and ADI |
 | `TransitionEngine` | Handles new-product launches: stitches history, applies linear/S-curve/step ramps |
 
 **Sparse classification thresholds:**
 
-| Class | CV² | ADI | Recommended model |
-|-------|-----|-----|-------------------|
-| Smooth | ≤ 0.49 | ≤ 1.32 | Statistical / ML |
-| Intermittent | ≤ 0.49 | > 1.32 | Croston / CrostonSBA |
-| Erratic | > 0.49 | ≤ 1.32 | TSB |
+| Class | CV-squared | ADI | Recommended model |
+|-------|------------|-----|-------------------|
+| Smooth | <= 0.49 | <= 1.32 | Statistical / ML |
+| Intermittent | <= 0.49 | > 1.32 | Croston / CrostonSBA |
+| Erratic | > 0.49 | <= 1.32 | TSB |
 | Lumpy | > 0.49 | > 1.32 | TSB / Ensemble |
 
 **Transition scenarios:**
 
 | Scenario | Condition | Action |
 |----------|-----------|--------|
-| A — Already launched | `launch_date ≤ forecast_origin` | Stitch old SKU history onto new SKU |
-| B — In horizon | `0 < gap ≤ transition_window` | Ramp-down old, ramp-up new (linear/scurve/step) |
+| A — Already launched | `launch_date <= forecast_origin` | Stitch old SKU history onto new SKU |
+| B — In horizon | `0 < gap <= transition_window` | Ramp-down old, ramp-up new (linear/scurve/step) |
 | C — Beyond horizon | `gap > transition_window` | Forecast old only; new SKU flagged "pending" |
 
 ### `src/hierarchy/` — Hierarchical Reconciliation
@@ -158,15 +288,15 @@ No UPDATE or DELETE operations — append-only by design for SOX compliance.
 | `middle_out` | — | Mid-level is authoritative; disaggregated down, aggregated up |
 | `ols` | Identity | Equal uncertainty at all levels |
 | `wls` | `diag(n_leaf_descendants)` or per-series residual variance | Structural or data-driven weights |
-| `mint` | Ledoit–Wolf diagonal shrinkage covariance | Falls back to WLS-structural when `T < n` |
+| `mint` | Ledoit-Wolf diagonal shrinkage covariance | Falls back to WLS-structural when `T < n` |
 
 **Linear reconciliation formula (OLS/WLS/MinT):**
 ```
-G       = (S′W⁻¹S)⁻¹ S′W⁻¹       # projection matrix
-P̃_leaf  = G · P̂_all               # reconciled leaf forecasts
-P̃_all   = S · P̃_leaf              # all-level coherent forecasts
+G       = (S'W-1 S)-1 S'W-1       # projection matrix
+P_leaf  = G * P_all                # reconciled leaf forecasts
+P_all   = S * P_leaf               # all-level coherent forecasts
 ```
-Tikhonov regularisation (`λ = 1e-6`) applied to `(S′W⁻¹S)` for numerical stability.
+Tikhonov regularisation (lambda = 1e-6) applied for numerical stability.
 
 ### `src/backtesting/` — Backtest Engine
 
@@ -202,10 +332,10 @@ Notebook-ready queries over the MetricStore:
 
 #### `BIExporter`
 Writes Parquet in Hive-partitioned layout for direct Power BI consumption:
-- `export_forecast_vs_actual(forecasts, actuals, lob)` → `bi_exports/forecast_vs_actual/lob=.../`
-- `export_leaderboard(lob)` → `bi_exports/model_leaderboard/lob=.../`
-- `export_bias_report(lob)` → `bi_exports/bias_report/lob=.../`
-- `export_fva(fva_detail, fva_summary, lob)` → `bi_exports/fva_detail/lob=.../` and `fva_summary/lob=.../`
+- `export_forecast_vs_actual(forecasts, actuals, lob)` -> `bi_exports/forecast_vs_actual/lob=.../`
+- `export_leaderboard(lob)` -> `bi_exports/model_leaderboard/lob=.../`
+- `export_bias_report(lob)` -> `bi_exports/bias_report/lob=.../`
+- `export_fva(fva_detail, fva_summary, lob)` -> `bi_exports/fva_detail/lob=.../` and `fva_summary/lob=.../`
 
 #### `ForecastComparator`
 Aligns model forecast with external sources and prior cycle:
@@ -221,7 +351,7 @@ Business-rule exception flags for S&OP review queues:
 | `exc_high_uncertainty` | uncertainty_ratio > 0.50 |
 | `exc_field_disagree` | \|gap_pct\| > 25% vs any external source |
 | `exc_overforecast` | gap_pct > 30% |
-| `exc_underforecast` | gap_pct < −30% |
+| `exc_underforecast` | gap_pct < -30% |
 | `exc_no_prior` | prior_model_forecast is null |
 
 All thresholds configurable at construction. `exception_summary()` groups by series with flagged-week counts, sorted by `total_exception_weeks` descending.
@@ -242,7 +372,7 @@ All thresholds configurable at construction. `exception_summary()` groups by ser
 
 #### FVA Analysis (`metrics/fva.py` + `analytics/fva_analyzer.py`)
 
-Measures how much accuracy each forecast layer contributes — from naïve baseline through statistical, ML, and planner overrides.
+Measures how much accuracy each forecast layer contributes — from naive baseline through statistical, ML, and planner overrides.
 
 **Layers:**
 
@@ -257,11 +387,11 @@ Measures how much accuracy each forecast layer contributes — from naïve basel
 
 | Function | Description |
 |----------|-------------|
-| `classify_fva(value)` | `ADDS_VALUE` (>2pp), `NEUTRAL`, or `DESTROYS_VALUE` (<−2pp) |
+| `classify_fva(value)` | `ADDS_VALUE` (>2pp), `NEUTRAL`, or `DESTROYS_VALUE` (<-2pp) |
 | `compute_layer_metrics(actual, forecast)` | WMAPE, bias, MAE for one layer |
 | `compute_fva_between_layers(actual, parent, child)` | Incremental FVA with classification |
 | `compute_fva_cascade(actual, forecasts)` | Full cascade metrics across all layers |
-| `compute_total_fva(actual, forecasts)` | Total WMAPE reduction baseline → final |
+| `compute_total_fva(actual, forecasts)` | Total WMAPE reduction baseline -> final |
 
 **FVA Analyzer (`src/analytics/fva_analyzer.py`):**
 
@@ -275,7 +405,7 @@ Measures how much accuracy each forecast layer contributes — from naïve basel
 
 | Class | Description |
 |-------|-------------|
-| `OverrideStore` | DuckDB-backed store for planner **transition overrides** (old_sku → new_sku proportion, scenario, ramp shape); `add_override()`, `get_overrides()`, `delete_override()` |
+| `OverrideStore` | DuckDB-backed store for planner **transition overrides** (old_sku -> new_sku proportion, scenario, ramp shape); `add_override()`, `get_overrides()`, `delete_override()` |
 
 ### `src/sku_mapping/` — New / Discontinued SKU Mapping
 
@@ -287,7 +417,7 @@ Maps new SKUs to analogues and splits multi-mapped forecasts proportionally.
 |-------|-----------|-------|
 | `AttributeMatchingMethod` | Cosine similarity | Product attribute vectors |
 | `NamingConventionMethod` | Token overlap (Jaccard) + base-name parsing | SKU names/descriptions |
-| `CurveFittingMethod` | S-curve / step-ramp shape fit (R²) | Sales trajectory |
+| `CurveFittingMethod` | S-curve / step-ramp shape fit (R-squared) | Sales trajectory |
 | `TemporalCovementMethod` | Pearson correlation of growth rates | Historical weekly sales |
 
 **Fusion:**
@@ -315,7 +445,7 @@ Built with FastAPI. Auto-generated Swagger docs at `/docs`. All data endpoints r
 
 | Class | Description |
 |-------|-------------|
-| `DeploymentOrchestrator` | End-to-end pipeline: preflight checks → champion selection → forecast → write → audit log |
+| `DeploymentOrchestrator` | End-to-end pipeline: preflight checks -> champion selection -> forecast -> write -> audit log |
 | `FabricLakehouse` | `read_table()`, `write_table()`, `table_exists()`, `vacuum()`, `optimize()`, `history()` |
 | `DeltaWriter` | `upsert()`, `overwrite_partition()`, `append()`, `write_forecasts()` |
 | `FabricConfig` | Workspace/lakehouse/capacity config; `from_env()`, `from_dict()`, `abfss_base` property |
@@ -339,8 +469,8 @@ PySpark wrappers for large-scale runs on Fabric/Databricks:
 
 | Class | Description |
 |-------|-------------|
-| `BacktestPipeline` | Wires `SeriesBuilder → BacktestEngine → MetricStore → ChampionSelector` |
-| `ForecastPipeline` | Wires `SeriesBuilder → champion model → Reconciler → OverrideStore → BIExporter` |
+| `BacktestPipeline` | Wires `SeriesBuilder -> BacktestEngine -> MetricStore -> ChampionSelector` |
+| `ForecastPipeline` | Wires `SeriesBuilder -> champion model -> Reconciler -> OverrideStore -> BIExporter` |
 
 ---
 
@@ -360,6 +490,9 @@ from src.analytics import (
 )
 from src.analytics.fva_analyzer import FVAAnalyzer
 from src.data.regressors import load_external_features, validate_regressors
+from src.data.validator import DataValidator
+from src.data.cleanser import DemandCleanser
+from src.forecasting.constrained import ConstrainedDemandEstimator
 from src.auth.models import User, Role, Permission
 from src.auth.token import create_token, decode_token
 from src.audit.logger import AuditLogger
@@ -453,7 +586,12 @@ forecast:
       - promotion_flag
       - holiday_flag
       - price_index
-    future_features_path: data/future_features.parquet  # known-in-advance features for forecast horizon
+    future_features_path: data/future_features.parquet
+  constraints:                # ConstrainedDemandEstimator
+    enabled: false
+    min_demand: 0.0
+    max_capacity: null
+    aggregate_max: null
 
 backtest:
   n_folds: 3
@@ -472,6 +610,22 @@ transition:
   transition_window_weeks: 13
   ramp_shape: linear   # linear | scurve | step
   enable_overrides: true
+
+data_quality:
+  validation:              # DataValidator
+    enabled: false
+    check_duplicates: true
+    check_frequency: true
+    check_non_negative: true
+    max_missing_pct: 100.0
+    strict: false
+  cleansing:               # DemandCleanser
+    enabled: false
+    outlier_method: iqr    # iqr | zscore
+    iqr_multiplier: 1.5
+    outlier_action: clip   # clip | interpolate | flag_only
+    stockout_detection: true
+    min_zero_run: 2
 ```
 
 ---
@@ -479,25 +633,46 @@ transition:
 ## Testing
 
 ```bash
-pip install -r requirements.txt
-python -m pytest --ignore=tests/test_metrics.py --ignore=tests/test_feature_engineering.py -v
-# 423 tests collected and passing
+pip install -r forecasting-platform/requirements.txt
+python -m pytest forecasting-platform/tests/ \
+  --ignore=forecasting-platform/tests/test_metrics.py \
+  --ignore=forecasting-platform/tests/test_feature_engineering.py -v
+# 710+ tests collected
 ```
 
 | Test file | Tests | Covers |
-|-----------|------:|-------|
+|-----------|------:|--------|
 | `test_platform.py` | 85 | Config, hierarchy, reconciliation, metrics, transitions, registry, backtest, REST API, deployment, drift |
-| `test_sku_mapping.py` | 67 | All 4 mapping methods, candidate fusion, Bayesian proportions, end-to-end pipeline |
 | `test_forecast_explainability.py` | 59 | Comparator, ExceptionEngine, Explainer (STL+SHAP+narrative), ModelCard, Registry, DriftDetector, Lineage |
 | `test_intermittent_demand.py` | 55 | SparseDetector, Croston, CrostonSBA, TSB, backtest routing |
 | `test_mint_reconciliation.py` | 46 | S-matrix math, OLS/WLS/MinT correctness, coherence, edge cases |
 | `test_foundation_models.py` | 41 | Chronos, TimeGPT fit/predict/quantiles, error handling, zero-shot property |
+| `test_nixtla_models.py` | 29 | AutoTheta, MSTL extended statsforecast models |
+| `test_data_analyzer.py` | 29 | Data analysis module |
+| `test_forecastability.py` | 28 | Forecastability signals and scoring |
+| `test_causal_analyzer.py` | 27 | Causal/econometric analysis |
 | `test_probabilistic_ensemble.py` | 24 | Ensemble quantiles, weight computation, config |
+| `test_demand_cleansing.py` | 24 | Outlier detection, stockout imputation, period exclusion, CleansingReport |
+| `test_data_validator.py` | 24 | Schema checks, duplicates, frequency, value range, completeness, builder integration |
+| `test_calibration.py` | 20 | Interval calibration and coverage |
+| `test_llm_analyzer.py` | 20 | LLM-based analysis integration |
+| `test_quality_report.py` | 19 | Data quality reporting |
+| `test_hierarchical_forecaster.py` | 17 | Hierarchical forecaster with reconciliation |
+| `test_constrained_demand.py` | 16 | Non-negativity, capacity limits, aggregate budgets, quantile monotonicity |
 | `test_rbac.py` | 14 | Role permissions, User model, AuditEvent, AuditLogger log/query/filters |
-| `test_fva.py` | 12 | FVA classification, layer metrics, cascade computation, FVAAnalyzer detail/summary/leaderboard |
-| `test_external_regressors.py` | 6 | Regressor validation, SeriesBuilder with/without features, broadcast features |
-| `test_metrics.py` | 6 | Metric functions (pandas) |
-| `test_feature_engineering.py` | 3 | Feature engineering (pandas) |
+| `test_override_store.py` | 14 | Override CRUD, approval workflow |
+| `test_break_detection.py` | 14 | Structural break detection |
+| `test_mase.py` | 13 | MASE metric computation |
+| `test_statistical_forecasters.py` | 12 | AutoARIMA, AutoETS fit/predict/quantiles |
+| `test_fva.py` | 12 | FVA classification, layer metrics, cascade computation, FVAAnalyzer |
+| `test_data_preprocessor.py` | 12 | Data preprocessing pipeline |
+| `test_ml_forecasters.py` | 11 | LightGBM, XGBoost direct forecasters |
+| `test_hierarchy_aggregator.py` | 11 | Aggregation, disaggregation, proportions |
+| `test_data_integrity.py` | 9 | Data integrity checks |
+| `test_multi_horizon.py` | 8 | Multi-horizon forecast evaluation |
+| `test_external_regressors.py` | 6 | Regressor validation, SeriesBuilder with/without features |
+| `test_data_loader.py` | 6 | Data loading from files |
+| `test_evaluator.py` | 5 | Evaluation orchestration |
 
 ---
 
@@ -507,7 +682,7 @@ python -m pytest --ignore=tests/test_metrics.py --ignore=tests/test_feature_engi
 ```
 polars >= 0.20.0
 numpy >= 1.21.0
-statsforecast >= 1.6.0      # AutoARIMA, AutoETS
+statsforecast >= 1.6.0      # AutoARIMA, AutoETS, AutoTheta, MSTL
 mlforecast >= 0.12.0        # ML direct forecasting
 lightgbm >= 3.3.0
 xgboost >= 1.5.0
@@ -520,6 +695,7 @@ fastapi + uvicorn           # REST API
 
 **Optional:**
 ```
+neuralforecast              # N-BEATS, NHITS, TFT neural forecasters
 shap                        # SHAP explainability for ML models
 pyjwt >= 2.0.0              # JWT token creation/validation (RBAC)
 bcrypt >= 4.0.0             # Password hashing (auth)
