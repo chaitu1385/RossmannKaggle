@@ -39,13 +39,24 @@ from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 
 from .schemas import (
     AnalysisResponse,
+    CommentaryRequest,
+    CommentaryResponse,
+    ConfigRecommendationItem,
+    ConfigTuneRequest,
+    ConfigTuneResponse,
     DriftAlertItem,
     DriftResponse,
     ForecastPoint,
     ForecastResponse,
     HealthResponse,
+    KeyMetricItem,
     LeaderboardEntry,
     LeaderboardResponse,
+    NLQueryRequest,
+    NLQueryResponse,
+    TriagedAlertItem,
+    TriageRequest,
+    TriageResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -395,6 +406,218 @@ def create_app(
             hypotheses=report.hypotheses,
             llm_narrative=llm_narrative,
             llm_risk_factors=llm_risk_factors,
+        )
+
+    # ── AI-native endpoints ────────────────────────────────────────────────
+
+    @app.post("/ai/explain", response_model=NLQueryResponse, tags=["ai"])
+    async def ai_explain(
+        request: NLQueryRequest,
+        user: User = Depends(require_permission(Permission.VIEW_FORECASTS)),
+    ):
+        """Answer a natural-language question about a specific series forecast."""
+        import polars as pl
+        from ..ai.nl_query import NaturalLanguageQueryEngine
+
+        # Load forecast data for the series
+        forecast_dir = app.state.data_dir / "forecasts" / request.lob
+        forecast_df = pl.DataFrame()
+        if forecast_dir.exists():
+            parquet_files = sorted(forecast_dir.glob("forecast_*.parquet"))
+            if parquet_files:
+                forecast_df = pl.read_parquet(parquet_files[-1])
+                forecast_df = forecast_df.filter(pl.col("series_id") == request.series_id)
+
+        # Load metrics data
+        metrics_df = pl.DataFrame()
+        try:
+            from ..metrics.store import MetricStore
+            store = MetricStore(str(app.state.metrics_dir))
+            metrics_df = store.read(lob=request.lob, run_type="backtest")
+        except Exception:
+            pass
+
+        # Load history data if available
+        history_df = pl.DataFrame()
+        history_dir = app.state.data_dir / "history" / request.lob
+        if history_dir.exists():
+            parquet_files = sorted(history_dir.glob("*.parquet"))
+            if parquet_files:
+                try:
+                    history_df = pl.read_parquet(parquet_files[-1])
+                    history_df = history_df.filter(pl.col("series_id") == request.series_id)
+                except Exception:
+                    pass
+
+        engine = NaturalLanguageQueryEngine()
+        result = engine.query(
+            series_id=request.series_id,
+            question=request.question,
+            lob=request.lob,
+            history=history_df if not history_df.is_empty() else None,
+            forecast=forecast_df if not forecast_df.is_empty() else None,
+            metrics_df=metrics_df if not metrics_df.is_empty() else None,
+        )
+
+        return NLQueryResponse(
+            answer=result.answer,
+            supporting_data=result.supporting_data,
+            confidence=result.confidence,
+            sources_used=result.sources_used,
+        )
+
+    @app.post("/ai/triage", response_model=TriageResponse, tags=["ai"])
+    async def ai_triage(
+        request: TriageRequest,
+        user: User = Depends(require_permission(Permission.VIEW_METRICS)),
+    ):
+        """Triage drift alerts by business impact with suggested actions."""
+        from ..ai.anomaly_triage import AnomalyTriageEngine
+        from ..metrics.drift import DriftConfig, ForecastDriftDetector
+        from ..metrics.store import MetricStore
+
+        store = MetricStore(str(app.state.metrics_dir))
+        try:
+            df = store.read(lob=request.lob, run_type=request.run_type)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Failed to read metric store: {exc}")
+
+        if df is None or df.is_empty():
+            raise HTTPException(status_code=404, detail=f"No metric data for LOB '{request.lob}'.")
+
+        detector = ForecastDriftDetector(DriftConfig())
+        alerts = detector.detect(df)
+
+        if request.severity_filter:
+            alerts = [a for a in alerts if a.severity.value == request.severity_filter]
+
+        engine = AnomalyTriageEngine()
+        result = engine.query(
+            lob=request.lob,
+            drift_alerts=alerts,
+            max_alerts=request.max_alerts,
+        )
+
+        return TriageResponse(
+            lob=request.lob,
+            executive_summary=result.executive_summary,
+            total_alerts=result.total_alerts,
+            critical_count=result.critical_count,
+            warning_count=result.warning_count,
+            ranked_alerts=[
+                TriagedAlertItem(
+                    series_id=a.series_id,
+                    metric=a.metric,
+                    severity=a.severity,
+                    business_impact_score=a.business_impact_score,
+                    suggested_action=a.suggested_action,
+                    reasoning=a.reasoning,
+                    original_message=a.original_message,
+                )
+                for a in result.ranked_alerts
+            ],
+        )
+
+    @app.post("/ai/recommend-config", response_model=ConfigTuneResponse, tags=["ai"])
+    async def ai_recommend_config(
+        request: ConfigTuneRequest,
+        user: User = Depends(require_permission(Permission.RUN_PIPELINE)),
+    ):
+        """Recommend configuration changes based on backtest performance."""
+        from ..ai.config_tuner import ConfigTunerEngine
+        from ..config.schema import PlatformConfig
+        from ..metrics.store import MetricStore
+
+        store = MetricStore(str(app.state.metrics_dir))
+
+        # Load leaderboard
+        leaderboard = None
+        try:
+            leaderboard = store.leaderboard(lob=request.lob, run_type=request.run_type)
+        except Exception:
+            pass
+
+        # Use default config (in production, load from config file)
+        config = PlatformConfig(lob=request.lob)
+
+        engine = ConfigTunerEngine()
+        result = engine.recommend(
+            lob=request.lob,
+            current_config=config,
+            leaderboard=leaderboard,
+        )
+
+        return ConfigTuneResponse(
+            lob=request.lob,
+            recommendations=[
+                ConfigRecommendationItem(
+                    field_path=r.field_path,
+                    current_value=r.current_value,
+                    recommended_value=r.recommended_value,
+                    reasoning=r.reasoning,
+                    expected_impact=r.expected_impact,
+                    risk=r.risk,
+                )
+                for r in result.recommendations
+            ],
+            overall_assessment=result.overall_assessment,
+            risk_summary=result.risk_summary,
+        )
+
+    @app.post("/ai/commentary", response_model=CommentaryResponse, tags=["ai"])
+    async def ai_commentary(
+        request: CommentaryRequest,
+        user: User = Depends(require_permission(Permission.VIEW_METRICS)),
+    ):
+        """Generate executive forecast commentary for S&OP meetings."""
+        from ..ai.commentary import CommentaryEngine
+        from ..metrics.drift import DriftConfig, ForecastDriftDetector
+        from ..metrics.store import MetricStore
+
+        store = MetricStore(str(app.state.metrics_dir))
+        try:
+            df = store.read(lob=request.lob, run_type=request.run_type)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Failed to read metric store: {exc}")
+
+        if df is None or df.is_empty():
+            raise HTTPException(status_code=404, detail=f"No metric data for LOB '{request.lob}'.")
+
+        # Get drift alerts
+        detector = ForecastDriftDetector(DriftConfig())
+        alerts = detector.detect(df)
+
+        # Get leaderboard
+        leaderboard = None
+        try:
+            leaderboard = store.leaderboard(lob=request.lob, run_type=request.run_type)
+        except Exception:
+            pass
+
+        engine = CommentaryEngine()
+        result = engine.generate(
+            lob=request.lob,
+            metrics_df=df,
+            drift_alerts=alerts,
+            leaderboard=leaderboard,
+            period_start=request.period_start,
+            period_end=request.period_end,
+        )
+
+        return CommentaryResponse(
+            lob=request.lob,
+            executive_summary=result.executive_summary,
+            key_metrics=[
+                KeyMetricItem(
+                    name=m.name,
+                    value=m.value,
+                    unit=m.unit,
+                    trend=m.trend,
+                )
+                for m in result.key_metrics
+            ],
+            exceptions=result.exceptions,
+            action_items=result.action_items,
         )
 
     return app

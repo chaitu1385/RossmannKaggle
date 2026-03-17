@@ -36,6 +36,12 @@ python forecasting-platform/setup.py sdist bdist_wheel
 ```
 forecasting-platform/
 ├── src/                    # Source modules (~20+ modules)
+│   ├── ai/                 # AI-native features (Claude-powered)
+│   │   ├── base.py         # AIFeatureBase — shared client wrapper
+│   │   ├── nl_query.py     # NaturalLanguageQueryEngine — POST /ai/explain
+│   │   ├── anomaly_triage.py # AnomalyTriageEngine — POST /ai/triage
+│   │   ├── config_tuner.py # ConfigTunerEngine — POST /ai/recommend-config
+│   │   └── commentary.py   # CommentaryEngine — POST /ai/commentary
 │   ├── api/                # FastAPI REST endpoints (auth-protected)
 │   ├── audit/              # Append-only Parquet audit logging
 │   ├── auth/               # RBAC (5 roles, 11 permissions), JWT tokens
@@ -93,7 +99,7 @@ YAML-driven config system with dataclass schema validation:
 - `configs/lob/` — line-of-business overrides (inherit from base)
 - Schema defined in `src/config/schema.py`
 
-Key config dataclasses: `ForecastConfig`, `BacktestConfig`, `DataQualityConfig` (contains `ValidationConfig`, `CleansingConfig`), `ConstraintConfig`, `ExternalRegressorConfig` (contains `RegressorScreenConfig`)
+Key config dataclasses: `ForecastConfig`, `BacktestConfig`, `DataQualityConfig` (contains `ValidationConfig`, `CleansingConfig`), `ConstraintConfig`, `ExternalRegressorConfig` (contains `RegressorScreenConfig`), `AIConfig`
 
 ### Multi-frequency support
 
@@ -116,8 +122,8 @@ Helper functions: `get_frequency_profile(freq)` returns the profile dict; `freq_
 - Test files mirror source structure with `test_` prefix
 - Helper fixtures use `_make_*` factory functions (e.g., `_make_weekly_actuals`)
 - Skip `test_metrics.py` and `test_feature_engineering.py` (legacy/slow)
-- 790+ tests across 32 test files
-- Key test modules: `test_platform.py` (85 tests), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55)
+- 860+ tests across 38 test files
+- Key test modules: `test_platform.py` (85 tests), `test_ai_*.py` (73), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55)
 
 ## Key Dependencies
 
