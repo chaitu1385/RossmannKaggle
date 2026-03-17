@@ -99,3 +99,100 @@ class AuditEventResponse(BaseModel):
     resource_type: str
     resource_id: str
     status: str
+
+
+# --------------------------------------------------------------------------- #
+#  AI feature request/response models
+# --------------------------------------------------------------------------- #
+
+class NLQueryRequest(BaseModel):
+    """Request body for POST /ai/explain."""
+    series_id: str
+    question: str
+    lob: str
+
+
+class NLQueryResponse(BaseModel):
+    """Response from POST /ai/explain."""
+    answer: str
+    supporting_data: Dict[str, Any] = {}
+    confidence: str = "low"       # "high" | "medium" | "low"
+    sources_used: List[str] = []
+
+
+class TriageRequest(BaseModel):
+    """Request body for POST /ai/triage."""
+    lob: str
+    run_type: str = "backtest"
+    severity_filter: Optional[str] = None   # "warning" | "critical" | None
+    max_alerts: int = 50
+
+
+class TriagedAlertItem(BaseModel):
+    """A single triaged drift alert."""
+    series_id: str
+    metric: str
+    severity: str
+    business_impact_score: float = 0.0
+    suggested_action: str = ""
+    reasoning: str = ""
+    original_message: str = ""
+
+
+class TriageResponse(BaseModel):
+    """Response from POST /ai/triage."""
+    lob: str
+    executive_summary: str = ""
+    total_alerts: int = 0
+    critical_count: int = 0
+    warning_count: int = 0
+    ranked_alerts: List[TriagedAlertItem] = []
+
+
+class ConfigTuneRequest(BaseModel):
+    """Request body for POST /ai/recommend-config."""
+    lob: str
+    run_type: str = "backtest"
+
+
+class ConfigRecommendationItem(BaseModel):
+    """A single configuration change recommendation."""
+    field_path: str
+    current_value: Any = None
+    recommended_value: Any = None
+    reasoning: str = ""
+    expected_impact: str = ""
+    risk: str = "low"             # "low" | "medium" | "high"
+
+
+class ConfigTuneResponse(BaseModel):
+    """Response from POST /ai/recommend-config."""
+    lob: str
+    recommendations: List[ConfigRecommendationItem] = []
+    overall_assessment: str = ""
+    risk_summary: str = ""
+
+
+class CommentaryRequest(BaseModel):
+    """Request body for POST /ai/commentary."""
+    lob: str
+    run_type: str = "backtest"
+    period_start: Optional[date] = None
+    period_end: Optional[date] = None
+
+
+class KeyMetricItem(BaseModel):
+    """A key metric with trend direction."""
+    name: str
+    value: float
+    unit: str = ""
+    trend: str = "stable"         # "improving" | "stable" | "degrading"
+
+
+class CommentaryResponse(BaseModel):
+    """Response from POST /ai/commentary."""
+    lob: str
+    executive_summary: str = ""
+    key_metrics: List[KeyMetricItem] = []
+    exceptions: List[str] = []
+    action_items: List[str] = []

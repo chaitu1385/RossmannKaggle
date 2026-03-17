@@ -149,3 +149,13 @@ Automated forecasts can't know about next month's product launch, the competitor
 A weekly-only platform can't serve a monthly S&OP process or daily replenishment cycle. But frequency changes everything: season length (52 for weekly, 12 for monthly), default lags, minimum series length, and date arithmetic all depend on the data frequency. Rather than scattering frequency-specific logic across 20+ modules, the platform uses `FREQUENCY_PROFILES` as a single source of truth — a dict mapping `"D"`, `"W"`, `"M"`, `"Q"` to all frequency-dependent parameters. Every model, backtester, validator, and data processor reads from this profile, so switching frequency is a single YAML config change.
 
 *Implementation: `src/config/schema.py` — `FREQUENCY_PROFILES`, `get_frequency_profile()`, `freq_timedelta()`*
+
+---
+
+## AI & Intelligence
+
+### AI-Native Features
+
+Forecasting platforms generate data (metrics, drift alerts, leaderboards) that planners must manually interpret. AI-native features use Claude to automate this interpretation: answering natural-language questions about forecasts, triaging drift alerts by business impact, recommending config changes from backtest results, and generating S&OP executive commentary. All four capabilities are API endpoints that send structured platform data to Claude with domain-specific prompts, then parse the response into actionable dataclasses. When Claude is unavailable (no API key or network issue), every feature gracefully degrades to a template-based fallback so the platform never breaks.
+
+*Implementation: `src/ai/` — `NaturalLanguageQueryEngine`, `AnomalyTriageEngine`, `ConfigTunerEngine`, `CommentaryEngine`*

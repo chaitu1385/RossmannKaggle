@@ -380,6 +380,15 @@ class OutputConfig:
 
 
 @dataclass
+class AIConfig:
+    """AI feature settings (Claude integration for AI-native endpoints)."""
+    enabled: bool = False                     # master switch for all AI endpoints
+    api_key_env_var: str = "ANTHROPIC_API_KEY"
+    model: str = "claude-sonnet-4-20250514"
+    max_tokens: int = 2000
+
+
+@dataclass
 class AnalysisConfig:
     """Data analysis module settings."""
     enabled: bool = True
@@ -416,6 +425,7 @@ class PlatformConfig:
     )
     output: OutputConfig = field(default_factory=OutputConfig)
     analysis: AnalysisConfig = field(default_factory=AnalysisConfig)
+    ai: AIConfig = field(default_factory=AIConfig)
     metrics: List[str] = field(
         default_factory=lambda: ["wmape", "normalized_bias"]
     )
