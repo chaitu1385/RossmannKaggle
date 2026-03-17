@@ -149,3 +149,25 @@ Automated forecasts can't know about next month's product launch, the competitor
 A weekly-only platform can't serve a monthly S&OP process or daily replenishment cycle. But frequency changes everything: season length (52 for weekly, 12 for monthly), default lags, minimum series length, and date arithmetic all depend on the data frequency. Rather than scattering frequency-specific logic across 20+ modules, the platform uses `FREQUENCY_PROFILES` as a single source of truth — a dict mapping `"D"`, `"W"`, `"M"`, `"Q"` to all frequency-dependent parameters. Every model, backtester, validator, and data processor reads from this profile, so switching frequency is a single YAML config change.
 
 *Implementation: `src/config/schema.py` — `FREQUENCY_PROFILES`, `get_frequency_profile()`, `freq_timedelta()`*
+
+---
+
+## Distributed Execution & Portability
+
+### Batch Inference & Parallelism
+
+Per-series sequential execution doesn't scale — fitting 10,000 series one-at-a-time on a single core wastes available compute. The `BatchInferenceRunner` partitions series into groups and dispatches them to a `ProcessPoolExecutor`, using Polars IPC serialization for zero-copy inter-process transfer. ML models (LightGBM, XGBoost) naturally train one model across all series in a batch, while statistical models benefit from I/O batching. The `ParallelismConfig` controls worker count, batch size, and backend (`"local"`, `"spark"`, `"ray"`), and flows through to Nixtla's `n_jobs` and `num_threads` parameters.
+
+*Implementation: `src/pipeline/batch_runner.py` — `BatchInferenceRunner`; `src/config/schema.py` — `ParallelismConfig`*
+
+### Pipeline Observability
+
+When a production forecast pipeline runs weekly across thousands of series, "something went wrong" is not actionable. Structured logging with correlation IDs (`run_id`) lets you trace every log line, metric, and alert back to a specific pipeline execution. The `MetricsEmitter` records timing (model fit/predict duration), counts (series processed, errors), and gauges (forecast rows) to a pluggable backend (log or StatsD). The `AlertDispatcher` routes drift alerts to Slack/Teams webhooks. Together, these make the difference between "the forecast is wrong" and "model X failed on fold 2 of LOB Y at 3:42am, here's the error."
+
+*Implementation: `src/observability/context.py` — `PipelineContext`; `src/observability/metrics.py` — `MetricsEmitter`; `src/observability/alerts.py` — `AlertDispatcher`*
+
+### Compute Portability
+
+The platform's business logic (forecasting, backtesting, reconciliation) should be deployable on a laptop, a Spark cluster, or Microsoft Fabric without code changes. This requires separating the compute layer (how models are distributed) from the data layer (where data lives) from the business logic (what models do). The `FabricNotebookAdapter` wraps the Spark + Fabric infrastructure into a one-liner setup class. The `ParquetOverrideStore` replaces DuckDB when it's unavailable in constrained runtimes. The `requirements-fabric.txt` pins only packages available in Fabric's default environment. Each layer can be swapped independently.
+
+*Implementation: `src/fabric/notebook_adapter.py` — `FabricNotebookAdapter`; `src/overrides/store.py` — `get_override_store()`*

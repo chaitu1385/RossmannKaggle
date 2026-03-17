@@ -37,12 +37,13 @@ class _StatsforecastBase(BaseForecaster):
     and maps columns to the expected ``unique_id / ds / y`` schema.
     """
 
-    def __init__(self, season_length: int = 52, frequency: str = "W"):
+    def __init__(self, season_length: int = 52, frequency: str = "W", n_jobs: int = 1):
         self.frequency = frequency
         profile = get_frequency_profile(frequency)
         if season_length == 52 and frequency != "W":
             season_length = profile["season_length"]
         self.season_length = season_length
+        self.n_jobs = n_jobs
         self._sf: Optional[Any] = None
         self._id_col: str = "series_id"
         self._time_col: str = "week"
@@ -80,7 +81,7 @@ class _StatsforecastBase(BaseForecaster):
         self._sf = StatsForecast(
             models=[model],
             freq=get_frequency_profile(self.frequency)["statsforecast_freq"],
-            n_jobs=1,
+            n_jobs=self.n_jobs,
         )
         self._sf.fit(pdf)
 

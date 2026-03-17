@@ -10,6 +10,7 @@ For each (model, fold) combination:
 
 import logging
 import uuid
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import date
 from typing import List, Optional
 
@@ -22,6 +23,99 @@ from ..metrics.store import METRIC_SCHEMA, MetricStore
 from .cross_validator import WalkForwardCV
 
 logger = logging.getLogger(__name__)
+
+
+def _run_model_in_process(
+    train_bytes: bytes,
+    val_bytes: bytes,
+    model_name: str,
+    fold_index: int,
+    run_id: str,
+    run_date_iso: str,
+    lob: str,
+    target_col: str,
+    time_col: str,
+    id_col: str,
+    metrics_list: List[str],
+    val_weeks: int,
+    frequency: str,
+    quantiles: List[float],
+    calibration_enabled: bool,
+) -> bytes:
+    """
+    Fit and evaluate a single model on a single fold.
+
+    Runs in a subprocess via ProcessPoolExecutor.  Data is transferred
+    as Polars IPC bytes for zero-copy deserialization.
+    """
+    import io
+
+    import polars as pl
+
+    from ..config.schema import get_frequency_profile
+    from ..forecasting.registry import registry
+    from ..metrics.definitions import compute_all_metrics
+
+    train = pl.read_ipc(io.BytesIO(train_bytes))
+    val = pl.read_ipc(io.BytesIO(val_bytes))
+    run_date = date.fromisoformat(run_date_iso)
+
+    forecaster = registry.build(model_name, frequency=frequency)
+    forecaster.fit(train, target_col=target_col, time_col=time_col, id_col=id_col)
+
+    predictions = forecaster.predict(horizon=val_weeks, id_col=id_col, time_col=time_col)
+
+    # Quantile predictions
+    if quantiles and calibration_enabled:
+        qdf = forecaster.predict_quantiles(
+            horizon=val_weeks, quantiles=quantiles, id_col=id_col, time_col=time_col,
+        )
+        q_cols = [c for c in qdf.columns if c.startswith("forecast_p")]
+        predictions = predictions.join(
+            qdf.select([id_col, time_col] + q_cols), on=[id_col, time_col], how="left",
+        )
+
+    merged = val.join(predictions, on=[id_col, time_col], how="inner")
+    if merged.is_empty():
+        empty = pl.DataFrame()
+        buf = io.BytesIO()
+        empty.write_ipc(buf)
+        return buf.getvalue()
+
+    val_start = val[time_col].min()
+    results = []
+    for sid in merged[id_col].unique().to_list():
+        s = merged.filter(pl.col(id_col) == sid)
+        actual = s[target_col]
+        forecast = s["forecast"]
+
+        insample = train.filter(pl.col(id_col) == sid)[target_col]
+        context = {"insample": insample}
+        metrics = compute_all_metrics(actual, forecast, metric_names=metrics_list, context=context)
+
+        q_cols = [c for c in s.columns if c.startswith("forecast_p")]
+        for row in s.iter_rows(named=True):
+            step_days = get_frequency_profile(frequency)["timedelta_kwargs"]
+            period_days = sum(v * (7 if k == "weeks" else 1) for k, v in step_days.items())
+            forecast_step = (row[time_col] - val_start).days // period_days + 1
+
+            record = {
+                "run_id": run_id, "run_type": "backtest", "run_date": run_date,
+                "lob": lob, "model_id": model_name, "fold": fold_index,
+                "grain_level": "series", "series_id": sid, "channel": "",
+                "target_week": row[time_col], "forecast_step": forecast_step,
+                "actual": float(row[target_col]), "forecast": float(row["forecast"]),
+            }
+            record.update(metrics)
+            for qc in q_cols:
+                if row[qc] is not None:
+                    record[qc] = float(row[qc])
+            results.append(record)
+
+    result_df = pl.DataFrame(results)
+    buf = io.BytesIO()
+    result_df.write_ipc(buf)
+    return buf.getvalue()
 
 
 class BacktestEngine:
@@ -137,37 +231,50 @@ class BacktestEngine:
             if not partitions:
                 partitions = [(_train_full, _val_full, forecasters)]
 
-            for train, val, models in partitions:
-                if train.is_empty() or val.is_empty():
-                    continue
-                for forecaster in models:
-                    logger.info(
-                        "  Model: %s (fold %d)", forecaster.name, fold.fold_index
-                    )
-                    try:
-                        fold_result = self._run_one(
-                            forecaster=forecaster,
-                            train=train,
-                            val=val,
-                            fold_index=fold.fold_index,
-                            run_id=run_id,
-                            run_date=run_date,
-                            target_col=target_col,
-                            time_col=time_col,
-                            id_col=id_col,
+            n_workers = getattr(self.config, "parallelism", None)
+            n_workers = n_workers.n_workers if n_workers else 1
+            use_parallel = n_workers != 1 and sum(
+                len(m) for _, _, m in partitions
+            ) > 1
+
+            if use_parallel:
+                self._run_fold_parallel(
+                    partitions, fold, run_id, run_date,
+                    target_col, time_col, id_col,
+                    all_results, n_workers,
+                )
+            else:
+                for train, val, models in partitions:
+                    if train.is_empty() or val.is_empty():
+                        continue
+                    for forecaster in models:
+                        logger.info(
+                            "  Model: %s (fold %d)", forecaster.name, fold.fold_index
                         )
-                        all_results.append(fold_result)
-                    except Exception as e:
-                        logger.error(
-                            "  Model %s fold %d failed: %s",
-                            forecaster.name, fold.fold_index, e,
-                        )
-                        self._failures.append({
-                            "model_id": forecaster.name,
-                            "fold": fold.fold_index,
-                            "error_type": type(e).__name__,
-                            "error_message": str(e),
-                        })
+                        try:
+                            fold_result = self._run_one(
+                                forecaster=forecaster,
+                                train=train,
+                                val=val,
+                                fold_index=fold.fold_index,
+                                run_id=run_id,
+                                run_date=run_date,
+                                target_col=target_col,
+                                time_col=time_col,
+                                id_col=id_col,
+                            )
+                            all_results.append(fold_result)
+                        except Exception as e:
+                            logger.error(
+                                "  Model %s fold %d failed: %s",
+                                forecaster.name, fold.fold_index, e,
+                            )
+                            self._failures.append({
+                                "model_id": forecaster.name,
+                                "fold": fold.fold_index,
+                                "error_type": type(e).__name__,
+                                "error_message": str(e),
+                            })
 
         if self._failures:
             logger.warning(
@@ -234,6 +341,84 @@ class BacktestEngine:
                 "error_message": pl.Utf8,
             })
         return pl.DataFrame(self._failures)
+
+    def _run_fold_parallel(
+        self,
+        partitions,
+        fold,
+        run_id: str,
+        run_date: date,
+        target_col: str,
+        time_col: str,
+        id_col: str,
+        all_results: list,
+        n_workers: int,
+    ) -> None:
+        """Run all models within a fold in parallel using ProcessPoolExecutor."""
+        import io
+
+        fc = self.config.forecast
+        quantiles = fc.quantiles if hasattr(fc, "quantiles") else []
+        calibration_enabled = (
+            quantiles and hasattr(fc, "calibration") and fc.calibration.enabled
+        )
+        max_workers = None if n_workers == -1 else max(1, n_workers)
+
+        futures = {}
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            for train, val, models in partitions:
+                if train.is_empty() or val.is_empty():
+                    continue
+                train_buf = io.BytesIO()
+                train.write_ipc(train_buf)
+                train_bytes = train_buf.getvalue()
+                val_buf = io.BytesIO()
+                val.write_ipc(val_buf)
+                val_bytes = val_buf.getvalue()
+
+                for forecaster in models:
+                    logger.info(
+                        "  Model: %s (fold %d) [parallel]",
+                        forecaster.name, fold.fold_index,
+                    )
+                    fut = executor.submit(
+                        _run_model_in_process,
+                        train_bytes=train_bytes,
+                        val_bytes=val_bytes,
+                        model_name=forecaster.name,
+                        fold_index=fold.fold_index,
+                        run_id=run_id,
+                        run_date_iso=run_date.isoformat(),
+                        lob=self.config.lob,
+                        target_col=target_col,
+                        time_col=time_col,
+                        id_col=id_col,
+                        metrics_list=self.config.metrics,
+                        val_weeks=self.bt_config.val_weeks,
+                        frequency=fc.frequency,
+                        quantiles=quantiles or [],
+                        calibration_enabled=bool(calibration_enabled),
+                    )
+                    futures[fut] = forecaster.name
+
+            for fut in as_completed(futures):
+                model_name = futures[fut]
+                try:
+                    result_bytes = fut.result()
+                    result_df = pl.read_ipc(io.BytesIO(result_bytes))
+                    if not result_df.is_empty():
+                        all_results.append(result_df)
+                except Exception as e:
+                    logger.error(
+                        "  Model %s fold %d failed: %s",
+                        model_name, fold.fold_index, e,
+                    )
+                    self._failures.append({
+                        "model_id": model_name,
+                        "fold": fold.fold_index,
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                    })
 
     @staticmethod
     def _normalize_result_schema(df: pl.DataFrame) -> pl.DataFrame:

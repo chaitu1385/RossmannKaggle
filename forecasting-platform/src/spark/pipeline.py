@@ -34,6 +34,11 @@ from typing import List, Optional
 logger = logging.getLogger(__name__)
 
 
+# ML model names that train a single model across all series in a group.
+# These benefit from larger partitions (by LOB) rather than per-series.
+_BATCH_ML_MODELS = {"lgbm_direct", "xgboost_direct"}
+
+
 def _extract_forecast_params(config, champion_model: str, horizon: int) -> dict:
     """
     Pull only the primitive values needed by executor tasks from a PlatformConfig.
@@ -139,10 +144,22 @@ class SparkForecastPipeline:
                                         id_col=p["id_col"], time_col=p["time_col"])
             return result.to_pandas()
 
-        actuals_sdf = repartition_by_series(actuals_sdf, id_col, num_partitions)
-        forecasts_sdf = actuals_sdf.groupby(id_col).applyInPandas(
-            _forecast_partition, schema=output_schema
-        )
+        # Batch-aware partitioning: ML models (LightGBM, XGBoost) train one
+        # model across all series in a group, so partition by LOB for fewer,
+        # larger partitions.  Statistical/neural models are per-series.
+        if champion_model in _BATCH_ML_MODELS and "lob" in actuals_sdf.columns:
+            logger.info(
+                "Using LOB-based partitioning for batch ML model %s",
+                champion_model,
+            )
+            forecasts_sdf = actuals_sdf.groupby("lob").applyInPandas(
+                _forecast_partition, schema=output_schema
+            )
+        else:
+            actuals_sdf = repartition_by_series(actuals_sdf, id_col, num_partitions)
+            forecasts_sdf = actuals_sdf.groupby(id_col).applyInPandas(
+                _forecast_partition, schema=output_schema
+            )
         logger.info(
             "SparkForecastPipeline.run_forecast launched (model=%s, horizon=%d)",
             champion_model, horizon,

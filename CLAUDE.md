@@ -9,8 +9,11 @@ Main code lives in `forecasting-platform/`.
 ## Common Commands
 
 ```bash
-# Install dependencies
+# Install dependencies (full)
 pip install -r forecasting-platform/requirements.txt
+
+# Install dependencies (Fabric-compatible subset — no DuckDB, PySpark, neuralforecast)
+pip install -r forecasting-platform/requirements-fabric.txt
 
 # Run all tests
 python -m pytest forecasting-platform/tests/ --ignore=forecasting-platform/tests/test_metrics.py --ignore=forecasting-platform/tests/test_feature_engineering.py -v
@@ -59,14 +62,23 @@ forecasting-platform/
 │   │   └── constrained.py  # ConstrainedDemandEstimator (capacity/budget constraints)
 │   ├── hierarchy/          # Tree structure, aggregation, reconciliation (OLS/WLS/MinT)
 │   ├── metrics/            # MetricStore (Parquet), drift detection, FVA
-│   ├── overrides/          # Planner manual override store (DuckDB)
+│   ├── observability/      # Structured logging, metrics, alerts, cost tracking
+│   │   ├── context.py      # PipelineContext — correlation ID threading
+│   │   ├── logging.py      # StructuredLogger — JSON logging with context
+│   │   ├── metrics.py      # MetricsEmitter — timing, counters, gauges (log/statsd)
+│   │   ├── alerts.py       # AlertDispatcher — drift alerts → webhooks
+│   │   └── cost.py         # CostEstimator — compute cost tracking
+│   ├── overrides/          # Planner manual override store (DuckDB + Parquet fallback)
 │   ├── pipeline/           # End-to-end backtest + forecast pipelines, provenance manifest
-│   │   └── manifest.py     # PipelineManifest — provenance sidecar (JSON) for each forecast run
+│   │   ├── manifest.py     # PipelineManifest — provenance sidecar (JSON) for each forecast run
+│   │   ├── batch_runner.py # BatchInferenceRunner — partitioned parallel forecasting
+│   │   └── scheduler.py    # PipelineScheduler — recurring runs with retry + dead-letter
 │   ├── series/             # Series builder, sparse detector, SKU transitions
 │   ├── sku_mapping/        # New/discontinued SKU mapping
 │   ├── spark/              # PySpark distributed execution
+│   ├── fabric/             # Microsoft Fabric / Delta Lake deployment
 │   └── analytics/          # BI export, comparators, explainability, governance, FVA
-├── tests/                  # 790+ tests (pytest)
+├── tests/                  # 860+ tests (pytest)
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
 └── notebooks/              # Jupyter notebooks for exploration
@@ -93,7 +105,7 @@ YAML-driven config system with dataclass schema validation:
 - `configs/lob/` — line-of-business overrides (inherit from base)
 - Schema defined in `src/config/schema.py`
 
-Key config dataclasses: `ForecastConfig`, `BacktestConfig`, `DataQualityConfig` (contains `ValidationConfig`, `CleansingConfig`), `ConstraintConfig`, `ExternalRegressorConfig` (contains `RegressorScreenConfig`)
+Key config dataclasses: `ForecastConfig`, `BacktestConfig`, `DataQualityConfig` (contains `ValidationConfig`, `CleansingConfig`), `ConstraintConfig`, `ExternalRegressorConfig` (contains `RegressorScreenConfig`), `ParallelismConfig`, `ObservabilityConfig` (contains `AlertConfig`)
 
 ### Multi-frequency support
 
@@ -116,7 +128,7 @@ Helper functions: `get_frequency_profile(freq)` returns the profile dict; `freq_
 - Test files mirror source structure with `test_` prefix
 - Helper fixtures use `_make_*` factory functions (e.g., `_make_weekly_actuals`)
 - Skip `test_metrics.py` and `test_feature_engineering.py` (legacy/slow)
-- 790+ tests across 32 test files
+- 860+ tests across 35 test files
 - Key test modules: `test_platform.py` (85 tests), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55)
 
 ## Key Dependencies

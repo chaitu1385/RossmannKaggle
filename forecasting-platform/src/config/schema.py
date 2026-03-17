@@ -393,6 +393,39 @@ class AnalysisConfig:
 
 
 @dataclass
+class ParallelismConfig:
+    """Distributed execution and parallelism settings."""
+    backend: str = "local"              # "local" | "spark" | "ray"
+    n_workers: int = -1                 # -1 = all CPU cores
+    n_jobs_statsforecast: int = -1      # thread count for statsforecast
+    num_threads_mlforecast: int = -1    # thread count for mlforecast
+    batch_size: int = 0                 # 0 = all series at once; >0 = chunk
+    gpu: bool = False                   # enable GPU for neural models
+
+
+@dataclass
+class AlertConfig:
+    """Alert routing configuration."""
+    channels: List[str] = field(default_factory=lambda: ["log"])
+    webhook_url: str = ""
+    min_severity: str = "warning"       # "warning" | "critical"
+    webhook_timeout: int = 10
+
+
+@dataclass
+class ObservabilityConfig:
+    """Pipeline observability and monitoring settings."""
+    log_format: str = "text"            # "text" | "json"
+    log_level: str = "INFO"
+    metrics_backend: str = "log"        # "log" | "statsd"
+    statsd_host: str = "localhost"
+    statsd_port: int = 8125
+    metrics_prefix: str = "forecast_platform"
+    cost_per_second: float = 0.0        # cloud cost rate for estimation
+    alerts: AlertConfig = field(default_factory=AlertConfig)
+
+
+@dataclass
 class PlatformConfig:
     """
     Top-level configuration for the forecasting platform.
@@ -416,6 +449,8 @@ class PlatformConfig:
     )
     output: OutputConfig = field(default_factory=OutputConfig)
     analysis: AnalysisConfig = field(default_factory=AnalysisConfig)
+    parallelism: ParallelismConfig = field(default_factory=ParallelismConfig)
+    observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
     metrics: List[str] = field(
         default_factory=lambda: ["wmape", "normalized_bias"]
     )

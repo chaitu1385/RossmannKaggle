@@ -22,6 +22,8 @@ import polars as pl
 from ..config.schema import PlatformConfig
 from ..forecasting.base import BaseForecaster
 from ..forecasting.registry import registry
+from ..observability.context import PipelineContext
+from ..observability.metrics import MetricsEmitter
 from ..series.builder import SeriesBuilder
 
 logger = logging.getLogger(__name__)
@@ -38,8 +40,14 @@ class ForecastPipeline:
     >>> forecast_df = pipeline.run(actuals_df, champion_model="lgbm_direct")
     """
 
-    def __init__(self, config: PlatformConfig):
+    def __init__(self, config: PlatformConfig, context: Optional[PipelineContext] = None):
         self.config = config
+        self.context = context or PipelineContext(lob=config.lob)
+        self._emitter = MetricsEmitter(
+            backend=config.observability.metrics_backend,
+            context=self.context,
+            prefix=config.observability.metrics_prefix,
+        )
         self._series_builder = SeriesBuilder(config)
         self._conformal_residuals: Optional[pl.DataFrame] = None
         self._last_forecast_path: Optional[str] = None
@@ -86,17 +94,19 @@ class ForecastPipeline:
         """
         fc = self.config.forecast
         horizon = fc.horizon_weeks
+        run_id = self.context.run_id
 
         # Step 1: Build series
-        logger.info("Building model-ready series...")
-        series = self._series_builder.build(
-            actuals=actuals,
-            external_features=external_features,
-            product_master=product_master,
-            mapping_table=mapping_table,
-            forecast_origin=forecast_origin,
-            overrides=overrides,
-        )
+        logger.info("[%s] Building model-ready series...", run_id)
+        with self._emitter.timer("series_build"):
+            series = self._series_builder.build(
+                actuals=actuals,
+                external_features=external_features,
+                product_master=product_master,
+                mapping_table=mapping_table,
+                forecast_origin=forecast_origin,
+                overrides=overrides,
+            )
 
         # Step 1b: Log data quality warnings (if report enabled)
         qr = self._series_builder._last_quality_report
@@ -120,13 +130,14 @@ class ForecastPipeline:
         logger.info("Champion model: %s", forecaster.name)
 
         # Step 3: Fit on all data
-        logger.info("Fitting on %d rows...", len(series))
-        forecaster.fit(
-            series,
-            target_col=fc.target_column,
-            time_col=fc.time_column,
-            id_col=fc.series_id_column,
-        )
+        logger.info("[%s] Fitting on %d rows...", run_id, len(series))
+        with self._emitter.timer("model_fit"):
+            forecaster.fit(
+                series,
+                target_col=fc.target_column,
+                time_col=fc.time_column,
+                id_col=fc.series_id_column,
+            )
 
         # Step 3b: Set future features for ML models (if external regressors configured)
         if external_features is not None and hasattr(forecaster, 'set_future_features'):
@@ -141,12 +152,14 @@ class ForecastPipeline:
                 )
 
         # Step 4: Point forecast
-        logger.info("Forecasting %d weeks...", horizon)
-        forecast = forecaster.predict(
-            horizon=horizon,
-            id_col=fc.series_id_column,
-            time_col=fc.time_column,
-        )
+        logger.info("[%s] Forecasting %d periods...", run_id, horizon)
+        with self._emitter.timer("model_predict"):
+            forecast = forecaster.predict(
+                horizon=horizon,
+                id_col=fc.series_id_column,
+                time_col=fc.time_column,
+            )
+        self._emitter.gauge("forecast_rows", float(len(forecast)))
 
         # Step 4b: Quantile forecasts (if configured)
         if fc.quantiles:

@@ -1,0 +1,200 @@
+{
+  "__requires": [
+    { "type": "datasource", "id": "prometheus", "name": "Prometheus" }
+  ],
+  "annotations": { "list": [] },
+  "description": "Forecast Platform pipeline monitoring — run history, model timing, accuracy trends, drift alerts, and cost tracking.",
+  "editable": true,
+  "id": null,
+  "title": "Forecast Platform — Pipeline Monitor",
+  "uid": "forecast-platform-monitor",
+  "version": 1,
+  "schemaVersion": 39,
+  "time": { "from": "now-30d", "to": "now" },
+  "timezone": "browser",
+  "refresh": "5m",
+  "templating": {
+    "list": [
+      {
+        "name": "lob",
+        "type": "query",
+        "datasource": "Prometheus",
+        "query": "label_values(forecast_platform_pipeline_duration_seconds, lob)",
+        "current": { "text": "All", "value": "$__all" },
+        "includeAll": true,
+        "multi": true
+      },
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "Prometheus", "value": "Prometheus" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Pipeline Run History",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "forecast_platform_pipeline_duration_seconds{lob=~\"$lob\"}",
+          "legendFormat": "{{lob}} — {{run_id}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "bars", "fillOpacity": 30 }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 2,
+      "title": "Series Count per Run",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "forecast_platform_series_count{lob=~\"$lob\"}",
+          "legendFormat": "{{lob}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 3,
+      "title": "Model Fit Duration (by model)",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "forecast_platform_model_fit_duration_seconds{lob=~\"$lob\"}",
+          "legendFormat": "{{model_id}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "options": { "stacking": { "mode": "normal" } }
+    },
+    {
+      "id": 4,
+      "title": "Model Predict Duration (by model)",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "forecast_platform_model_predict_duration_seconds{lob=~\"$lob\"}",
+          "legendFormat": "{{model_id}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "options": { "stacking": { "mode": "normal" } }
+    },
+    {
+      "id": 5,
+      "title": "Backtest WMAPE by LOB (trend)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "forecast_platform_backtest_wmape{lob=~\"$lob\"}",
+          "legendFormat": "{{lob}} — {{model_id}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 0.15, "color": "yellow" },
+              { "value": 0.3, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Forecast Rows Produced",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(forecast_platform_forecast_rows{lob=~\"$lob\"})",
+          "legendFormat": "Total forecast rows"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 7,
+      "title": "Backtest Folds Completed",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(forecast_platform_backtest_folds_completed{lob=~\"$lob\"})",
+          "legendFormat": "Total folds"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 8,
+      "title": "Drift Alerts Timeline",
+      "type": "logs",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [
+        {
+          "expr": "{job=\"forecast_platform\"} |= \"DriftAlert\"",
+          "legendFormat": ""
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true
+      }
+    },
+    {
+      "id": 9,
+      "title": "Model Errors",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "forecast_platform_model_errors{lob=~\"$lob\"}",
+          "legendFormat": "{{lob}} — {{model_id}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "bars", "fillOpacity": 50 }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Estimated Cost per Run",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        {
+          "expr": "forecast_platform_pipeline_duration_seconds{lob=~\"$lob\"} * $__rate_interval",
+          "legendFormat": "{{lob}} — cost estimate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": { "drawStyle": "bars" }
+        }
+      }
+    }
+  ]
+}

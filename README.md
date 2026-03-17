@@ -30,12 +30,17 @@ A production-grade, modular weekly sales forecasting platform. Covers the full l
 ├─────────────────────────────────────────────────────────────┤
 │  Pipeline Layer                       src/pipeline/         │
 │  BacktestPipeline · ForecastPipeline · PipelineManifest     │
+│  BatchInferenceRunner · PipelineScheduler                   │
 ├─────────────────────────────────────────────────────────────┤
 │  Backtest Engine                      src/backtesting/      │
 │  BacktestEngine · WalkForwardCV · ChampionSelector          │
 ├─────────────────────────────────────────────────────────────┤
+│  Observability                        src/observability/    │
+│  PipelineContext · StructuredLogger · MetricsEmitter        │
+│  AlertDispatcher · CostEstimator                            │
+├─────────────────────────────────────────────────────────────┤
 │  Override Store                       src/overrides/        │
-│  OverrideStore (DuckDB)                                     │
+│  OverrideStore (DuckDB) · ParquetOverrideStore (fallback)   │
 ├─────────────────────────────────────────────────────────────┤
 │  Hierarchy Layer                      src/hierarchy/        │
 │  HierarchyTree · HierarchyNode · HierarchyAggregator       │
@@ -94,13 +99,14 @@ forecasting-platform/
 │   ├── hierarchy/          # Hierarchy tree, aggregation, reconciliation (OLS/WLS/MinT)
 │   ├── metrics/            # MetricStore, drift detection, metric definitions, FVA computation
 │   ├── models/             # LightGBM + XGBoost wrappers (legacy)
-│   ├── overrides/          # Planner manual override store (DuckDB)
-│   ├── pipeline/           # End-to-end backtest + forecast pipelines, provenance manifest
+│   ├── observability/      # Structured logging, metrics, alerts, cost tracking
+│   ├── overrides/          # Planner manual override store (DuckDB + Parquet fallback)
+│   ├── pipeline/           # End-to-end backtest + forecast pipelines, provenance manifest, batch runner, scheduler
 │   ├── series/             # Series builder, sparse detector, lifecycle transitions
 │   ├── sku_mapping/        # New/discontinued SKU mapping (4 methods + Bayesian fusion)
 │   ├── spark/              # PySpark distributed execution layer
 │   └── utils/              # Logger, config utilities
-├── tests/                  # 790+ unit + integration tests
+├── tests/                  # 860+ unit + integration tests
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
 ├── notebooks/              # Jupyter notebooks for exploration
@@ -412,11 +418,31 @@ Measures how much accuracy each forecast layer contributes — from naive baseli
 | `summarize(fva_detail, group_by)` | Aggregate by layer: mean WMAPE, FVA, % adds/neutral/destroys |
 | `layer_leaderboard(fva_detail)` | Rank layers by contribution; recommends Keep/Review/Remove |
 
+### `src/observability/` — Pipeline Observability
+
+| Class | Description |
+|-------|-------------|
+| `PipelineContext` | Correlation ID threading for pipeline runs; `run_id`, `lob`, `parent_run_id`; `child()` for sub-pipelines |
+| `StructuredLogger` | JSON-formatted logging enriched with `run_id`/`lob` from context; wraps stdlib `logging` |
+| `MetricsEmitter` | Emit timing, counters, gauges; backends: `"log"` (JSON), `"statsd"` (UDP); `timer()` context manager |
+| `AlertDispatcher` | Routes `DriftAlert` objects to log and/or webhook channels; severity filtering |
+| `CostEstimator` | Track per-model compute time; estimate cloud costs at configurable $/second rate |
+| `setup_logging()` | Configure root logger for `"text"` or `"json"` format |
+
+### `src/pipeline/` — Distributed Execution & Scheduling
+
+| Class | Description |
+|-------|-------------|
+| `BatchInferenceRunner` | Partition series → parallel fit/predict → merge; configurable `n_workers`, `batch_size`, backend (`"local"` ProcessPool) |
+| `PipelineScheduler` | Recurring pipeline execution with retry (exponential backoff) and dead-letter JSON for failed runs |
+
 ### `src/overrides/` — Planner Overrides
 
 | Class | Description |
 |-------|-------------|
 | `OverrideStore` | DuckDB-backed store for planner **transition overrides** (old_sku -> new_sku proportion, scenario, ramp shape); `add_override()`, `get_overrides()`, `delete_override()` |
+| `ParquetOverrideStore` | Parquet-backed fallback for environments where DuckDB is unavailable (e.g. Microsoft Fabric) |
+| `get_override_store()` | Factory function — auto-selects DuckDB or Parquet backend based on available imports |
 
 ### `src/sku_mapping/` — New / Discontinued SKU Mapping
 
@@ -651,6 +677,27 @@ data_quality:
     outlier_action: clip   # clip | interpolate | flag_only
     stockout_detection: true
     min_zero_run: 2
+
+parallelism:
+  backend: local           # local | spark | ray
+  n_workers: -1            # -1 = all CPU cores
+  n_jobs_statsforecast: -1
+  num_threads_mlforecast: -1
+  batch_size: 0            # 0 = all series at once; >0 = chunked
+  gpu: false
+
+observability:
+  log_format: text         # text | json
+  log_level: INFO
+  metrics_backend: log     # log | statsd
+  statsd_host: localhost
+  statsd_port: 8125
+  metrics_prefix: forecast_platform
+  cost_per_second: 0.0     # cloud cost rate for estimation
+  alerts:
+    channels: [log]        # log | webhook
+    webhook_url: ""
+    min_severity: warning  # warning | critical
 ```
 
 ---
@@ -662,7 +709,7 @@ pip install -r forecasting-platform/requirements.txt
 python -m pytest forecasting-platform/tests/ \
   --ignore=forecasting-platform/tests/test_metrics.py \
   --ignore=forecasting-platform/tests/test_feature_engineering.py -v
-# 790+ tests collected
+# 860+ tests collected
 ```
 
 | Test file | Tests | Covers |
@@ -700,6 +747,9 @@ python -m pytest forecasting-platform/tests/ \
 | `test_pipeline_manifest.py` | 15 | Manifest build, write, read roundtrip; hash determinism; ForecastPipeline integration |
 | `test_external_regressors.py` | 6 | Regressor validation, SeriesBuilder with/without features |
 | `test_data_loader.py` | 6 | Data loading from files |
+| `test_observability.py` | 33 | PipelineContext, StructuredLogger, MetricsEmitter, AlertDispatcher, CostEstimator, PipelineScheduler |
+| `test_batch_runner.py` | 8 | BatchInferenceRunner, ParallelismConfig |
+| `test_fabric_portability.py` | 19 | requirements-fabric.txt, ParquetOverrideStore, get_override_store factory, FabricNotebookAdapter |
 | `test_evaluator.py` | 5 | Evaluation orchestration |
 
 ---
