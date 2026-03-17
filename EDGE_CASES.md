@@ -20,7 +20,7 @@ A catalog of the failure modes that break forecasting platforms — what goes wr
 
 **How the platform handles it:** `FREQUENCY_PROFILES` in `src/config/schema.py` defines frequency-aware minimum lengths (weekly: 52, monthly: 24, daily: 90, quarterly: 8). The series builder filters by `min_series_length_weeks` before training. The data quality report counts and surfaces `short_series_count`. The sparse detector returns `demand_class="insufficient_data"` for series below `min_periods` (default 10), routing them to standard models rather than intermittent ones. The seasonal naive forecaster uses cyclic index fallback for series shorter than `season_length`.
 
-**What to watch for:** Borderline series (e.g., 53 weeks for a weekly model with season_length=52) pass the filter but may still produce unstable seasonal estimates. Consider setting `min_series_length_weeks` to 1.5× the seasonal period for better reliability. Also, foundation models (Chronos, TimeGPT) can produce reasonable forecasts on shorter series since they don't need to learn seasonality from scratch.
+**What to watch for:** Borderline series (e.g., 53 weeks for a weekly model with season_length=52) pass the filter but may still produce unstable seasonal estimates. Consider setting `min_series_length` to 1.5× the seasonal period for the configured frequency for better reliability. Also, foundation models (Chronos, TimeGPT) can produce reasonable forecasts on shorter series since they don't need to learn seasonality from scratch.
 
 ---
 
@@ -90,7 +90,7 @@ A catalog of the failure modes that break forecasting platforms — what goes wr
 
 **How the platform handles it:** The data quality report (`src/data/quality_report.py`) surfaces `missing_week_pct` and `series_with_gaps`. The base forecaster class (`src/forecasting/base.py`) provides `fill_weekly_gaps()` with two strategies: `"zero"` (fill gaps with 0.0 — appropriate when missing = no demand) and `"forward_fill"` (propagate last known value — appropriate when missing = unobserved but demand likely continued). ML models default to forward-fill to avoid zero contamination in lag features. Gap filling is configurable via `DataQualityConfig(fill_gaps, fill_value)`.
 
-**What to watch for:** Long gaps (longer than one seasonal cycle) filled with zeros create artificial sparse patterns that may trigger the intermittent demand detector, routing the series to Croston when it's actually a regular-demand series with bad data. Long gaps filled with forward-fill create artificially flat regions that distort trend estimation. For gaps longer than ~4 weeks, consider excluding the pre-gap data entirely (similar to structural break truncation) rather than imputing.
+**What to watch for:** Long gaps (longer than one seasonal cycle) filled with zeros create artificial sparse patterns that may trigger the intermittent demand detector, routing the series to Croston when it's actually a regular-demand series with bad data. Long gaps filled with forward-fill create artificially flat regions that distort trend estimation. For gaps longer than ~4 periods (frequency-dependent), consider excluding the pre-gap data entirely (similar to structural break truncation) rather than imputing.
 
 ---
 

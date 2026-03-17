@@ -1,6 +1,6 @@
 # Forecasting Platform
 
-A production-grade, modular weekly sales forecasting platform. Covers the full lifecycle from raw data ingestion to hierarchically reconciled, explained, and governed forecasts — with a REST API, Microsoft Fabric/Delta Lake deployment layer, Spark distributed execution, and S&OP exception management.
+A production-grade, modular multi-frequency sales forecasting platform (daily, weekly, monthly, quarterly). Covers the full lifecycle from raw data ingestion to hierarchically reconciled, explained, and governed forecasts — with a REST API, Microsoft Fabric/Delta Lake deployment layer, Spark distributed execution, and S&OP exception management.
 
 **See also:** [CONCEPTS.md](CONCEPTS.md) — why each component exists and when to use it | [EDGE_CASES.md](EDGE_CASES.md) — failure modes and how the platform handles them
 
@@ -194,7 +194,7 @@ def predict_quantiles(self, horizon: int, quantiles: list[float]) -> pl.DataFram
 | Function | Description |
 |----------|-------------|
 | `load_external_features(path)` | Load external feature data from Parquet or CSV |
-| `generate_holiday_calendar(country, start, end)` | Generate weekly holiday flags using the `holidays` library (optional dep) |
+| `generate_holiday_calendar(country, start, end)` | Generate period-level holiday flags using the `holidays` library (optional dep) |
 | `validate_regressors(features, actuals, columns)` | Validate grain alignment, null checks, future coverage for forecast horizon |
 
 ML models (`LGBMDirectForecaster`, `XGBoostDirectForecaster`) automatically detect and use external feature columns during `fit()` and `predict()`. Statistical and naive models silently ignore them.
@@ -281,7 +281,7 @@ No UPDATE or DELETE operations — append-only by design for SOX compliance.
 
 | Class | Description |
 |-------|-------------|
-| `SeriesBuilder` | Builds weekly panel DataFrames from raw transactional data; fills gaps; integrates validation and cleansing |
+| `SeriesBuilder` | Builds frequency-aware panel DataFrames from raw transactional data; fills gaps; integrates validation and cleansing |
 | `SparseDetector` | Classifies series as smooth / intermittent / erratic / lumpy using CV-squared and ADI |
 | `TransitionEngine` | Handles new-product launches: stitches history, applies linear/S-curve/step ramps |
 | `StructuralBreakDetector` | Identifies permanent level shifts via CUSUM (zero-dependency) or PELT (`ruptures`); truncates history to post-break regime |

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Weekly sales forecasting platform for retail S&OP. Python 3.8+, built on FastAPI (REST API), PySpark (distributed execution), and Polars (data processing). Combines statistical, ML, neural, and foundation model forecasting with hierarchical reconciliation.
+Multi-frequency (daily/weekly/monthly/quarterly) sales forecasting platform for retail S&OP. Python 3.8+, built on FastAPI (REST API), PySpark (distributed execution), and Polars (data processing). Combines statistical, ML, neural, and foundation model forecasting with hierarchical reconciliation.
 
 Main code lives in `forecasting-platform/`.
 
