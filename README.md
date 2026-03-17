@@ -15,6 +15,12 @@ A production-grade, modular weekly sales forecasting platform. Covers the full l
 │  GET /health  /forecast/{lob}  /metrics/leaderboard/{lob}  │
 │  GET /forecast/{lob}/{series_id}  /metrics/drift/{lob}     │
 │  GET /audit                                                 │
+│  POST /ai/explain  /ai/triage  /ai/recommend-config        │
+│  POST /ai/commentary                                        │
+├─────────────────────────────────────────────────────────────┤
+│  AI Layer                              src/ai/              │
+│  NaturalLanguageQueryEngine · AnomalyTriageEngine           │
+│  ConfigTunerEngine · CommentaryEngine                       │
 ├─────────────────────────────────────────────────────────────┤
 │  Auth & Audit                         src/auth/ src/audit/  │
 │  RBAC (5 roles, 11 permissions) · JWT tokens                │

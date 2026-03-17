@@ -171,3 +171,10 @@ When a production forecast pipeline runs weekly across thousands of series, "som
 The platform's business logic (forecasting, backtesting, reconciliation) should be deployable on a laptop, a Spark cluster, or Microsoft Fabric without code changes. This requires separating the compute layer (how models are distributed) from the data layer (where data lives) from the business logic (what models do). The `FabricNotebookAdapter` wraps the Spark + Fabric infrastructure into a one-liner setup class. The `ParquetOverrideStore` replaces DuckDB when it's unavailable in constrained runtimes. The `requirements-fabric.txt` pins only packages available in Fabric's default environment. Each layer can be swapped independently.
 
 *Implementation: `src/fabric/notebook_adapter.py` — `FabricNotebookAdapter`; `src/overrides/store.py` — `get_override_store()`*
+## AI & Intelligence
+
+### AI-Native Features
+
+Forecasting platforms generate data (metrics, drift alerts, leaderboards) that planners must manually interpret. AI-native features use Claude to automate this interpretation: answering natural-language questions about forecasts, triaging drift alerts by business impact, recommending config changes from backtest results, and generating S&OP executive commentary. All four capabilities are API endpoints that send structured platform data to Claude with domain-specific prompts, then parse the response into actionable dataclasses. When Claude is unavailable (no API key or network issue), every feature gracefully degrades to a template-based fallback so the platform never breaks.
+
+*Implementation: `src/ai/` — `NaturalLanguageQueryEngine`, `AnomalyTriageEngine`, `ConfigTunerEngine`, `CommentaryEngine`*
