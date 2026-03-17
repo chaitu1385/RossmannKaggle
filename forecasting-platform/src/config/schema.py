@@ -12,6 +12,17 @@ from typing import Dict, List, Optional
 
 
 @dataclass
+class RegressorScreenConfig:
+    """Pre-training regressor quality screening."""
+    enabled: bool = False
+    variance_threshold: float = 1e-6       # drop features with variance below this
+    correlation_threshold: float = 0.95    # warn if pairwise |correlation| exceeds this
+    mi_enabled: bool = False               # mutual information check (requires sklearn)
+    mi_threshold: float = 0.01             # warn if MI with target below this
+    auto_drop: bool = True                 # automatically drop flagged columns
+
+
+@dataclass
 class ExternalRegressorConfig:
     """Configuration for external regressors (promotions, holidays, price, etc.)."""
     enabled: bool = False
@@ -23,6 +34,7 @@ class ExternalRegressorConfig:
     # explicit future values or they are dropped at prediction time.
     # Columns not listed default to "known_ahead" for backward compatibility.
     feature_types: Dict[str, str] = field(default_factory=dict)
+    screen: RegressorScreenConfig = field(default_factory=RegressorScreenConfig)
 
 
 @dataclass

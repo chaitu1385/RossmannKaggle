@@ -38,6 +38,7 @@ class SeriesBuilder:
         self._last_cleansing_report = None
         self._last_break_report = None
         self._last_quality_report = None
+        self._last_regressor_screen_report = None
 
     def build(
         self,
@@ -212,6 +213,33 @@ class SeriesBuilder:
                     df = df.with_columns(
                         pl.col(col).fill_null(0).alias(col)
                     )
+
+        # Step 3d: Regressor screening (after join, before model fit)
+        self._last_regressor_screen_report = None
+        if (
+            external_features is not None
+            and self.config.forecast.external_regressors.enabled
+            and self.config.forecast.external_regressors.screen.enabled
+        ):
+            from ..data.regressor_screen import screen_regressors
+            screen_cfg = self.config.forecast.external_regressors.screen
+            screened_cols = [
+                c for c in self.config.forecast.external_regressors.feature_columns
+                if c in df.columns
+            ]
+            if screened_cols:
+                report = screen_regressors(df, screened_cols, value_col, screen_cfg)
+                self._last_regressor_screen_report = report
+                for w in report.warnings:
+                    logger.warning("Regressor screen: %s", w)
+                if screen_cfg.auto_drop and report.dropped_columns:
+                    cols_to_drop = [c for c in report.dropped_columns if c in df.columns]
+                    if cols_to_drop:
+                        df = df.drop(cols_to_drop)
+                        logger.info(
+                            "Dropped %d low-quality regressors: %s",
+                            len(cols_to_drop), cols_to_drop,
+                        )
 
         # Step 4: Sort
         df = df.sort([sid_col, time_col])

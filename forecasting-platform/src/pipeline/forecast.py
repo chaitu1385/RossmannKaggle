@@ -15,6 +15,7 @@ import logging
 from datetime import date
 from pathlib import Path
 from typing import Optional, Union
+from uuid import uuid4
 
 import polars as pl
 
@@ -41,6 +42,7 @@ class ForecastPipeline:
         self.config = config
         self._series_builder = SeriesBuilder(config)
         self._conformal_residuals: Optional[pl.DataFrame] = None
+        self._last_forecast_path: Optional[str] = None
 
     def set_conformal_residuals(self, residuals: pl.DataFrame) -> None:
         """Set conformal residuals from backtest for interval correction."""
@@ -176,6 +178,15 @@ class ForecastPipeline:
         # Step 5: Write to output
         forecast = self._write_forecast(forecast, forecast_origin)
 
+        # Step 6: Write provenance manifest
+        self._write_manifest(
+            actuals=actuals,
+            champion_model_id=(
+                forecaster.name if hasattr(forecaster, "name") else str(champion_model)
+            ),
+            forecast=forecast,
+        )
+
         return forecast
 
     def _run_multi_horizon(
@@ -249,7 +260,41 @@ class ForecastPipeline:
             forecast = forecast.drop("forecast_step")
 
         forecast = self._write_forecast(forecast, forecast_origin)
+
+        # Write provenance manifest for multi-horizon run
+        self._write_manifest(
+            actuals=series,
+            champion_model_id="multi_horizon",
+            forecast=forecast,
+        )
+
         return forecast
+
+    def _write_manifest(
+        self,
+        actuals: pl.DataFrame,
+        champion_model_id: str,
+        forecast: pl.DataFrame,
+        backtest_wmape: Optional[float] = None,
+    ) -> None:
+        """Write a provenance manifest alongside the last forecast file."""
+        if self._last_forecast_path is None:
+            return
+        try:
+            from .manifest import build_manifest, write_manifest
+            manifest = build_manifest(
+                run_id=uuid4().hex[:16],
+                config=self.config,
+                actuals=actuals,
+                series_builder=self._series_builder,
+                champion_model_id=champion_model_id,
+                forecast=forecast,
+                forecast_file=Path(self._last_forecast_path).name,
+                backtest_wmape=backtest_wmape,
+            )
+            write_manifest(manifest, self._last_forecast_path)
+        except Exception:
+            logger.warning("Failed to write pipeline manifest", exc_info=True)
 
     def _write_forecast(
         self, forecast: pl.DataFrame, forecast_origin: Optional[date]
@@ -268,5 +313,6 @@ class ForecastPipeline:
 
         forecast.write_parquet(str(filepath))
         logger.info("Forecast written to %s (%d rows)", filepath, len(forecast))
+        self._last_forecast_path = str(filepath)
 
         return forecast
