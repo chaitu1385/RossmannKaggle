@@ -24,6 +24,12 @@ python -m pytest forecasting-platform/tests/test_platform.py -v
 # Start the REST API server
 python forecasting-platform/scripts/serve.py --port 8000 --data-dir data/
 
+# Start Streamlit dashboard
+streamlit run forecasting-platform/streamlit/app.py
+
+# Docker quick-start (API + Streamlit)
+docker compose up
+
 # Run forecast pipeline
 python forecasting-platform/scripts/run_forecast.py --config forecasting-platform/configs/platform_config.yaml --lob retail
 
@@ -84,6 +90,14 @@ forecasting-platform/
 │   ├── spark/              # PySpark distributed execution
 │   ├── fabric/             # Microsoft Fabric / Delta Lake deployment
 │   └── analytics/          # BI export, comparators, explainability, governance, FVA
+├── streamlit/              # Streamlit dashboard (4 pages)
+│   ├── app.py              # Main entry point / landing page
+│   ├── utils.py            # Shared helpers, colour palette, data loaders
+│   └── pages/              # Streamlit multi-page layout
+│       ├── 1_Data_Onboarding.py    # Upload CSV → DataAnalyzer → config recommendation
+│       ├── 2_Backtest_Results.py   # Leaderboard, FVA cascade, champion map
+│       ├── 3_Forecast_Viewer.py    # Time series + fan chart + decomposition
+│       └── 4_Platform_Health.py    # Manifests, drift alerts, data quality, cost
 ├── tests/                  # 860+ tests (pytest)
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
@@ -143,6 +157,7 @@ Helper functions: `get_frequency_profile(freq)` returns the profile dict; `freq_
 ## Key Dependencies
 
 Core: polars, statsforecast, mlforecast, lightgbm, xgboost, scikit-learn, fastapi, pyyaml, duckdb
+Dashboard: streamlit, plotly
 Optional: neuralforecast, pyspark, shap, pyjwt, bcrypt, holidays, delta-spark, azure-identity
 
 ## Documentation Convention

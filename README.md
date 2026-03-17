@@ -112,6 +112,14 @@ forecasting-platform/
 │   ├── sku_mapping/        # New/discontinued SKU mapping (4 methods + Bayesian fusion)
 │   ├── spark/              # PySpark distributed execution layer
 │   └── utils/              # Logger, config utilities
+├── streamlit/              # Streamlit dashboard (4 pages)
+│   ├── app.py              # Landing page
+│   ├── utils.py            # Shared helpers, colours, data loaders
+│   └── pages/              # Multi-page layout
+│       ├── 1_Data_Onboarding.py    # CSV → DataAnalyzer → config recommendation
+│       ├── 2_Backtest_Results.py   # Leaderboard, FVA cascade, champion map
+│       ├── 3_Forecast_Viewer.py    # Fan chart + decomposition + narrative
+│       └── 4_Platform_Health.py    # Manifests, drift alerts, data quality, cost
 ├── tests/                  # 860+ unit + integration tests
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
@@ -760,6 +768,32 @@ python -m pytest forecasting-platform/tests/ \
 
 ---
 
+## Streamlit Dashboard
+
+A 4-page interactive dashboard that puts the platform in a browser for data scientists, demand planners, and platform admins.
+
+| Page | Persona | What it does |
+|------|---------|-------------|
+| **Data Onboarding** | Data Scientist | Upload CSV → auto-detect schema, hierarchy, forecastability scores → recommended config with optional LLM narrative |
+| **Backtest Results** | Data Scientist / Manager | Model leaderboard, FVA cascade chart (naive → statistical → ML), per-series champion map, layer leaderboard with Keep/Review/Remove |
+| **Forecast Viewer** | Demand Planner | Series selector → forecast line with P10/P90 fan chart, actuals overlay, seasonal decomposition, explainer narrative |
+| **Platform Health** | Platform Admin | Pipeline manifests, drift alerts (severity-coloured), data quality summary, compute cost tracking |
+
+**Run locally:**
+```bash
+streamlit run forecasting-platform/streamlit/app.py
+```
+
+**Docker quick-start** (API on port 8000, dashboard on port 8501):
+```bash
+docker compose up
+# → Open http://localhost:8501
+```
+
+The Streamlit app imports platform classes directly (DataAnalyzer, MetricStore, FVAAnalyzer, ForecastExplainer, etc.) — no network overhead, no dual-service dependency for development. Charts use Plotly for hover/zoom/pan interactivity.
+
+---
+
 ## Dependencies
 
 **Core** (no pandas in the production path):
@@ -775,6 +809,12 @@ rapidfuzz >= 3.0.0          # SKU name matching
 duckdb >= 0.9.0             # Override store
 pyyaml >= 5.4.0
 fastapi + uvicorn           # REST API
+```
+
+**Dashboard:**
+```
+streamlit >= 1.30.0         # Interactive web UI
+plotly >= 5.18.0            # Interactive charts (fan charts, gauges, bar charts)
 ```
 
 **Optional:**

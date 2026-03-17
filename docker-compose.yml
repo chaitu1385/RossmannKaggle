@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      target: api
+    ports:
+      - "8000:8000"
+    environment:
+      - API_DATA_DIR=forecasting-platform/data/
+      - API_METRICS_DIR=forecasting-platform/data/metrics/
+    volumes:
+      - ./forecasting-platform/data:/app/forecasting-platform/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  streamlit:
+    build:
+      context: .
+      target: streamlit
+    ports:
+      - "8501:8501"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ./forecasting-platform/data:/app/forecasting-platform/data
+    depends_on:
+      - api
