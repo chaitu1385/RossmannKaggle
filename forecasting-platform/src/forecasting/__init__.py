@@ -1,4 +1,5 @@
 from .base import BaseForecaster as BaseForecaster
+from .constrained import ConstrainedDemandEstimator as ConstrainedDemandEstimator
 from .ensemble import WeightedEnsembleForecaster as WeightedEnsembleForecaster
 from .foundation import ChronosForecaster as ChronosForecaster
 from .foundation import TimeGPTForecaster as TimeGPTForecaster

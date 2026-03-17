@@ -63,6 +63,17 @@ class CalibrationConfig:
 
 
 @dataclass
+class ConstraintConfig:
+    """Capacity and business-rule constraints applied to forecasts."""
+    enabled: bool = False
+    min_demand: float = 0.0                          # floor (non-negativity by default)
+    max_capacity: Optional[float] = None             # global per-series-per-week cap
+    capacity_column: Optional[str] = None            # column name for per-series capacity
+    aggregate_max: Optional[float] = None            # sum across all series per period
+    proportional_redistribution: bool = True         # when aggregate exceeded: proportional vs clip-largest
+
+
+@dataclass
 class ForecastConfig:
     """Forecast horizon and model selection."""
     horizon_weeks: int = 39              # 9 months
@@ -87,6 +98,9 @@ class ForecastConfig:
     )
     calibration: CalibrationConfig = field(
         default_factory=CalibrationConfig
+    )
+    constraints: ConstraintConfig = field(
+        default_factory=ConstraintConfig
     )
 
 
@@ -157,6 +171,21 @@ class StructuralBreakConfig:
 
 
 @dataclass
+class ValidationConfig:
+    """Schema enforcement and data validation settings."""
+    enabled: bool = False                    # opt-in
+    require_columns: List[str] = field(default_factory=list)  # extra required beyond time/target/id
+    check_duplicates: bool = True            # flag duplicate (series_id, time_col) pairs
+    check_frequency: bool = True             # validate consistent weekly intervals
+    check_non_negative: bool = True          # demand values >= 0
+    min_value: Optional[float] = None        # custom floor (overrides non_negative if set)
+    max_value: Optional[float] = None        # custom ceiling
+    max_missing_pct: float = 100.0           # fail if any series exceeds this % missing weeks
+    min_series_count: int = 1                # minimum number of series required
+    strict: bool = False                     # if True, warnings become errors
+
+
+@dataclass
 class DataQualityReportConfig:
     """Pre-training data quality report settings."""
     enabled: bool = False                    # opt-in
@@ -172,6 +201,7 @@ class DataQualityConfig:
     min_series_length_weeks: int = 52    # drop series shorter than this
     drop_zero_series: bool = False       # drop series with all-zero target
     validate_frequency: bool = False     # if True, raise on non-weekly gaps
+    validation: ValidationConfig = field(default_factory=ValidationConfig)
     cleansing: CleansingConfig = field(default_factory=CleansingConfig)
     structural_breaks: StructuralBreakConfig = field(default_factory=StructuralBreakConfig)
     report: DataQualityReportConfig = field(default_factory=DataQualityReportConfig)

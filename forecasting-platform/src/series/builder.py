@@ -34,6 +34,7 @@ class SeriesBuilder:
     def __init__(self, config: PlatformConfig):
         self.config = config
         self._transition_engine = TransitionEngine(config.transition)
+        self._last_validation_report = None
         self._last_cleansing_report = None
         self._last_break_report = None
         self._last_quality_report = None
@@ -74,6 +75,27 @@ class SeriesBuilder:
         value_col = fc.target_column
         sid_col = fc.series_id_column
 
+        # Step 0: Schema validation (before anything else)
+        dq = self.config.data_quality
+        self._last_validation_report = None
+        if dq.validation.enabled:
+            from ..data.validator import DataValidator
+            validator = DataValidator(dq.validation)
+            self._last_validation_report = validator.validate(
+                actuals, value_col, time_col, sid_col
+            )
+            for issue in self._last_validation_report.issues:
+                if issue.level == "error":
+                    logger.error("Validation: %s", issue.message)
+                else:
+                    logger.warning("Validation: %s", issue.message)
+            if not self._last_validation_report.passed:
+                raise ValueError(
+                    f"Data validation failed with "
+                    f"{len(self._last_validation_report.errors)} error(s). "
+                    f"First: {self._last_validation_report.errors[0].message}"
+                )
+
         # Step 1: Build composite series ID if not present
         df = self._ensure_series_id(actuals, sid_col)
 
@@ -99,7 +121,6 @@ class SeriesBuilder:
             )
 
         # Step 3: Fill missing weeks (controlled by data_quality config)
-        dq = self.config.data_quality
         if dq.fill_gaps:
             df = self._fill_gaps(df, time_col, sid_col, value_col, dq.fill_value)
 
