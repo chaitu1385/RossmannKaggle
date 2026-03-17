@@ -210,4 +210,15 @@ A catalog of the failure modes that break forecasting platforms — what goes wr
 
 **How the platform handles it:** The `ForecastabilityAnalyzer` (`src/analytics/forecastability.py`) handles constant series by returning CV=0.0 when standard deviation is below 1e-12, preventing division-by-zero errors. For very short series, entropy calculations use whatever data is available but may produce unstable estimates. The forecastability score defaults to low values for degenerate cases, which conservatively routes these series to simpler models.
 
+**What to watch for:** Fallback responses lack the business-context reasoning that Claude provides — a triaged alert list without impact scoring is just the raw drift output. Monitor the `sources_used` field in NL query responses and the presence of `suggested_action` in triage results to detect when fallbacks are active. If Claude rate limiting is frequent, consider adding a response cache keyed on (lob, series_id, question_hash).
+
+---
+
+## 20. Large File Uploads in Streamlit Dashboard
+
+**What happens:** A user uploads a CSV with millions of rows via the Data Onboarding page. `DataAnalyzer.analyze()` runs synchronously in the Streamlit event loop, causing the page to hang or time out. Streamlit's default upload limit is 200 MB, but even smaller files can exhaust memory on constrained containers.
+
+**How the platform handles it:** The `DataAnalyzer.analyze()` call is wrapped with `@st.cache_data`, so repeat analyses of the same data are instant. Plotly charts render client-side, avoiding server-side image generation bottlenecks. Each page shows graceful empty states (info messages) when no data is loaded, so the app never crashes on missing inputs. The Rossmann sample dataset (18 MB, 1M rows) is bundled as a one-click demo to bypass upload friction.
+
+**What to watch for:** Streamlit re-runs the entire page script on every widget interaction. Heavy computations (DataAnalyzer, FVA cascade) must be cached or they re-execute on every click. If users upload datasets larger than the Rossmann sample, consider adding `st.session_state` checkpoints to avoid redundant recomputation. The Docker container should be provisioned with at least 2 GB RAM for datasets with 1000+ series.
 **What to watch for:** A low forecastability score doesn't always mean "don't forecast" — it means the signal-to-noise ratio is poor with available methods. Foundation models (Chronos, TimeGPT) may still produce useful forecasts on low-forecastability series since they bring pre-trained knowledge. Also, forecastability is assessed on historical data; a series that became forecastable after a structural break may score low due to the pre-break noise. Consider running forecastability assessment on post-break data only if structural breaks are detected.

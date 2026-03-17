@@ -206,3 +206,11 @@ The platform's business logic (forecasting, backtesting, reconciliation) should 
 Forecasting platforms generate data (metrics, drift alerts, leaderboards) that planners must manually interpret. AI-native features use Claude to automate this interpretation: answering natural-language questions about forecasts, triaging drift alerts by business impact, recommending config changes from backtest results, and generating S&OP executive commentary. All four capabilities are API endpoints that send structured platform data to Claude with domain-specific prompts, then parse the response into actionable dataclasses. When Claude is unavailable (no API key or network issue), every feature gracefully degrades to a template-based fallback so the platform never breaks.
 
 *Implementation: `src/ai/` — `NaturalLanguageQueryEngine`, `AnomalyTriageEngine`, `ConfigTunerEngine`, `CommentaryEngine`*
+
+## Product & UX
+
+### Streamlit Dashboard
+
+A forecasting platform that only data scientists can operate is incomplete — demand planners need to see forecasts, compare models, and review exceptions; platform admins need to monitor health and drift. The Streamlit dashboard provides a browser-based interface with four pages mapped to three user personas: Data Onboarding (upload data, assess forecastability, get a recommended config), Backtest Results (model leaderboard with FVA cascade), Forecast Viewer (interactive fan chart with seasonal decomposition), and Platform Health (drift alerts, pipeline manifests, compute cost). It imports platform classes directly — no API round-trip — so a `docker compose up` gives a working demo in under two minutes.
+
+*Implementation: `streamlit/` — `app.py`, `pages/1_Data_Onboarding.py`, `pages/2_Backtest_Results.py`, `pages/3_Forecast_Viewer.py`, `pages/4_Platform_Health.py`*

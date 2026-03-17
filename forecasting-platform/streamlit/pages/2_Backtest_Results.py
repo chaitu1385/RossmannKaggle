@@ -1,0 +1,286 @@
+"""
+Page 2 — Backtest Results
+
+Model leaderboard, FVA cascade chart, per-series champion map,
+and layer leaderboard with Keep/Review/Remove recommendations.
+"""
+
+import sys
+from pathlib import Path
+
+import plotly.express as px
+import plotly.graph_objects as go
+import streamlit as st
+
+_PLATFORM_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_PLATFORM_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PLATFORM_ROOT))
+
+import polars as pl
+
+from src.analytics.fva_analyzer import FVAAnalyzer
+from src.metrics.store import MetricStore
+from streamlit.utils import (
+    COLORS,
+    DATA_DIR,
+    FVA_COLORS,
+    MODEL_LAYER_COLORS,
+    polars_to_pandas,
+    format_pct,
+)
+
+st.set_page_config(page_title="Backtest Results", page_icon="🏆", layout="wide")
+st.title("Backtest Results")
+
+# ---------------------------------------------------------------------------
+#  Data source: MetricStore or uploaded Parquet
+# ---------------------------------------------------------------------------
+metrics_dir = str(DATA_DIR / "metrics")
+
+tab_store, tab_upload = st.tabs(["From Metric Store", "Upload Parquet"])
+
+metrics_df = None
+
+with tab_store:
+    lob = st.text_input("Line of Business", value="retail", key="lob_store")
+    if st.button("Load from metric store", key="load_store"):
+        try:
+            store = MetricStore(base_path=metrics_dir)
+            metrics_df = store.read(run_type="backtest", lob=lob)
+            if metrics_df is not None and not metrics_df.is_empty():
+                st.session_state["backtest_metrics"] = metrics_df
+                st.success(f"Loaded {metrics_df.shape[0]:,} metric records.")
+            else:
+                st.warning("No backtest results found for this LOB.")
+        except Exception as e:
+            st.error(f"Error loading metrics: {e}")
+
+with tab_upload:
+    uploaded = st.file_uploader("Upload backtest metrics Parquet", type=["parquet"])
+    if uploaded is not None:
+        import io
+        metrics_df = pl.read_parquet(io.BytesIO(uploaded.getvalue()))
+        st.session_state["backtest_metrics"] = metrics_df
+        st.success(f"Loaded {metrics_df.shape[0]:,} records from upload.")
+
+# Retrieve from session if previously loaded
+if metrics_df is None:
+    metrics_df = st.session_state.get("backtest_metrics")
+
+if metrics_df is None:
+    st.info(
+        "Load backtest results from the metric store or upload a Parquet file. "
+        "Run `python scripts/run_backtest.py` first to populate the store."
+    )
+    st.stop()
+
+# ---------------------------------------------------------------------------
+#  Model Leaderboard
+# ---------------------------------------------------------------------------
+st.divider()
+st.header("Model Leaderboard")
+
+# Aggregate: mean WMAPE and bias per model
+if "model_id" in metrics_df.columns and "wmape" in metrics_df.columns:
+    leaderboard = (
+        metrics_df
+        .group_by("model_id")
+        .agg([
+            pl.col("wmape").mean().alias("mean_wmape"),
+            pl.col("normalized_bias").mean().alias("mean_bias"),
+            pl.col("series_id").n_unique().alias("n_series"),
+        ])
+        .sort("mean_wmape")
+        .with_row_index("rank", offset=1)
+    )
+
+    st.dataframe(
+        polars_to_pandas(leaderboard),
+        use_container_width=True,
+        column_config={
+            "rank": st.column_config.NumberColumn("Rank"),
+            "model_id": "Model",
+            "mean_wmape": st.column_config.NumberColumn("WMAPE", format="%.4f"),
+            "mean_bias": st.column_config.NumberColumn("Bias", format="%.4f"),
+            "n_series": st.column_config.NumberColumn("Series"),
+        },
+    )
+
+    # Bar chart
+    lb_pd = polars_to_pandas(leaderboard)
+    fig_lb = go.Figure()
+    fig_lb.add_trace(go.Bar(
+        x=lb_pd["model_id"],
+        y=lb_pd["mean_wmape"],
+        marker_color=COLORS["primary"],
+        text=[f"{v:.4f}" for v in lb_pd["mean_wmape"]],
+        textposition="auto",
+    ))
+    fig_lb.update_layout(
+        title="Mean WMAPE by Model",
+        xaxis_title="Model",
+        yaxis_title="WMAPE",
+        height=350,
+        margin=dict(t=40, b=40),
+    )
+    st.plotly_chart(fig_lb, use_container_width=True)
+else:
+    st.warning("Expected columns `model_id` and `wmape` not found in data.")
+
+# ---------------------------------------------------------------------------
+#  FVA Cascade
+# ---------------------------------------------------------------------------
+st.divider()
+st.header("Forecast Value-Add (FVA) Cascade")
+
+try:
+    fva = FVAAnalyzer()
+    fva_detail = fva.compute_fva_detail(metrics_df)
+
+    if not fva_detail.is_empty():
+        # Summary by layer
+        fva_summary = fva.summarize(fva_detail)
+        fva_summary_pd = polars_to_pandas(fva_summary)
+
+        # FVA cascade bar chart
+        if "forecast_layer" in fva_summary.columns and "mean_wmape" in fva_summary.columns:
+            fig_fva = go.Figure()
+
+            for _, row in fva_summary_pd.iterrows():
+                layer = row["forecast_layer"]
+                color = MODEL_LAYER_COLORS.get(layer, COLORS["neutral"])
+                fig_fva.add_trace(go.Bar(
+                    x=[layer],
+                    y=[row["mean_wmape"]],
+                    name=layer,
+                    marker_color=color,
+                    text=[f"{row['mean_wmape']:.4f}"],
+                    textposition="auto",
+                ))
+
+            fig_fva.update_layout(
+                title="FVA Cascade — Mean WMAPE by Layer",
+                xaxis_title="Forecast Layer",
+                yaxis_title="WMAPE",
+                showlegend=False,
+                height=350,
+                margin=dict(t=40, b=40),
+            )
+            st.plotly_chart(fig_fva, use_container_width=True)
+
+        # FVA class distribution (stacked bar)
+        if "n_adds_value" in fva_summary.columns:
+            fva_class_cols = ["n_adds_value", "n_neutral", "n_destroys_value"]
+            available_cols = [c for c in fva_class_cols if c in fva_summary.columns]
+
+            if available_cols:
+                fig_stack = go.Figure()
+                label_map = {
+                    "n_adds_value": "Adds Value",
+                    "n_neutral": "Neutral",
+                    "n_destroys_value": "Destroys Value",
+                }
+                color_map = {
+                    "n_adds_value": FVA_COLORS["ADDS_VALUE"],
+                    "n_neutral": FVA_COLORS["NEUTRAL"],
+                    "n_destroys_value": FVA_COLORS["DESTROYS_VALUE"],
+                }
+
+                for col in available_cols:
+                    fig_stack.add_trace(go.Bar(
+                        x=fva_summary_pd["forecast_layer"],
+                        y=fva_summary_pd[col],
+                        name=label_map.get(col, col),
+                        marker_color=color_map.get(col, COLORS["neutral"]),
+                    ))
+
+                fig_stack.update_layout(
+                    barmode="stack",
+                    title="FVA Classification by Layer",
+                    xaxis_title="Forecast Layer",
+                    yaxis_title="Number of Series",
+                    height=350,
+                    margin=dict(t=40, b=40),
+                )
+                st.plotly_chart(fig_stack, use_container_width=True)
+
+        # Summary table
+        with st.expander("FVA Summary Table"):
+            st.dataframe(fva_summary_pd, use_container_width=True)
+
+        # -------------------------------------------------------------------
+        #  Layer Leaderboard
+        # -------------------------------------------------------------------
+        st.subheader("Layer Leaderboard")
+        layer_lb = fva.layer_leaderboard(fva_detail)
+
+        if not layer_lb.is_empty():
+            layer_lb_pd = polars_to_pandas(layer_lb)
+
+            # Colour the recommendation column
+            def style_recommendation(val):
+                colors = {
+                    "Keep": f"background-color: {FVA_COLORS['ADDS_VALUE']}20",
+                    "Review": f"background-color: {FVA_COLORS['NEUTRAL']}40",
+                    "Remove": f"background-color: {FVA_COLORS['DESTROYS_VALUE']}20",
+                }
+                return colors.get(val, "")
+
+            st.dataframe(
+                layer_lb_pd.style.map(
+                    style_recommendation, subset=["recommendation"]
+                ),
+                use_container_width=True,
+            )
+    else:
+        st.info("No FVA data available. Ensure backtest results contain multiple model layers.")
+except Exception as e:
+    st.warning(f"FVA analysis not available: {e}")
+
+# ---------------------------------------------------------------------------
+#  Per-Series Champion Map
+# ---------------------------------------------------------------------------
+st.divider()
+st.header("Per-Series Champion Map")
+
+if "model_id" in metrics_df.columns and "series_id" in metrics_df.columns:
+    # Find best model per series by WMAPE
+    champion_map = (
+        metrics_df
+        .group_by(["series_id", "model_id"])
+        .agg(pl.col("wmape").mean().alias("mean_wmape"))
+        .sort("mean_wmape")
+        .group_by("series_id")
+        .first()
+        .sort("series_id")
+    )
+
+    # Champion distribution
+    champ_dist = (
+        champion_map
+        .group_by("model_id")
+        .len()
+        .sort("len", descending=True)
+        .rename({"len": "n_series"})
+    )
+
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        st.dataframe(polars_to_pandas(champ_dist), use_container_width=True)
+
+    with col2:
+        dist_pd = polars_to_pandas(champ_dist)
+        fig_champ = px.pie(
+            dist_pd,
+            names="model_id",
+            values="n_series",
+            title="Champion Model Distribution",
+            hole=0.4,
+        )
+        fig_champ.update_layout(height=350, margin=dict(t=40, b=20))
+        st.plotly_chart(fig_champ, use_container_width=True)
+
+    with st.expander("Full champion map"):
+        st.dataframe(polars_to_pandas(champion_map), use_container_width=True)
+else:
+    st.info("Champion map requires `series_id` and `model_id` columns.")
