@@ -15,7 +15,7 @@ from typing import List, Optional
 
 import polars as pl
 
-from ..config.schema import PlatformConfig
+from ..config.schema import PlatformConfig, get_frequency_profile
 from ..forecasting.base import BaseForecaster
 from ..metrics.definitions import compute_all_metrics
 from ..metrics.store import METRIC_SCHEMA, MetricStore
@@ -46,6 +46,7 @@ class BacktestEngine:
             n_folds=self.bt_config.n_folds,
             val_weeks=self.bt_config.val_weeks,
             gap_weeks=self.bt_config.gap_weeks,
+            frequency=config.forecast.frequency,
         )
         self._failures: List[dict] = []
 
@@ -312,7 +313,11 @@ class BacktestEngine:
 
             for row in s.iter_rows(named=True):
                 # forecast_step: 1-indexed week offset from validation start
-                forecast_step = (row[time_col] - val_start).days // 7 + 1
+                step_days = get_frequency_profile(self.config.forecast.frequency)["timedelta_kwargs"]
+                period_days = sum(
+                    v * (7 if k == "weeks" else 1) for k, v in step_days.items()
+                )
+                forecast_step = (row[time_col] - val_start).days // period_days + 1
 
                 record = {
                     "run_id": run_id,

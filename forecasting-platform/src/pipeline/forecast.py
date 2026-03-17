@@ -112,7 +112,9 @@ class ForecastPipeline:
 
         # Step 2: Resolve forecaster (name → registry lookup, or use directly)
         if isinstance(champion_model, str):
-            forecaster: BaseForecaster = registry.build(champion_model)
+            forecaster: BaseForecaster = registry.build(
+                champion_model, frequency=fc.frequency
+            )
         else:
             forecaster = champion_model
         logger.info("Champion model: %s", forecaster.name)
@@ -224,7 +226,7 @@ class ForecastPipeline:
                 bucket_name, start_step, end_step, model_name,
             )
 
-            forecaster = registry.build(model_name)
+            forecaster = registry.build(model_name, frequency=fc.frequency)
             forecaster.fit(
                 series,
                 target_col=fc.target_column,

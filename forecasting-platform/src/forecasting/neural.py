@@ -50,6 +50,7 @@ from typing import Any, Dict, List, Optional
 
 import polars as pl
 
+from ..config.schema import get_frequency_profile
 from .base import BaseForecaster
 from .registry import registry
 
@@ -94,6 +95,7 @@ class _NeuralforecastBase(BaseForecaster):
         accelerator: str = "cpu",
         enable_progress_bar: bool = False,
         quantiles: Optional[List[float]] = None,
+        frequency: str = "W",
     ):
         self.max_steps = max_steps
         self.learning_rate = learning_rate
@@ -103,6 +105,7 @@ class _NeuralforecastBase(BaseForecaster):
         self.accelerator = accelerator
         self.enable_progress_bar = enable_progress_bar
         self._quantiles = quantiles
+        self.frequency = frequency
 
         self._nf: Optional[Any] = None
         self._id_col: str = "series_id"
@@ -149,9 +152,10 @@ class _NeuralforecastBase(BaseForecaster):
         # trained horizon, we refit (neuralforecast requires h at init).
         self._horizon = 13
         model = self._get_model(self._horizon)
+        sf_freq = get_frequency_profile(self.frequency)["statsforecast_freq"]
         self._nf = NeuralForecast(
             models=[model],
-            freq="W",
+            freq=sf_freq,
         )
 
         is_cpu = self.accelerator == "cpu"

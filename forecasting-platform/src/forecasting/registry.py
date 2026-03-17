@@ -18,6 +18,7 @@ Instantiate from config::
     forecasters = registry.build_from_config(["naive_seasonal", "lgbm_direct"])
 """
 
+import inspect
 from typing import Callable, Dict, List, Optional, Type
 
 from .base import BaseForecaster
@@ -56,8 +57,21 @@ class ForecasterRegistry:
         return self._registry[name]
 
     def build(self, name: str, **kwargs) -> BaseForecaster:
-        """Instantiate a forecaster by name."""
+        """Instantiate a forecaster by name.
+
+        Unknown kwargs are silently dropped so that pipeline-level
+        parameters (e.g. ``frequency``) can be broadcast to all models
+        without requiring every model to accept them.
+        """
         cls = self.get(name)
+        sig = inspect.signature(cls.__init__)
+        accepts_var_kw = any(
+            p.kind == inspect.Parameter.VAR_KEYWORD
+            for p in sig.parameters.values()
+        )
+        if not accepts_var_kw:
+            valid = set(sig.parameters) - {"self"}
+            kwargs = {k: v for k, v in kwargs.items() if k in valid}
         return cls(**kwargs)
 
     def build_from_config(

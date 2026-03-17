@@ -15,7 +15,7 @@ from typing import Optional
 
 import polars as pl
 
-from ..config.schema import PlatformConfig
+from ..config.schema import PlatformConfig, get_frequency_profile
 from .transition import TransitionEngine
 
 logger = logging.getLogger(__name__)
@@ -33,6 +33,7 @@ class SeriesBuilder:
 
     def __init__(self, config: PlatformConfig):
         self.config = config
+        self._frequency = config.forecast.frequency
         self._transition_engine = TransitionEngine(config.transition)
         self._last_validation_report = None
         self._last_cleansing_report = None
@@ -291,8 +292,11 @@ class SeriesBuilder:
         if min_date is None or max_date is None:
             return df
 
+        _interval_map = {"D": "1d", "W": "1w", "M": "1mo", "Q": "1q"}
+        freq = getattr(self, "_frequency", "W")
+        interval = _interval_map.get(freq, "1w")
         all_weeks = pl.date_range(
-            min_date, max_date, interval="1w", eager=True
+            min_date, max_date, interval=interval, eager=True
         ).alias(time_col)
         all_weeks_df = pl.DataFrame({time_col: all_weeks})
 

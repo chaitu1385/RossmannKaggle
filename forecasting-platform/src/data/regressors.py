@@ -56,12 +56,13 @@ def generate_holiday_calendar(
     start_date: date,
     end_date: date,
     time_column: str = "week",
+    frequency: str = "W",
 ) -> pl.DataFrame:
     """
-    Generate a weekly holiday flag calendar for a given country.
+    Generate a holiday flag calendar for a given country and frequency.
 
     Requires the `holidays` package (pip install holidays).
-    Each week gets a count of holidays falling within that week.
+    Each period gets a count of holidays falling within that period.
 
     Parameters
     ----------
@@ -73,6 +74,8 @@ def generate_holiday_calendar(
         End of the date range.
     time_column:
         Name for the time column in the output.
+    frequency:
+        Data frequency — ``"D"``, ``"W"``, ``"M"``, ``"Q"``.
 
     Returns
     -------
@@ -93,14 +96,18 @@ def generate_holiday_calendar(
     years = list(range(start_date.year, end_date.year + 1))
     country_holidays = _holidays_lib.country_holidays(country, years=years)
 
-    # Generate weekly date range
-    weeks = pl.date_range(start_date, end_date, interval="1w", eager=True)
+    # Generate date range at the configured frequency
+    _interval_map = {"D": "1d", "W": "1w", "M": "1mo", "Q": "1q"}
+    interval = _interval_map.get(frequency, "1w")
+    _window_days = {"D": 1, "W": 7, "M": 30, "Q": 91}
+    window = _window_days.get(frequency, 7)
+    weeks = pl.date_range(start_date, end_date, interval=interval, eager=True)
 
     holiday_counts = []
     for week_start in weeks:
-        # Count holidays in the 7-day window starting from this date
+        # Count holidays in the period window starting from this date
         count = 0
-        for day_offset in range(7):
+        for day_offset in range(window):
             check_date = week_start + pl.duration(days=day_offset)
             if isinstance(check_date, date) and check_date in country_holidays:
                 count += 1

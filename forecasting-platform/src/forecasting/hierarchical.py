@@ -35,6 +35,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import polars as pl
 
+from ..config.schema import freq_timedelta, get_frequency_profile
 from .base import BaseForecaster
 from .registry import registry
 
@@ -186,7 +187,9 @@ class HierarchicalForecaster(BaseForecaster):
         method: str = "mint_shrink",
         base_forecaster_name: str = "auto_ets",
         middle_level: Optional[str] = None,
+        frequency: str = "W",
     ):
+        self.frequency = frequency
         if method not in _METHOD_MAP:
             raise ValueError(
                 f"Unknown hierarchical method {method!r}. "
@@ -289,11 +292,11 @@ class HierarchicalForecaster(BaseForecaster):
                 continue
 
             last_date = times[-1]
-            season = min(52, len(vals))
+            sl = get_frequency_profile(self.frequency)["season_length"]
+            season = min(sl, len(vals))
 
             for h in range(1, horizon + 1):
-                from datetime import timedelta
-                fc_date = last_date + timedelta(weeks=h)
+                fc_date = last_date + freq_timedelta(self.frequency, h)
                 # Seasonal naive: value from season_length periods ago
                 idx = len(vals) - season + ((h - 1) % season)
                 fc_val = vals[max(0, idx)]

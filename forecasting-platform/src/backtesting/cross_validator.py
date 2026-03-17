@@ -19,6 +19,8 @@ from typing import List, Tuple
 
 import polars as pl
 
+from ..config.schema import freq_timedelta
+
 
 @dataclass
 class CVFold:
@@ -43,6 +45,7 @@ class WalkForwardCV:
         n_folds: int = 3,
         val_weeks: int = 13,
         gap_weeks: int = 0,
+        frequency: str = "W",
     ):
         """
         Parameters
@@ -50,13 +53,17 @@ class WalkForwardCV:
         n_folds:
             Number of validation folds.
         val_weeks:
-            Weeks in each validation window.
+            Periods in each validation window (name kept for YAML compat).
         gap_weeks:
-            Gap between train end and val start (to simulate production lag).
+            Gap periods between train end and val start (to simulate
+            production lag).
+        frequency:
+            Data frequency — ``"D"``, ``"W"``, ``"M"``, ``"Q"``.
         """
         self.n_folds = n_folds
         self.val_weeks = val_weeks
         self.gap_weeks = gap_weeks
+        self.frequency = frequency
 
     def split(
         self,
@@ -78,9 +85,9 @@ class WalkForwardCV:
         # Work backwards from max_date
         folds: List[CVFold] = []
         for i in range(self.n_folds - 1, -1, -1):
-            val_end = max_date - timedelta(weeks=i * self.val_weeks)
-            val_start = val_end - timedelta(weeks=self.val_weeks - 1)
-            train_end = val_start - timedelta(weeks=self.gap_weeks + 1)
+            val_end = max_date - freq_timedelta(self.frequency, i * self.val_weeks)
+            val_start = val_end - freq_timedelta(self.frequency, self.val_weeks - 1)
+            train_end = val_start - freq_timedelta(self.frequency, self.gap_weeks + 1)
 
             if train_end < min_date:
                 continue

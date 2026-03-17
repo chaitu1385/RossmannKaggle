@@ -80,14 +80,21 @@ class BacktestPipeline:
                      len(series),
                      series[fc.series_id_column].n_unique())
 
-        # Step 2: Instantiate forecasters from config
-        forecasters = registry.build_from_config(fc.forecasters)
+        # Step 2: Instantiate forecasters from config (frequency-aware)
+        freq_kwargs = {"frequency": fc.frequency}
+        forecasters = registry.build_from_config(
+            fc.forecasters,
+            params={name: freq_kwargs for name in fc.forecasters},
+        )
         logger.info("Forecasters: %s", [f.name for f in forecasters])
 
         # Intermittent demand forecasters (optional sparse routing)
         sparse_forecasters = None
         if fc.intermittent_forecasters and fc.sparse_detection:
-            sparse_forecasters = registry.build_from_config(fc.intermittent_forecasters)
+            sparse_forecasters = registry.build_from_config(
+                fc.intermittent_forecasters,
+                params={name: freq_kwargs for name in fc.intermittent_forecasters},
+            )
             logger.info(
                 "Sparse forecasters: %s", [f.name for f in sparse_forecasters]
             )

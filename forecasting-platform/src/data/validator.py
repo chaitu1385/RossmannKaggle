@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 
 import polars as pl
 
-from ..config.schema import ValidationConfig
+from ..config.schema import ValidationConfig, freq_timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -218,8 +218,14 @@ class DataValidator:
         df: pl.DataFrame,
         time_col: str,
         id_col: str,
+        frequency: str = "W",
     ) -> tuple:
-        """Validate consistent weekly (7-day) intervals per series.
+        """Validate consistent intervals per series for the given frequency.
+
+        Parameters
+        ----------
+        frequency:
+            Expected data frequency — ``"D"``, ``"W"``, ``"M"``, ``"Q"``.
 
         Returns (issues, violation_count).
         """
@@ -233,19 +239,20 @@ class DataValidator:
         if gaps.is_empty():
             return issues, 0
 
-        non_weekly = gaps.filter(pl.col("_gap") != timedelta(days=7))
-        if non_weekly.is_empty():
+        expected_gap = freq_timedelta(frequency)
+        non_matching = gaps.filter(pl.col("_gap") != expected_gap)
+        if non_matching.is_empty():
             return issues, 0
 
-        violating_series = non_weekly[id_col].unique()
+        violating_series = non_matching[id_col].unique()
         violation_count = violating_series.len()
 
         issues.append(ValidationIssue(
             level="warning",
             check="frequency",
             message=(
-                f"{violation_count} series have non-weekly gaps "
-                f"(expected 7-day intervals)"
+                f"{violation_count} series have inconsistent gaps "
+                f"(expected {expected_gap} intervals for frequency={frequency!r})"
             ),
             details={
                 "violation_count": violation_count,

@@ -7,12 +7,12 @@ yearly seasonality, it copies weeks from the same period one year ago.
 This serves as the "beat this" benchmark for all other models.
 """
 
-from datetime import timedelta
 from typing import Any, Dict, List
 
 import numpy as np
 import polars as pl
 
+from ..config.schema import freq_timedelta, get_frequency_profile
 from .base import BaseForecaster
 from .registry import registry
 
@@ -23,13 +23,23 @@ class SeasonalNaiveForecaster(BaseForecaster):
 
     name = "naive_seasonal"
 
-    def __init__(self, season_length: int = 52):
+    def __init__(self, season_length: int = 52, frequency: str = "W"):
         """
         Parameters
         ----------
         season_length:
-            Number of periods in one seasonal cycle (52 for weekly-yearly).
+            Number of periods in one seasonal cycle.  Defaults to the
+            value from ``FREQUENCY_PROFILES[frequency]`` when left at 52
+            and *frequency* is not ``"W"``.
+        frequency:
+            Data frequency — ``"D"``, ``"W"``, ``"M"``, or ``"Q"``.
         """
+        self.frequency = frequency
+        profile = get_frequency_profile(frequency)
+        # If caller left season_length at the old weekly default but picked
+        # a non-weekly frequency, use the profile default instead.
+        if season_length == 52 and frequency != "W":
+            season_length = profile["season_length"]
         self.season_length = season_length
         self._fitted_data: pl.DataFrame = pl.DataFrame()
         self._target_col: str = "quantity"
@@ -78,7 +88,7 @@ class SeasonalNaiveForecaster(BaseForecaster):
                 if idx < 0:
                     idx = (h - 1) % n  # fallback for short series
                 val = values[idx] if 0 <= idx < n else 0.0
-                forecast_date = max_date + timedelta(weeks=h)
+                forecast_date = max_date + freq_timedelta(self.frequency, h)
                 forecasts.append({
                     id_col: series_id,
                     time_col: forecast_date,
@@ -124,7 +134,7 @@ class SeasonalNaiveForecaster(BaseForecaster):
                 # Not enough history — fall back to degenerate intervals
                 point_rows = [
                     {id_col: series_id,
-                     time_col: max_date + timedelta(weeks=h),
+                     time_col: max_date + freq_timedelta(self.frequency, h),
                      **{f"forecast_p{int(round(q * 100))}": float(
                          values[min(len(values) - self.season_length + ((h - 1) % self.season_length),
                                     len(values) - 1)]
@@ -148,7 +158,7 @@ class SeasonalNaiveForecaster(BaseForecaster):
                 if idx < 0:
                     idx = (h - 1) % n
                 point_val = float(values[idx] if 0 <= idx < n else 0.0)
-                forecast_date = max_date + timedelta(weeks=h)
+                forecast_date = max_date + freq_timedelta(self.frequency, h)
 
                 pos = idx % sl
                 pos_residuals = residuals_by_pos.get(pos, [0.0])
@@ -171,4 +181,4 @@ class SeasonalNaiveForecaster(BaseForecaster):
         return pl.DataFrame(results)
 
     def get_params(self) -> Dict[str, Any]:
-        return {"season_length": self.season_length}
+        return {"season_length": self.season_length, "frequency": self.frequency}

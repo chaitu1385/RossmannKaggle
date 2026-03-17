@@ -63,7 +63,8 @@ def _dict_to_config(d: Dict[str, Any]) -> PlatformConfig:
 
     fc_raw = d.get("forecast", {})
     forecast = ForecastConfig(
-        horizon_weeks=fc_raw.get("horizon_weeks", 39),
+        horizon_weeks=fc_raw.get("horizon_periods",
+                                 fc_raw.get("horizon_weeks", 39)),
         frequency=fc_raw.get("frequency", "W"),
         target_column=fc_raw.get("target_column", "quantity"),
         time_column=fc_raw.get("time_column", "week"),
@@ -79,8 +80,10 @@ def _dict_to_config(d: Dict[str, Any]) -> PlatformConfig:
     bt_raw = d.get("backtest", {})
     backtest = BacktestConfig(
         n_folds=bt_raw.get("n_folds", 3),
-        val_weeks=bt_raw.get("val_weeks", 13),
-        gap_weeks=bt_raw.get("gap_weeks", 0),
+        val_weeks=bt_raw.get("val_periods",
+                             bt_raw.get("val_weeks", 13)),
+        gap_weeks=bt_raw.get("gap_periods",
+                             bt_raw.get("gap_weeks", 0)),
         champion_granularity=bt_raw.get("champion_granularity", "lob"),
         primary_metric=bt_raw.get("primary_metric", "wmape"),
         secondary_metric=bt_raw.get("secondary_metric", "normalized_bias"),
