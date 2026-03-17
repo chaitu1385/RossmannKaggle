@@ -41,9 +41,10 @@ forecasting-platform/
 │   ├── auth/               # RBAC (5 roles, 11 permissions), JWT tokens
 │   ├── backtesting/        # Walk-forward validation, champion selection
 │   ├── config/             # YAML schema + loader (dataclass-driven)
-│   ├── data/               # Data loading, preprocessing, validation, demand cleansing, external regressors
+│   ├── data/               # Data loading, preprocessing, validation, demand cleansing, regressor screening, external regressors
 │   │   ├── validator.py    # DataValidator — schema enforcement, duplicate/frequency/range checks
 │   │   ├── cleanser.py     # DemandCleanser — outlier detection, stockout imputation, period exclusion
+│   │   ├── regressor_screen.py # RegressorScreen — variance, correlation, MI screening
 │   │   └── regressors.py   # External regressor loader, holiday calendar, validation
 │   ├── evaluation/         # Metric computations (WMAPE, RMSPE, bias, MAE)
 │   ├── forecasting/        # Model implementations + registry
@@ -59,12 +60,13 @@ forecasting-platform/
 │   ├── hierarchy/          # Tree structure, aggregation, reconciliation (OLS/WLS/MinT)
 │   ├── metrics/            # MetricStore (Parquet), drift detection, FVA
 │   ├── overrides/          # Planner manual override store (DuckDB)
-│   ├── pipeline/           # End-to-end backtest + forecast pipelines
+│   ├── pipeline/           # End-to-end backtest + forecast pipelines, provenance manifest
+│   │   └── manifest.py     # PipelineManifest — provenance sidecar (JSON) for each forecast run
 │   ├── series/             # Series builder, sparse detector, SKU transitions
 │   ├── sku_mapping/        # New/discontinued SKU mapping
 │   ├── spark/              # PySpark distributed execution
 │   └── analytics/          # BI export, comparators, explainability, governance, FVA
-├── tests/                  # 710+ tests (pytest)
+├── tests/                  # 760+ tests (pytest)
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
 └── notebooks/              # Jupyter notebooks for exploration
@@ -91,7 +93,7 @@ YAML-driven config system with dataclass schema validation:
 - `configs/lob/` — line-of-business overrides (inherit from base)
 - Schema defined in `src/config/schema.py`
 
-Key config dataclasses: `ForecastConfig`, `BacktestConfig`, `DataQualityConfig` (contains `ValidationConfig`, `CleansingConfig`), `ConstraintConfig`, `ExternalRegressorConfig`
+Key config dataclasses: `ForecastConfig`, `BacktestConfig`, `DataQualityConfig` (contains `ValidationConfig`, `CleansingConfig`), `ConstraintConfig`, `ExternalRegressorConfig` (contains `RegressorScreenConfig`)
 
 ## Testing
 
@@ -99,7 +101,7 @@ Key config dataclasses: `ForecastConfig`, `BacktestConfig`, `DataQualityConfig` 
 - Test files mirror source structure with `test_` prefix
 - Helper fixtures use `_make_*` factory functions (e.g., `_make_weekly_actuals`)
 - Skip `test_metrics.py` and `test_feature_engineering.py` (legacy/slow)
-- 710+ tests across 30 test files
+- 760+ tests across 32 test files
 - Key test modules: `test_platform.py` (85 tests), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55)
 
 ## Key Dependencies

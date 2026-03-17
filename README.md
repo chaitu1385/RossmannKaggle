@@ -27,7 +27,7 @@ A production-grade, modular weekly sales forecasting platform. Covers the full l
 │  ForecastLineage · FVAAnalyzer                              │
 ├─────────────────────────────────────────────────────────────┤
 │  Pipeline Layer                       src/pipeline/         │
-│  BacktestPipeline · ForecastPipeline                        │
+│  BacktestPipeline · ForecastPipeline · PipelineManifest     │
 ├─────────────────────────────────────────────────────────────┤
 │  Backtest Engine                      src/backtesting/      │
 │  BacktestEngine · WalkForwardCV · ChampionSelector          │
@@ -63,7 +63,7 @@ A production-grade, modular weekly sales forecasting platform. Covers the full l
 │  Data Layer                           src/data/             │
 │  DataLoader · DataPreprocessor · FeatureEngineer            │
 │  ExternalRegressorLoader · HolidayCalendar                  │
-│  DataValidator · DemandCleanser                             │
+│  DataValidator · DemandCleanser · RegressorScreen            │
 ├─────────────────────────────────────────────────────────────┤
 │  Infrastructure                       src/fabric/ src/spark/│
 │  DeploymentOrchestrator · FabricLakehouse · DeltaWriter     │
@@ -85,7 +85,7 @@ forecasting-platform/
 │   ├── auth/               # RBAC, JWT authentication, role/permission models
 │   ├── backtesting/        # Walk-forward backtest engine, champion selection
 │   ├── config/             # YAML config schema + loader (incl. external regressor config)
-│   ├── data/               # Data loading, preprocessing, validation, demand cleansing, external regressors
+│   ├── data/               # Data loading, preprocessing, validation, demand cleansing, regressor screening, external regressors
 │   ├── evaluation/         # Metrics (WMAPE, RMSPE, bias, MAE) + evaluator
 │   ├── fabric/             # Microsoft Fabric / Delta Lake deployment
 │   ├── forecasting/        # Model implementations + registry (statistical, ML, neural, foundation, intermittent)
@@ -93,12 +93,12 @@ forecasting-platform/
 │   ├── metrics/            # MetricStore, drift detection, metric definitions, FVA computation
 │   ├── models/             # LightGBM + XGBoost wrappers (legacy)
 │   ├── overrides/          # Planner manual override store (DuckDB)
-│   ├── pipeline/           # End-to-end backtest + forecast pipelines
+│   ├── pipeline/           # End-to-end backtest + forecast pipelines, provenance manifest
 │   ├── series/             # Series builder, sparse detector, lifecycle transitions
 │   ├── sku_mapping/        # New/discontinued SKU mapping (4 methods + Bayesian fusion)
 │   ├── spark/              # PySpark distributed execution layer
 │   └── utils/              # Logger, config utilities
-├── tests/                  # 710+ unit + integration tests
+├── tests/                  # 760+ unit + integration tests
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
 ├── notebooks/              # Jupyter notebooks for exploration
@@ -201,6 +201,15 @@ Runs as the first step in `SeriesBuilder.build()` when `validation.enabled = Tru
 | `CleansingReport` | Counts: outliers, stockout periods/weeks, rows modified, per-series breakdown |
 
 Runs after gap-filling in `SeriesBuilder.build()` when `cleansing.enabled = True`. All statistics computed per-series (not globally). Supports period exclusion (e.g., COVID) with interpolate/drop/flag actions.
+
+#### RegressorScreen (pre-training feature quality)
+
+| Class/Dataclass | Description |
+|-----------------|-------------|
+| `screen_regressors()` | Screens external features before model training: zero/near-zero variance, high pairwise correlation, optional mutual information with target |
+| `RegressorScreenReport` | Result with `screened_columns`, `dropped_columns`, `low_variance_columns`, `high_correlation_pairs`, `low_mi_columns`, per-column stats |
+
+Runs after feature join in `SeriesBuilder.build()` when `external_regressors.screen.enabled = True`. Optionally auto-drops flagged columns (`auto_drop=True`).
 
 ### `src/auth/` — RBAC & Authentication
 
@@ -471,6 +480,10 @@ PySpark wrappers for large-scale runs on Fabric/Databricks:
 |-------|-------------|
 | `BacktestPipeline` | Wires `SeriesBuilder -> BacktestEngine -> MetricStore -> ChampionSelector` |
 | `ForecastPipeline` | Wires `SeriesBuilder -> champion model -> Reconciler -> OverrideStore -> BIExporter` |
+| `PipelineManifest` | Provenance sidecar for each forecast run: input data hash, cleansing/validation/screen summaries, config hash, champion model, output metadata |
+| `build_manifest()` | Collects provenance from SeriesBuilder reports into a single manifest |
+| `write_manifest()` | Writes manifest as JSON sidecar next to the forecast Parquet file |
+| `read_manifest()` | Loads manifest from JSON file |
 
 ---
 
@@ -492,12 +505,14 @@ from src.analytics.fva_analyzer import FVAAnalyzer
 from src.data.regressors import load_external_features, validate_regressors
 from src.data.validator import DataValidator
 from src.data.cleanser import DemandCleanser
+from src.data.regressor_screen import screen_regressors
 from src.forecasting.constrained import ConstrainedDemandEstimator
 from src.auth.models import User, Role, Permission
 from src.auth.token import create_token, decode_token
 from src.audit.logger import AuditLogger
 from src.overrides import OverrideStore
 from src.pipeline import BacktestPipeline, ForecastPipeline
+from src.pipeline.manifest import PipelineManifest, read_manifest
 
 # 1. Load and validate external features (promotions, holidays, price)
 ext_features = load_external_features("data/external_features.parquet")
@@ -587,6 +602,13 @@ forecast:
       - holiday_flag
       - price_index
     future_features_path: data/future_features.parquet
+    screen:                    # RegressorScreen
+      enabled: false
+      variance_threshold: 1.0e-6
+      correlation_threshold: 0.95
+      mi_enabled: false
+      mi_threshold: 0.01
+      auto_drop: true
   constraints:                # ConstrainedDemandEstimator
     enabled: false
     min_demand: 0.0
@@ -637,7 +659,7 @@ pip install -r forecasting-platform/requirements.txt
 python -m pytest forecasting-platform/tests/ \
   --ignore=forecasting-platform/tests/test_metrics.py \
   --ignore=forecasting-platform/tests/test_feature_engineering.py -v
-# 710+ tests collected
+# 760+ tests collected
 ```
 
 | Test file | Tests | Covers |
@@ -670,6 +692,8 @@ python -m pytest forecasting-platform/tests/ \
 | `test_hierarchy_aggregator.py` | 11 | Aggregation, disaggregation, proportions |
 | `test_data_integrity.py` | 9 | Data integrity checks |
 | `test_multi_horizon.py` | 8 | Multi-horizon forecast evaluation |
+| `test_regressor_screen.py` | 16 | Variance, correlation, MI screening; auto-drop; SeriesBuilder integration |
+| `test_pipeline_manifest.py` | 15 | Manifest build, write, read roundtrip; hash determinism; ForecastPipeline integration |
 | `test_external_regressors.py` | 6 | Regressor validation, SeriesBuilder with/without features |
 | `test_data_loader.py` | 6 | Data loading from files |
 | `test_evaluator.py` | 5 | Evaluation orchestration |
