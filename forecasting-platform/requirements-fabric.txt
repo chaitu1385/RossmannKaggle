@@ -1,0 +1,46 @@
+# ── Fabric-Compatible Dependencies ────────────────────────────────────────────
+#
+# Packages safe to `%pip install` in a Microsoft Fabric notebook.
+#
+# What's EXCLUDED (provided by Fabric's Spark runtime or unavailable):
+#   - pyspark          — provided by Fabric Spark runtime
+#   - delta-spark      — provided by Fabric Delta runtime
+#   - duckdb           — not in Fabric default env; platform falls back to Parquet
+#   - neuralforecast   — requires PyTorch (not in default env)
+#   - fastapi / uvicorn— REST API layer, not needed in Fabric notebooks
+#   - httpx            — test dependency for API testing
+#   - shap             — optional explainability, heavy native deps
+#   - pyspark          — already in runtime
+#
+# Azure SDKs (azure-identity, azure-storage-file-datalake) are provided by
+# the Fabric runtime — do NOT install them manually.
+#
+# Usage in a Fabric notebook cell:
+#   %pip install -r /lakehouse/default/Files/forecasting-platform/requirements-fabric.txt
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── Core ─────────────────────────────────────────────────────────────────────
+numpy>=1.21.0
+pandas>=1.3.0
+polars>=0.20.0
+pyyaml>=5.4.0
+
+# ── Forecasting (Nixtla stack) ───────────────────────────────────────────────
+statsforecast>=1.6.0
+mlforecast>=0.12.0
+hierarchicalforecast>=0.4.0
+
+# ── ML models ───────────────────────────────────────────────────────────────
+lightgbm>=3.3.0
+xgboost>=1.5.0
+scikit-learn>=1.0.0
+
+# ── String matching (SKU mapping) ───────────────────────────────────────────
+rapidfuzz>=3.0.0
+
+# ── Visualization ───────────────────────────────────────────────────────────
+matplotlib>=3.4.0
+seaborn>=0.11.0
+
+# ── Holiday calendars ───────────────────────────────────────────────────────
+holidays>=0.40

@@ -21,6 +21,8 @@ from ..config.schema import PlatformConfig
 from ..forecasting.ensemble import WeightedEnsembleForecaster
 from ..forecasting.registry import registry
 from ..metrics.store import MetricStore
+from ..observability.context import PipelineContext
+from ..observability.metrics import MetricsEmitter
 from ..series.builder import SeriesBuilder
 
 logger = logging.getLogger(__name__)
@@ -38,8 +40,14 @@ class BacktestPipeline:
     >>> results = pipeline.run(actuals_df)
     """
 
-    def __init__(self, config: PlatformConfig):
+    def __init__(self, config: PlatformConfig, context: Optional[PipelineContext] = None):
         self.config = config
+        self.context = context or PipelineContext(lob=config.lob)
+        self._emitter = MetricsEmitter(
+            backend=config.observability.metrics_backend,
+            context=self.context,
+            prefix=config.observability.metrics_prefix,
+        )
         self._series_builder = SeriesBuilder(config)
         self._metric_store = MetricStore(config.output.metrics_path)
         self._backtest_engine = BacktestEngine(config, self._metric_store)
@@ -66,18 +74,22 @@ class BacktestPipeline:
         """
         fc = self.config.forecast
 
+        run_id = self.context.run_id
+
         # Step 1: Build series
-        logger.info("Building model-ready series...")
-        series = self._series_builder.build(
-            actuals=actuals,
-            external_features=external_features,
-            product_master=product_master,
-            mapping_table=mapping_table,
-            forecast_origin=forecast_origin,
-            overrides=overrides,
-        )
-        logger.info("Series built: %d rows, %d series",
-                     len(series),
+        logger.info("[%s] Building model-ready series...", run_id)
+        with self._emitter.timer("series_build"):
+            series = self._series_builder.build(
+                actuals=actuals,
+                external_features=external_features,
+                product_master=product_master,
+                mapping_table=mapping_table,
+                forecast_origin=forecast_origin,
+                overrides=overrides,
+            )
+        self._emitter.gauge("series_count", float(series[fc.series_id_column].n_unique()))
+        logger.info("[%s] Series built: %d rows, %d series",
+                     run_id, len(series),
                      series[fc.series_id_column].n_unique())
 
         # Step 2: Instantiate forecasters from config (frequency-aware)
@@ -100,10 +112,12 @@ class BacktestPipeline:
             )
 
         # Step 3: Run backtesting
-        logger.info("Running backtesting (%d folds)...", self.config.backtest.n_folds)
-        results = self._backtest_engine.run(
-            series, forecasters, sparse_forecasters=sparse_forecasters
-        )
+        logger.info("[%s] Running backtesting (%d folds)...", run_id, self.config.backtest.n_folds)
+        with self._emitter.timer("backtest_run"):
+            results = self._backtest_engine.run(
+                series, forecasters, sparse_forecasters=sparse_forecasters
+            )
+        self._emitter.counter("backtest_folds_completed", self.config.backtest.n_folds)
 
         # Surface any model failures
         failures = self._backtest_engine.get_failure_summary()
@@ -183,7 +197,7 @@ class BacktestPipeline:
                     id_col=fc.series_id_column,
                 )
 
-        logger.info("Backtest pipeline complete.")
+        logger.info("[%s] Backtest pipeline complete.", run_id)
         return {
             "backtest_results": results,
             "champions": champions,

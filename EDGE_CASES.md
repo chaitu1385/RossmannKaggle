@@ -154,6 +154,33 @@ A catalog of the failure modes that break forecasting platforms — what goes wr
 
 ---
 
+## 16. Fabric Environment Restrictions
+
+**What happens:** Microsoft Fabric's default Spark runtime doesn't include DuckDB, neuralforecast/PyTorch, or certain Python packages. `pip install` in notebook cells is limited. The override store fails to initialize. Neural models can't be instantiated.
+
+**How the platform handles it:** The `get_override_store()` factory auto-detects DuckDB availability and falls back to `ParquetOverrideStore` (Polars read/write Parquet). The `requirements-fabric.txt` pins only packages safe to install in Fabric notebooks — it excludes `pyspark` (provided by runtime), `delta-spark` (provided), `duckdb`, `neuralforecast`, `shap`, `fastapi`. The `FabricNotebookAdapter` wraps all boilerplate (SparkSession, FabricLakehouse, config loading) into a one-liner. Optional dependency guards (`_HAS_STATSFORECAST`, `_HAS_NEURALFORECAST`) prevent import-time crashes.
+
+**What to watch for:** The Parquet override store doesn't support concurrent writes — if multiple notebooks write overrides simultaneously, last-write-wins. In production Fabric environments, use a single orchestrator notebook for override management. Also, `%pip install` in Fabric adds packages for the session only — they don't persist across cluster restarts. Pin your library env in the Fabric workspace settings for durable installs.
+
+---
+
+## 17. Parallel Execution Failures
+
+**What happens:** A worker process in `BatchInferenceRunner` or parallel backtest crashes — out of memory, model convergence failure, or serialization error. Partial results exist for some batches but not others. The pipeline appears to succeed but with missing series in the output.
+
+**How the platform handles it:** The `BatchInferenceRunner` and parallel backtest engine catch per-batch/per-model exceptions individually using `concurrent.futures.as_completed()`. Failed batches are logged as errors but don't crash the entire run — successful batches are still collected and concatenated. The `BacktestEngine` records failures in `self._failures` with model name, fold, error type, and message. The `get_failure_summary()` method returns these as a DataFrame for reporting. Data is serialized as Polars IPC bytes for safe inter-process transfer.
+
+**What to watch for:** A silently failed batch means some series are missing from the output. Always check `engine.failures` after a parallel backtest run and compare the number of output series against the input. Memory pressure is the most common cause — each worker loads a full copy of the model plus its batch data. If you see OOM errors, reduce `batch_size` or `n_workers`. For models that aren't pickle-safe (e.g., those with live database connections), the parallel path will fail — use `n_workers=1` as a safe fallback.
+
+---
+
+## 18. Stale Alerts from Drift Detection
+
+**What happens:** The `AlertDispatcher` fires drift alerts based on `ForecastDriftDetector` output, but the alerts reflect a temporary data anomaly (late data delivery, one-off holiday effect) rather than genuine model degradation. The operations team gets paged for a non-issue, learns to ignore alerts, and then misses a real drift event.
+
+**How the platform handles it:** The `AlertConfig` has a `min_severity` filter — set to `"critical"` to suppress warning-level alerts. The `ForecastDriftDetector` uses configurable `baseline_weeks` and `recent_weeks` windows, so transient spikes in a 1-week window don't trigger alerts if the baseline window is 12+ weeks. The alert payload includes `current_value` and `baseline_value`, enabling downstream filtering rules. The `AlertDispatcher` counts dispatched alerts via `dispatched_count` for monitoring alert volume.
+
+**What to watch for:** Alert fatigue is a serious operational risk. Start with `min_severity: critical` and only drop to `warning` once you've tuned the drift detection thresholds for your data. Set `baseline_weeks` to at least 8-12 to absorb seasonal variation. Monitor `dispatched_count` — if it exceeds a few per week, your thresholds are too sensitive. Consider adding a cooldown period (not yet built-in) where the same series can't trigger the same alert type within N days.
 ## 16. Claude API Unavailability (AI Features)
 
 **What happens:** The Anthropic API is unreachable — no API key configured, network timeout, rate limiting, or the `anthropic` package is not installed. All four AI endpoints (`/ai/explain`, `/ai/triage`, `/ai/recommend-config`, `/ai/commentary`) would fail if they depended on a live API call.

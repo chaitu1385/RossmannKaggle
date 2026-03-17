@@ -12,11 +12,14 @@ from typing import Any, Dict, Optional
 import yaml
 
 from .schema import (
+    AlertConfig,
     BacktestConfig,
     ExternalRegressorConfig,
     ForecastConfig,
     HierarchyConfig,
+    ObservabilityConfig,
     OutputConfig,
+    ParallelismConfig,
     PlatformConfig,
     ReconciliationConfig,
     TransitionConfig,
@@ -108,6 +111,36 @@ def _dict_to_config(d: Dict[str, Any]) -> PlatformConfig:
         format=out_raw.get("format", "parquet"),
     )
 
+    # ── Parallelism config ───────────────────────────────────────────────
+    par_raw = d.get("parallelism", {})
+    parallelism = ParallelismConfig(
+        backend=par_raw.get("backend", "local"),
+        n_workers=par_raw.get("n_workers", -1),
+        n_jobs_statsforecast=par_raw.get("n_jobs_statsforecast", -1),
+        num_threads_mlforecast=par_raw.get("num_threads_mlforecast", -1),
+        batch_size=par_raw.get("batch_size", 0),
+        gpu=par_raw.get("gpu", False),
+    )
+
+    # ── Observability config ──────────────────────────────────────────────
+    obs_raw = d.get("observability", {})
+    alert_raw = obs_raw.get("alerts", {})
+    observability = ObservabilityConfig(
+        log_format=obs_raw.get("log_format", "text"),
+        log_level=obs_raw.get("log_level", "INFO"),
+        metrics_backend=obs_raw.get("metrics_backend", "log"),
+        statsd_host=obs_raw.get("statsd_host", "localhost"),
+        statsd_port=obs_raw.get("statsd_port", 8125),
+        metrics_prefix=obs_raw.get("metrics_prefix", "forecast_platform"),
+        cost_per_second=obs_raw.get("cost_per_second", 0.0),
+        alerts=AlertConfig(
+            channels=alert_raw.get("channels", ["log"]),
+            webhook_url=alert_raw.get("webhook_url", ""),
+            min_severity=alert_raw.get("min_severity", "warning"),
+            webhook_timeout=alert_raw.get("webhook_timeout", 10),
+        ),
+    )
+
     return PlatformConfig(
         lob=d.get("lob", "default"),
         description=d.get("description", ""),
@@ -117,6 +150,8 @@ def _dict_to_config(d: Dict[str, Any]) -> PlatformConfig:
         backtest=backtest,
         transition=transition,
         output=output,
+        parallelism=parallelism,
+        observability=observability,
         metrics=d.get("metrics", ["wmape", "normalized_bias"]),
     )
 

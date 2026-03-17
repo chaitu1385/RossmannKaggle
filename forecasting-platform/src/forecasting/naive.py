@@ -64,45 +64,52 @@ class SeasonalNaiveForecaster(BaseForecaster):
         id_col: str = "series_id",
         time_col: str = "week",
     ) -> pl.DataFrame:
-        results = []
+        sl = self.season_length
+        freq = self.frequency
 
-        for series_id in self._fitted_data[self._id_col].unique().to_list():
-            series = (
-                self._fitted_data
-                .filter(pl.col(self._id_col) == series_id)
-                .sort(self._time_col)
-            )
-
-            values = series[self._target_col].to_list()
-            max_date = series[self._time_col].max()
+        def _predict_group(group_df: pl.DataFrame) -> pl.DataFrame:
+            """Vectorized predict for a single series group."""
+            sorted_df = group_df.sort(self._time_col)
+            values = sorted_df[self._target_col].to_list()
+            max_date = sorted_df[self._time_col].max()
+            series_id_val = sorted_df[self._id_col][0]
 
             if len(values) == 0 or max_date is None:
-                continue
-
-            # Build forecasts by cycling through seasonal history
-            n = len(values)
-            forecasts = []
-            for h in range(1, horizon + 1):
-                # Index into the seasonal cycle
-                idx = n - self.season_length + ((h - 1) % self.season_length)
-                if idx < 0:
-                    idx = (h - 1) % n  # fallback for short series
-                val = values[idx] if 0 <= idx < n else 0.0
-                forecast_date = max_date + freq_timedelta(self.frequency, h)
-                forecasts.append({
-                    id_col: series_id,
-                    time_col: forecast_date,
-                    "forecast": float(val),
+                return pl.DataFrame(schema={
+                    id_col: pl.Utf8, time_col: pl.Date, "forecast": pl.Float64
                 })
 
-            results.extend(forecasts)
+            n = len(values)
+            # Pre-compute all forecast values using numpy for speed
+            h_range = np.arange(1, horizon + 1)
+            indices = n - sl + ((h_range - 1) % sl)
 
-        if not results:
+            # Handle short series: where idx < 0, use cyclic fallback
+            short_mask = indices < 0
+            indices[short_mask] = (h_range[short_mask] - 1) % n
+
+            # Clip to valid range and extract values
+            indices = np.clip(indices, 0, n - 1)
+            vals_array = np.array(values, dtype=np.float64)
+            forecast_vals = vals_array[indices]
+
+            # Build date array
+            dates = [max_date + freq_timedelta(freq, int(h)) for h in h_range]
+
+            return pl.DataFrame({
+                id_col: [series_id_val] * horizon,
+                time_col: dates,
+                "forecast": forecast_vals.tolist(),
+            })
+
+        # Use map_groups for vectorized per-series prediction
+        if len(self._fitted_data) == 0:
             return pl.DataFrame(schema={
                 id_col: pl.Utf8, time_col: pl.Date, "forecast": pl.Float64
             })
 
-        return pl.DataFrame(results)
+        results = self._fitted_data.group_by(self._id_col).map_groups(_predict_group)
+        return results
 
     def predict_quantiles(
         self,
