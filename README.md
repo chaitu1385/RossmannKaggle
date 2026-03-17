@@ -98,7 +98,7 @@ forecasting-platform/
 │   ├── sku_mapping/        # New/discontinued SKU mapping (4 methods + Bayesian fusion)
 │   ├── spark/              # PySpark distributed execution layer
 │   └── utils/              # Logger, config utilities
-├── tests/                  # 760+ unit + integration tests
+├── tests/                  # 790+ unit + integration tests
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
 ├── notebooks/              # Jupyter notebooks for exploration
@@ -590,7 +590,8 @@ audit.log(AuditEvent(action="promote_model", resource_type="model_card",
 lob: retail
 
 forecast:
-  horizon_weeks: 39          # default; override per LOB
+  frequency: W               # D | W | M | Q (drives season_length, lags, etc.)
+  horizon_weeks: 39          # periods; use horizon_periods for clarity
   forecasters: [lgbm_direct, auto_ets, seasonal_naive]
   quantiles: [0.1, 0.5, 0.9]
   sparse_detection: true
@@ -659,7 +660,7 @@ pip install -r forecasting-platform/requirements.txt
 python -m pytest forecasting-platform/tests/ \
   --ignore=forecasting-platform/tests/test_metrics.py \
   --ignore=forecasting-platform/tests/test_feature_engineering.py -v
-# 760+ tests collected
+# 790+ tests collected
 ```
 
 | Test file | Tests | Covers |
@@ -672,6 +673,7 @@ python -m pytest forecasting-platform/tests/ \
 | `test_nixtla_models.py` | 29 | AutoTheta, MSTL extended statsforecast models |
 | `test_data_analyzer.py` | 29 | Data analysis module |
 | `test_forecastability.py` | 28 | Forecastability signals and scoring |
+| `test_frequency_profiles.py` | 25 | Multi-frequency support: FREQUENCY_PROFILES, helpers, config properties, model frequency wiring |
 | `test_causal_analyzer.py` | 27 | Causal/econometric analysis |
 | `test_probabilistic_ensemble.py` | 24 | Ensemble quantiles, weight computation, config |
 | `test_demand_cleansing.py` | 24 | Outlier detection, stockout imputation, period exclusion, CleansingReport |

@@ -8,7 +8,100 @@ hard-coded to a specific LOB.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from datetime import timedelta
+from typing import Any, Dict, List, Optional
+
+
+# ---------------------------------------------------------------------------
+# Frequency profiles — single source of truth for frequency-dependent defaults
+# ---------------------------------------------------------------------------
+# Each supported frequency maps to a profile dict containing:
+#   season_length     — primary seasonal cycle length in periods
+#   secondary_season  — optional secondary cycle (e.g. yearly for daily data)
+#   default_lags      — lag set for ML models
+#   min_series_length  — minimum history length (periods) to train on
+#   default_val_periods — default backtest validation window (periods)
+#   default_horizon    — default forecast horizon (periods)
+#   statsforecast_freq — freq string accepted by statsforecast / neuralforecast
+#   timedelta_kwargs   — kwargs for datetime.timedelta representing one period
+# ---------------------------------------------------------------------------
+FREQUENCY_PROFILES: Dict[str, Dict[str, Any]] = {
+    "D": {
+        "season_length": 7,
+        "secondary_season": 365,
+        "default_lags": [1, 2, 3, 7, 14, 21, 28, 56, 91, 182, 364],
+        "min_series_length": 90,
+        "default_val_periods": 28,
+        "default_horizon": 90,
+        "statsforecast_freq": "D",
+        "timedelta_kwargs": {"days": 1},
+    },
+    "W": {
+        "season_length": 52,
+        "secondary_season": None,
+        "default_lags": [1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 16, 20, 26, 52],
+        "min_series_length": 52,
+        "default_val_periods": 13,
+        "default_horizon": 39,
+        "statsforecast_freq": "W",
+        "timedelta_kwargs": {"weeks": 1},
+    },
+    "M": {
+        "season_length": 12,
+        "secondary_season": None,
+        "default_lags": [1, 2, 3, 6, 12],
+        "min_series_length": 24,
+        "default_val_periods": 3,
+        "default_horizon": 12,
+        "statsforecast_freq": "MS",
+        "timedelta_kwargs": {"days": 30},
+    },
+    "Q": {
+        "season_length": 4,
+        "secondary_season": None,
+        "default_lags": [1, 2, 4, 8],
+        "min_series_length": 8,
+        "default_val_periods": 2,
+        "default_horizon": 8,
+        "statsforecast_freq": "QS",
+        "timedelta_kwargs": {"days": 91},
+    },
+}
+
+
+def get_frequency_profile(freq: str) -> Dict[str, Any]:
+    """Look up the frequency profile; raise on unknown frequency.
+
+    Parameters
+    ----------
+    freq : str
+        One of ``"D"``, ``"W"``, ``"M"``, ``"Q"``.
+
+    Returns
+    -------
+    dict
+        Profile dict with season_length, default_lags, statsforecast_freq, etc.
+    """
+    if freq not in FREQUENCY_PROFILES:
+        raise ValueError(
+            f"Unsupported frequency {freq!r}. "
+            f"Choose from: {sorted(FREQUENCY_PROFILES)}"
+        )
+    return FREQUENCY_PROFILES[freq]
+
+
+def freq_timedelta(freq: str, periods: int = 1) -> timedelta:
+    """Return a ``timedelta`` for *periods* steps at the given frequency.
+
+    Parameters
+    ----------
+    freq : str
+        One of ``"D"``, ``"W"``, ``"M"``, ``"Q"``.
+    periods : int
+        Number of periods (default 1).
+    """
+    kwargs = get_frequency_profile(freq)["timedelta_kwargs"]
+    return timedelta(**{k: v * periods for k, v in kwargs.items()})
 
 
 @dataclass
@@ -87,9 +180,18 @@ class ConstraintConfig:
 
 @dataclass
 class ForecastConfig:
-    """Forecast horizon and model selection."""
-    horizon_weeks: int = 39              # 9 months
-    frequency: str = "W"                 # weekly
+    """Forecast horizon and model selection.
+
+    The ``frequency`` field (``"D"``, ``"W"``, ``"M"``, ``"Q"``) drives
+    downstream defaults — season length, ML lags, statsforecast freq string,
+    backtest window sizing, and date arithmetic.  See :data:`FREQUENCY_PROFILES`.
+
+    ``horizon_weeks`` is kept for backward-compatible YAML loading; it
+    represents *periods* regardless of frequency.  Use the
+    :pyattr:`horizon_periods` alias for clarity.
+    """
+    horizon_weeks: int = 39              # periods (name kept for YAML compat)
+    frequency: str = "W"                 # "D" | "W" | "M" | "Q"
     target_column: str = "quantity"
     time_column: str = "week"
     series_id_column: str = "series_id"  # unique key per time series
@@ -115,6 +217,28 @@ class ForecastConfig:
         default_factory=ConstraintConfig
     )
 
+    # -- Computed helpers (not stored in YAML) --
+
+    @property
+    def horizon_periods(self) -> int:
+        """Alias for ``horizon_weeks`` (periods, frequency-agnostic)."""
+        return self.horizon_weeks
+
+    @property
+    def season_length(self) -> int:
+        """Primary seasonal cycle length derived from ``frequency``."""
+        return get_frequency_profile(self.frequency)["season_length"]
+
+    @property
+    def statsforecast_freq(self) -> str:
+        """Frequency string accepted by statsforecast / neuralforecast."""
+        return get_frequency_profile(self.frequency)["statsforecast_freq"]
+
+    @property
+    def default_lags(self) -> List[int]:
+        """Default ML lag set for the configured frequency."""
+        return list(get_frequency_profile(self.frequency)["default_lags"])
+
 
 @dataclass
 class HorizonBucket:
@@ -126,15 +250,31 @@ class HorizonBucket:
 
 @dataclass
 class BacktestConfig:
-    """Walk-forward cross-validation settings."""
+    """Walk-forward cross-validation settings.
+
+    ``val_weeks`` and ``gap_weeks`` represent *periods* (not calendar weeks)
+    when the platform runs at non-weekly frequencies.  Names are kept for
+    backward-compatible YAML loading; use :pyattr:`val_periods` /
+    :pyattr:`gap_periods` aliases for clarity.
+    """
     n_folds: int = 3
-    val_weeks: int = 13                  # each fold validates on 13 weeks
-    gap_weeks: int = 0                   # gap between train end and val start
+    val_weeks: int = 13                  # periods per fold (name kept for compat)
+    gap_weeks: int = 0                   # gap periods between train end and val start
     champion_granularity: str = "lob"    # "lob" | "product_group" | "series"
     primary_metric: str = "wmape"
     secondary_metric: str = "normalized_bias"
     selection_strategy: str = "champion" # "champion" | "weighted_ensemble"
     horizon_buckets: List[HorizonBucket] = field(default_factory=list)  # empty = single champion
+
+    @property
+    def val_periods(self) -> int:
+        """Alias for ``val_weeks`` (periods, frequency-agnostic)."""
+        return self.val_weeks
+
+    @property
+    def gap_periods(self) -> int:
+        """Alias for ``gap_weeks`` (periods, frequency-agnostic)."""
+        return self.gap_weeks
 
 
 @dataclass
@@ -207,12 +347,21 @@ class DataQualityReportConfig:
 
 @dataclass
 class DataQualityConfig:
-    """Data quality and preprocessing settings."""
-    fill_gaps: bool = True               # fill missing weeks with fill_value
+    """Data quality and preprocessing settings.
+
+    ``min_series_length_weeks`` represents *periods* (not calendar weeks)
+    when the platform runs at non-weekly frequencies.
+    """
+    fill_gaps: bool = True               # fill missing periods with fill_value
     fill_value: float = 0.0              # value to use for gap-filling
-    min_series_length_weeks: int = 52    # drop series shorter than this
+    min_series_length_weeks: int = 52    # periods (name kept for YAML compat)
     drop_zero_series: bool = False       # drop series with all-zero target
-    validate_frequency: bool = False     # if True, raise on non-weekly gaps
+    validate_frequency: bool = False     # if True, raise on inconsistent intervals
+
+    @property
+    def min_series_length(self) -> int:
+        """Alias for ``min_series_length_weeks`` (periods, frequency-agnostic)."""
+        return self.min_series_length_weeks
     validation: ValidationConfig = field(default_factory=ValidationConfig)
     cleansing: CleansingConfig = field(default_factory=CleansingConfig)
     structural_breaks: StructuralBreakConfig = field(default_factory=StructuralBreakConfig)

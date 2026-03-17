@@ -7,12 +7,12 @@ horizon vector.  Uses LightGBM or XGBoost as the underlying learner.
 Falls back to a direct manual implementation if mlforecast is not installed.
 """
 
-from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 import numpy as np
 import polars as pl
 
+from ..config.schema import FREQUENCY_PROFILES, freq_timedelta, get_frequency_profile
 from .base import BaseForecaster
 from .feature_manager import MLForecastFeatureManager
 from .registry import registry
@@ -34,10 +34,8 @@ class _DirectMLBase(BaseForecaster):
     manually in Polars.
     """
 
-    # Default lags: dense short-horizon + seasonal multiples.
-    # Lag-52 provides direct year-ago signal; week_of_year date feature
-    # captures cyclical pattern.  Rolling windows capped at 26 to preserve
-    # training rows on shorter histories.
+    # Default lags for weekly frequency — used when lags=None and frequency="W".
+    # For other frequencies the profile default is used instead.
     DEFAULT_LAGS = [1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 16, 20, 26, 52]
 
     def __init__(
@@ -46,9 +44,12 @@ class _DirectMLBase(BaseForecaster):
         lag_transforms: Optional[Dict] = None,
         num_threads: int = 1,
         freq: Optional[str] = None,
+        frequency: str = "W",
         **kwargs,
     ):
-        self.lags = lags or self.DEFAULT_LAGS
+        self.frequency = frequency
+        profile = get_frequency_profile(frequency)
+        self.lags = lags or list(profile["default_lags"])
         self.lag_transforms = lag_transforms or self._default_lag_transforms()
         self.num_threads = num_threads
         self._freq = freq  # auto-detected from data if None
@@ -154,36 +155,50 @@ class _DirectMLBase(BaseForecaster):
         """Extract quarter as an integer feature."""
         return dates.quarter
 
-    @staticmethod
-    def _detect_weekly_freq(df, time_col: str) -> str:
-        """Detect the pandas-compatible weekly frequency from data dates.
+    def _detect_freq(self, df, time_col: str) -> str:
+        """Detect the pandas-compatible frequency string from data dates.
 
-        Polars ``truncate("1w")`` produces Monday-start weeks, but pandas
-        ``"W"`` anchors on Sunday.  Using the wrong anchor shifts all date
-        features and predicted dates.  This helper infers the correct
-        ``W-<DAY>`` offset from the actual dates in the data.
+        For weekly data, infers the correct ``W-<DAY>`` anchor from actual
+        dates.  For other frequencies, returns the statsforecast freq string
+        from the frequency profile.
         """
+        profile = get_frequency_profile(self.frequency)
+        if self.frequency != "W":
+            return profile["statsforecast_freq"]
         dates = df[time_col].unique().sort()
         if len(dates) < 2:
             return "W"
-        # Use the weekday of the first date as the anchor
         first_date = dates[0]
         if hasattr(first_date, "weekday"):
             day_name = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"][first_date.weekday()]
             return f"W-{day_name}"
         return "W"
 
+    def _get_date_features(self):
+        """Return date feature extractors appropriate for the frequency."""
+        features = [self._month, self._quarter]
+        if self.frequency in ("D", "W"):
+            features.append(self._week_of_year)
+        if self.frequency == "D":
+            features.append(self._day_of_week)
+        return features
+
+    @staticmethod
+    def _day_of_week(dates):
+        """Extract day-of-week (0=Mon … 6=Sun) as an integer feature."""
+        return dates.weekday
+
     def _fit_mlforecast(self, df, target_col, time_col, id_col):
         train_pdf = self._feature_mgr.prepare_fit(df, id_col, time_col, target_col)
 
-        freq = self._freq or self._detect_weekly_freq(df, time_col)
+        freq = self._freq or self._detect_freq(df, time_col)
 
         self._mlf = MLForecast(
             models=[self._get_learner()],
             freq=freq,
             lags=self.lags,
             lag_transforms=self.lag_transforms,
-            date_features=[self._month, self._quarter, self._week_of_year],
+            date_features=self._get_date_features(),
             num_threads=self.num_threads,
         )
 
@@ -285,7 +300,7 @@ class _DirectMLBase(BaseForecaster):
                 freq=freq,
                 lags=self.lags,
                 lag_transforms=self.lag_transforms,
-                date_features=[self._month, self._quarter, self._week_of_year],
+                date_features=self._get_date_features(),
                 num_threads=self.num_threads,
             )
             mlf_q.fit(self._feature_mgr.train_pdf, validate_data=False)
@@ -322,7 +337,7 @@ class _DirectMLBase(BaseForecaster):
             )
             values = series[self._target_col].to_list()
             n = len(values)
-            sl = 52
+            sl = get_frequency_profile(self.frequency)["season_length"]
             residuals = [
                 values[i] - values[i - sl]
                 for i in range(sl, n)
@@ -360,14 +375,15 @@ class _DirectMLBase(BaseForecaster):
 
             # Simple: use last season_length values cyclically
             n = len(values)
+            sl = get_frequency_profile(self.frequency)["season_length"]
             for h in range(1, horizon + 1):
-                idx = n - 52 + ((h - 1) % 52)
+                idx = n - sl + ((h - 1) % sl)
                 if idx < 0:
                     idx = max(0, n - 1)
                 val = values[min(idx, n - 1)]
                 results.append({
                     id_col: sid,
-                    time_col: max_date + timedelta(weeks=h),
+                    time_col: max_date + freq_timedelta(self.frequency, h),
                     "forecast": float(val),
                 })
 

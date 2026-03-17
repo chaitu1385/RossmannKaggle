@@ -148,7 +148,13 @@ class DataAnalyzer:
         hierarchy = self.detect_hierarchy(df, schema)
 
         # 3. Forecastability assessment
-        fa = ForecastabilityAnalyzer(season_length=self.season_length)
+        # Use detected frequency to set the correct season_length
+        try:
+            from ..config.schema import get_frequency_profile
+            _detected_sl = get_frequency_profile(schema.frequency_guess)["season_length"]
+        except (ValueError, KeyError):
+            _detected_sl = self.season_length
+        fa = ForecastabilityAnalyzer(season_length=_detected_sl)
         # Build series_id from id_columns if needed
         analysis_df, sid_col = self._prepare_analysis_df(df, schema)
         forecastability = fa.analyze(analysis_df, schema.target_column,
@@ -597,17 +603,30 @@ class DataAnalyzer:
         """Build a PlatformConfig tailored to the data characteristics."""
         reasoning: List[str] = []
 
-        # Data length in weeks
+        # Data length in periods (frequency-aware)
+        freq = schema.frequency_guess
+        try:
+            from ..config.schema import get_frequency_profile
+            profile = get_frequency_profile(freq)
+        except ValueError:
+            from ..config.schema import FREQUENCY_PROFILES
+            profile = FREQUENCY_PROFILES["W"]
+            freq = "W"
+
         try:
             d0 = date.fromisoformat(schema.date_range[0][:10])
             d1 = date.fromisoformat(schema.date_range[1][:10])
-            data_weeks = (d1 - d0).days // 7
+            td_kwargs = profile["timedelta_kwargs"]
+            period_days = sum(v * (7 if k == "weeks" else 1) for k, v in td_kwargs.items())
+            data_periods = max(1, (d1 - d0).days // period_days)
         except (ValueError, IndexError):
-            data_weeks = 52
+            data_periods = profile["min_series_length"]
+        data_weeks = data_periods  # backward-compat alias for threshold logic
 
         # ----- Forecast config ----- #
-        horizon = min(13, max(4, data_weeks // 4))
-        reasoning.append(f"Horizon set to {horizon} weeks (data_length / 4, capped at 13)")
+        default_horizon = profile["default_horizon"]
+        horizon = min(default_horizon, max(profile["default_val_periods"], data_periods // 4))
+        reasoning.append(f"Horizon set to {horizon} periods (freq={freq!r}, data_length / 4, capped at {default_horizon})")
 
         # Model selection based on forecastability and data characteristics
         forecasters = ["naive_seasonal"]

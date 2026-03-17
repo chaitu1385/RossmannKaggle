@@ -40,11 +40,11 @@ Usage
 
 import logging
 import os
-from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 import polars as pl
 
+from ..config.schema import freq_timedelta, get_frequency_profile
 from .base import BaseForecaster
 from .registry import registry
 
@@ -92,11 +92,13 @@ class ChronosForecaster(BaseForecaster):
         device: str = "cpu",
         num_samples: int = 20,
         torch_dtype: str = "bfloat16",
+        frequency: str = "W",
     ):
         self.model_name = model_name
         self.device = device
         self.num_samples = num_samples
         self.torch_dtype = torch_dtype
+        self.frequency = frequency
 
         self._pipeline: Optional[Any] = None          # lazy-loaded on first predict
         self._context: Dict[str, List[float]] = {}    # series_id → historical values
@@ -253,7 +255,7 @@ class ChronosForecaster(BaseForecaster):
             series_samples = samples_np[i]
 
             for h in range(horizon):
-                forecast_date = last_date + timedelta(weeks=h + 1)
+                forecast_date = last_date + freq_timedelta(self.frequency, h + 1)
                 row: Dict[str, Any] = {id_col: sid, time_col: forecast_date}
 
                 if quantiles is None:
@@ -302,9 +304,11 @@ class TimeGPTForecaster(BaseForecaster):
         self,
         api_key: Optional[str] = None,
         model: str = "timegpt-1",
+        frequency: str = "W",
     ):
         self.api_key = api_key or os.environ.get("NIXTLA_API_KEY", "")
         self.model = model
+        self.frequency = frequency
 
         self._client: Optional[Any] = None          # lazy-initialised
         self._train_df: Optional[pl.DataFrame] = None  # stored as Polars; converted on API call
@@ -431,7 +435,7 @@ class TimeGPTForecaster(BaseForecaster):
         kwargs: Dict[str, Any] = {
             "df": train_pdf,
             "h": horizon,
-            "freq": "W",
+            "freq": get_frequency_profile(self.frequency)["statsforecast_freq"],
             "model": self.model,
             "time_col": "ds",
             "target_col": "y",

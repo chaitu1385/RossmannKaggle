@@ -66,7 +66,7 @@ forecasting-platform/
 │   ├── sku_mapping/        # New/discontinued SKU mapping
 │   ├── spark/              # PySpark distributed execution
 │   └── analytics/          # BI export, comparators, explainability, governance, FVA
-├── tests/                  # 760+ tests (pytest)
+├── tests/                  # 790+ tests (pytest)
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
 └── notebooks/              # Jupyter notebooks for exploration
@@ -95,13 +95,28 @@ YAML-driven config system with dataclass schema validation:
 
 Key config dataclasses: `ForecastConfig`, `BacktestConfig`, `DataQualityConfig` (contains `ValidationConfig`, `CleansingConfig`), `ConstraintConfig`, `ExternalRegressorConfig` (contains `RegressorScreenConfig`)
 
+### Multi-frequency support
+
+The platform supports daily (`"D"`), weekly (`"W"`), monthly (`"M"`), and quarterly (`"Q"`) data frequencies. The `FREQUENCY_PROFILES` dict in `src/config/schema.py` is the single source of truth, mapping each frequency to: `season_length`, `default_lags`, `min_series_length`, `default_val_periods`, `default_horizon`, `statsforecast_freq`, and `timedelta_kwargs`.
+
+Set `frequency` in the YAML config:
+```yaml
+forecast:
+  frequency: "M"          # "D" | "W" | "M" | "Q"
+  horizon_periods: 12     # alias for horizon_weeks (backward-compat)
+backtest:
+  val_periods: 3          # alias for val_weeks (backward-compat)
+```
+
+Helper functions: `get_frequency_profile(freq)` returns the profile dict; `freq_timedelta(freq, periods)` returns a `timedelta` for date arithmetic. All models, backtesting, validation, and data processing use these instead of hardcoded weekly values.
+
 ## Testing
 
 - Framework: pytest
 - Test files mirror source structure with `test_` prefix
 - Helper fixtures use `_make_*` factory functions (e.g., `_make_weekly_actuals`)
 - Skip `test_metrics.py` and `test_feature_engineering.py` (legacy/slow)
-- 760+ tests across 32 test files
+- 790+ tests across 32 test files
 - Key test modules: `test_platform.py` (85 tests), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55)
 
 ## Key Dependencies

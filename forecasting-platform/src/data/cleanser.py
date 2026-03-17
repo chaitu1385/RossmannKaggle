@@ -11,7 +11,7 @@ from typing import List
 
 import polars as pl
 
-from ..config.schema import CleansingConfig
+from ..config.schema import CleansingConfig, get_frequency_profile
 
 
 # --------------------------------------------------------------------------- #
@@ -314,10 +314,15 @@ class DemandCleanser:
         time_col: str,
         value_col: str,
         sid_col: str,
+        frequency: str = "W",
     ) -> pl.DataFrame:
-        """Replace stockout zeros with same-week-prior-year value."""
+        """Replace stockout zeros with same-period-prior-year value."""
+        sl = get_frequency_profile(frequency)["season_length"]
+        td_kwargs = get_frequency_profile(frequency)["timedelta_kwargs"]
+        seasonal_lookback = {k: v * sl for k, v in td_kwargs.items()}
+        one_period = td_kwargs
         df = df.with_columns(
-            (pl.col(time_col) - pl.duration(weeks=52)).alias("_lookup_date"),
+            (pl.col(time_col) - pl.duration(**seasonal_lookback)).alias("_lookup_date"),
         )
 
         lookup = df.select(
@@ -328,15 +333,15 @@ class DemandCleanser:
 
         df = df.join(lookup, on=[sid_col, "_lookup_date"], how="left")
 
-        # Fall back to ±1 week neighbors from prior year
+        # Fall back to ±1 period neighbors from prior year
         lookup_minus1 = df.select(
             pl.col(sid_col),
-            (pl.col(time_col) + pl.duration(weeks=1)).alias("_lookup_date"),
+            (pl.col(time_col) + pl.duration(**one_period)).alias("_lookup_date"),
             pl.col(value_col).alias("_py_minus1"),
         )
         lookup_plus1 = df.select(
             pl.col(sid_col),
-            (pl.col(time_col) - pl.duration(weeks=1)).alias("_lookup_date"),
+            (pl.col(time_col) - pl.duration(**one_period)).alias("_lookup_date"),
             pl.col(value_col).alias("_py_plus1"),
         )
 

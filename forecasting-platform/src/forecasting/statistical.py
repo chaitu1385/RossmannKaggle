@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 
 import polars as pl
 
+from ..config.schema import get_frequency_profile
 from .base import BaseForecaster
 from .registry import registry
 
@@ -36,7 +37,11 @@ class _StatsforecastBase(BaseForecaster):
     and maps columns to the expected ``unique_id / ds / y`` schema.
     """
 
-    def __init__(self, season_length: int = 52):
+    def __init__(self, season_length: int = 52, frequency: str = "W"):
+        self.frequency = frequency
+        profile = get_frequency_profile(frequency)
+        if season_length == 52 and frequency != "W":
+            season_length = profile["season_length"]
         self.season_length = season_length
         self._sf: Optional[Any] = None
         self._id_col: str = "series_id"
@@ -74,7 +79,7 @@ class _StatsforecastBase(BaseForecaster):
         model = self._get_model()
         self._sf = StatsForecast(
             models=[model],
-            freq="W",
+            freq=get_frequency_profile(self.frequency)["statsforecast_freq"],
             n_jobs=1,
         )
         self._sf.fit(pdf)
@@ -220,8 +225,9 @@ class AutoThetaForecaster(_StatsforecastBase):
         self,
         season_length: int = 52,
         decomposition_type: str = "multiplicative",
+        frequency: str = "W",
     ):
-        super().__init__(season_length=season_length)
+        super().__init__(season_length=season_length, frequency=frequency)
         self.decomposition_type = decomposition_type
 
     def _get_model(self):
@@ -265,8 +271,9 @@ class MSTLForecaster(_StatsforecastBase):
         self,
         season_length: int = 52,
         secondary_season_length: Optional[int] = None,
+        frequency: str = "W",
     ):
-        super().__init__(season_length=season_length)
+        super().__init__(season_length=season_length, frequency=frequency)
         self.secondary_season_length = secondary_season_length
 
     def _get_model(self):
