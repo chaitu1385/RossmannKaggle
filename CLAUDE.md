@@ -130,5 +130,7 @@ When adding a new module or capability, update these files:
 
 1. **`README.md`** (root) — Add module docs (class table, description). Update test count and dependency list if changed.
 2. **`CLAUDE.md`** (root) — Update architecture tree. Update test count. Add new config dataclasses if applicable.
+3. **`CONCEPTS.md`** (root) — Add a concept entry if the feature introduces a new "why" that non-domain-experts need to understand (3-4 sentences: what, why, when).
+4. **`EDGE_CASES.md`** (root) — Add an entry if the feature handles a new failure mode (what happens, how we handle it, what to watch for).
 
-These are the only two documentation files in the repo. All other docs (plans, specs, analyses) are transient working documents — delete them once the work is merged.
+These are the only documentation files in the repo. All other docs (plans, specs, analyses) are transient working documents — delete them once the work is merged.

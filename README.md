@@ -2,6 +2,8 @@
 
 A production-grade, modular weekly sales forecasting platform. Covers the full lifecycle from raw data ingestion to hierarchically reconciled, explained, and governed forecasts — with a REST API, Microsoft Fabric/Delta Lake deployment layer, Spark distributed execution, and S&OP exception management.
 
+**See also:** [CONCEPTS.md](CONCEPTS.md) — why each component exists and when to use it | [EDGE_CASES.md](EDGE_CASES.md) — failure modes and how the platform handles them
+
 ---
 
 ## System Layers
