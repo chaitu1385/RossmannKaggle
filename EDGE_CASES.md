@@ -181,10 +181,33 @@ A catalog of the failure modes that break forecasting platforms — what goes wr
 **How the platform handles it:** The `AlertConfig` has a `min_severity` filter — set to `"critical"` to suppress warning-level alerts. The `ForecastDriftDetector` uses configurable `baseline_weeks` and `recent_weeks` windows, so transient spikes in a 1-week window don't trigger alerts if the baseline window is 12+ weeks. The alert payload includes `current_value` and `baseline_value`, enabling downstream filtering rules. The `AlertDispatcher` counts dispatched alerts via `dispatched_count` for monitoring alert volume.
 
 **What to watch for:** Alert fatigue is a serious operational risk. Start with `min_severity: critical` and only drop to `warning` once you've tuned the drift detection thresholds for your data. Set `baseline_weeks` to at least 8-12 to absorb seasonal variation. Monitor `dispatched_count` — if it exceeds a few per week, your thresholds are too sensitive. Consider adding a cooldown period (not yet built-in) where the same series can't trigger the same alert type within N days.
-## 16. Claude API Unavailability (AI Features)
 
-**What happens:** The Anthropic API is unreachable — no API key configured, network timeout, rate limiting, or the `anthropic` package is not installed. All four AI endpoints (`/ai/explain`, `/ai/triage`, `/ai/recommend-config`, `/ai/commentary`) would fail if they depended on a live API call.
+---
 
-**How the platform handles it:** Every AI feature class inherits from `AIFeatureBase`, which checks for client availability via the `.available` property. When unavailable: (1) `NaturalLanguageQueryEngine` returns a clear "AI analysis unavailable" message. (2) `AnomalyTriageEngine` returns alerts in their original severity order with a template executive summary. (3) `ConfigTunerEngine` returns an empty recommendations list. (4) `CommentaryEngine` generates a template-based summary from raw metrics (WMAPE, bias, alert counts). All fallbacks populate the same dataclass structure so downstream consumers (UI, BI tools) don't need to handle a different schema. The `AIConfig.enabled` flag in platform config provides a master switch — when `False`, features degrade without attempting API calls.
+## 19. Claude API / LLM Unavailability
 
-**What to watch for:** Fallback responses lack the business-context reasoning that Claude provides — a triaged alert list without impact scoring is just the raw drift output. Monitor the `sources_used` field in NL query responses and the presence of `suggested_action` in triage results to detect when fallbacks are active. If Claude rate limiting is frequent, consider adding a response cache keyed on (lob, series_id, question_hash).
+**What happens:** The Anthropic API is unreachable — no API key configured, network timeout, rate limiting, or the `anthropic` package is not installed. All four AI endpoints (`/ai/explain`, `/ai/triage`, `/ai/recommend-config`, `/ai/commentary`) would fail if they depended on a live API call. Similarly, the `LLMAnalyzer` in the analytics module would fail if it assumes the LLM is always available.
+
+**How the platform handles it:** Two layers of graceful degradation: (1) AI API features (`src/ai/`): Every AI feature class inherits from `AIFeatureBase`, which checks for client availability via the `.available` property. When unavailable, `NaturalLanguageQueryEngine` returns "AI analysis unavailable", `AnomalyTriageEngine` returns alerts in original severity order with a template summary, `ConfigTunerEngine` returns an empty recommendations list, and `CommentaryEngine` generates a template-based summary from raw metrics. The `AIConfig.enabled` flag provides a master switch. (2) Analytics LLM integration (`src/analytics/llm_analyzer.py`): The `LLMAnalyzer` checks for API key availability at initialization and returns a stub response with `available=False`. No pipeline stage hard-depends on LLM output — all statistical analysis runs independently.
+
+**What to watch for:** Fallback responses lack the business-context reasoning that Claude provides — a triaged alert list without impact scoring is just the raw drift output. Monitor the `sources_used` field in NL query responses and the presence of `suggested_action` in triage results to detect when fallbacks are active. For `LLMAnalyzer`, always gate content display on the `available` flag. If Claude rate limiting is frequent, consider adding a response cache keyed on (lob, series_id, question_hash).
+
+---
+
+## 20. Schema Auto-Detection Failures
+
+**What happens:** The `DataAnalyzer` uses heuristics (column names, dtypes, cardinality) to auto-detect time columns, target columns, and series ID columns. Ambiguous schemas — multiple date columns, multiple numeric columns with similar names, or non-standard column naming — can produce incorrect mappings, leading to wrong config recommendations.
+
+**How the platform handles it:** The `DataAnalyzer` (`src/analytics/analyzer.py`) returns detection results with confidence scores and warnings. Ambiguous detections are flagged in the `warnings` list. The auto-generated `PlatformConfig` is a recommendation, not a binding contract — users should review and override column mappings in their YAML config when auto-detection produces incorrect results.
+
+**What to watch for:** Auto-detection works well for datasets with conventional column names (`date`, `sales`, `sku_id`) but struggles with domain-specific naming (`wk_end_dt`, `qty_shipped`, `material_number`). Datasets with multiple date columns (e.g., `order_date`, `ship_date`, `invoice_date`) will trigger ambiguity warnings — the analyzer picks the most likely candidate but may choose wrong. Always validate the `SchemaDetection` output before running a full pipeline on a new dataset.
+
+---
+
+## 21. Forecastability Score Edge Cases
+
+**What happens:** The `ForecastabilityAnalyzer` computes entropy, SNR, and CV metrics per series. Series with fewer than ~20 observations produce unreliable entropy and SNR estimates. Constant series (zero variance) return NaN for CV and spectral entropy. Very short or degenerate series can produce misleading forecastability scores.
+
+**How the platform handles it:** The `ForecastabilityAnalyzer` (`src/analytics/forecastability.py`) handles constant series by returning CV=0.0 when standard deviation is below 1e-12, preventing division-by-zero errors. For very short series, entropy calculations use whatever data is available but may produce unstable estimates. The forecastability score defaults to low values for degenerate cases, which conservatively routes these series to simpler models.
+
+**What to watch for:** A low forecastability score doesn't always mean "don't forecast" — it means the signal-to-noise ratio is poor with available methods. Foundation models (Chronos, TimeGPT) may still produce useful forecasts on low-forecastability series since they bring pre-trained knowledge. Also, forecastability is assessed on historical data; a series that became forecastable after a structural break may score low due to the pre-break noise. Consider running forecastability assessment on post-break data only if structural breaks are detected.

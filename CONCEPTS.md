@@ -94,6 +94,12 @@ Adding every available feature (weather, price, promotions, macroeconomic indica
 
 *Implementation: `src/data/regressor_screen.py` — `screen_regressors()`*
 
+### Automated Data Profiling
+
+When onboarding a new dataset, you need to answer a dozen configuration questions: which column is the time axis? Which is the target? What's the data frequency? Are there hierarchies? What's the data quality? The `DataAnalyzer` automates this by running schema detection (column name and dtype heuristics), hierarchy discovery (cardinality analysis), frequency inference, and quality profiling — then recommending a `PlatformConfig` that can be used as-is or fine-tuned. This eliminates manual config guesswork and catches data issues before they reach the forecasting models.
+
+*Implementation: `src/analytics/analyzer.py` — `DataAnalyzer`*
+
 ### Data Validation
 
 Garbage in, garbage out is the single most common forecasting failure mode. A single duplicated row can double-count a week's sales. A missing frequency check lets monthly data slip into a weekly pipeline. Negative values from return adjustments can flip model coefficients. The `DataValidator` runs sequential checks — schema enforcement, duplicate detection, frequency consistency, value range validation, and completeness assessment — before any data reaches the forecasting models. Critical issues (duplicates, schema violations) raise errors that block the pipeline; minor issues (small gaps, warnings) are logged but don't stop execution.
@@ -149,6 +155,28 @@ Automated forecasts can't know about next month's product launch, the competitor
 A weekly-only platform can't serve a monthly S&OP process or daily replenishment cycle. But frequency changes everything: season length (52 for weekly, 12 for monthly), default lags, minimum series length, and date arithmetic all depend on the data frequency. Rather than scattering frequency-specific logic across 20+ modules, the platform uses `FREQUENCY_PROFILES` as a single source of truth — a dict mapping `"D"`, `"W"`, `"M"`, `"Q"` to all frequency-dependent parameters. Every model, backtester, validator, and data processor reads from this profile, so switching frequency is a single YAML config change.
 
 *Implementation: `src/config/schema.py` — `FREQUENCY_PROFILES`, `get_frequency_profile()`, `freq_timedelta()`*
+
+---
+
+## Analytics & Interpretation
+
+### Forecastability Assessment
+
+Not all series can be forecast equally well — a stable seasonal product is inherently more predictable than a lumpy spare part or a trend-driven fashion item. The `ForecastabilityAnalyzer` computes per-series statistical signals: coefficient of variation (CV), approximate entropy (ApEn), spectral entropy, signal-to-noise ratio (SNR), and trend/seasonal strength. These are combined into a forecastability score that informs model selection, prediction interval width, and expectations setting. Low-forecastability series get wider intervals and simpler models; high-forecastability series justify more complex approaches.
+
+*Implementation: `src/analytics/forecastability.py` — `ForecastabilityAnalyzer`*
+
+### Causal & Econometric Analysis
+
+Correlation isn't causation — a price change that coincides with a seasonal shift produces misleading elasticity estimates. The `CausalAnalyzer` addresses this by detrending and deseasonalizing before computing price elasticity, detecting cannibalization via lagged cross-correlation between competing products, and measuring promotional lift through controlled before/after comparison. These econometric insights help planners understand *why* demand changed, not just *that* it changed.
+
+*Implementation: `src/analytics/causal.py` — `CausalAnalyzer`*
+
+### LLM-Powered Interpretation
+
+Raw statistical output (p-values, entropy scores, trend coefficients) isn't actionable for business users who need to make S&OP decisions. The `LLMAnalyzer` sends analysis reports to Claude for plain-language interpretation: key findings, hypotheses about demand drivers, model selection rationale, and risk identification. It gracefully degrades to a stub response when `ANTHROPIC_API_KEY` is unset, ensuring pipelines never hard-depend on LLM availability.
+
+*Implementation: `src/analytics/llm_analyzer.py` — `LLMAnalyzer`*
 
 ---
 
