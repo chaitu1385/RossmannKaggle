@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
 
 import polars as pl
 import streamlit as st
@@ -67,6 +67,15 @@ def load_uploaded_csv(uploaded_file) -> pl.DataFrame:
     """Read an uploaded CSV file into a Polars DataFrame."""
     raw = uploaded_file.getvalue()
     return pl.read_csv(io.BytesIO(raw), try_parse_dates=True)
+
+
+def load_uploaded_csvs(uploaded_files: List) -> Dict[str, pl.DataFrame]:
+    """Read multiple uploaded CSV files into a dict of {filename: DataFrame}."""
+    result: Dict[str, pl.DataFrame] = {}
+    for f in uploaded_files:
+        raw = f.getvalue()
+        result[f.name] = pl.read_csv(io.BytesIO(raw), try_parse_dates=True)
+    return result
 
 
 def polars_to_pandas(df: pl.DataFrame):

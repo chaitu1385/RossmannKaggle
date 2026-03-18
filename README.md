@@ -243,6 +243,25 @@ Runs after gap-filling in `SeriesBuilder.build()` when `cleansing.enabled = True
 
 Runs after feature join in `SeriesBuilder.build()` when `external_regressors.screen.enabled = True`. Optionally auto-drops flagged columns (`auto_drop=True`).
 
+#### FileClassifier (multi-file upload role detection)
+
+| Class/Dataclass | Description |
+|-----------------|-------------|
+| `FileClassifier` | Classifies uploaded DataFrames into roles: `time_series`, `dimension`, `regressor`, `unknown`. Two-pass: isolation scoring then cross-file resolution |
+| `FileProfile` | Per-file profile with `role`, `confidence`, `time_column`, `id_columns`, `numeric_columns`, `reasoning` |
+| `ClassificationResult` | All files bucketed into `primary_file`, `dimension_files`, `regressor_files`, `unknown_files` with warnings |
+
+#### MultiFileMerger (join key detection and merge)
+
+| Class/Dataclass | Description |
+|-----------------|-------------|
+| `MultiFileMerger` | Detects join keys between classified files, generates merge preview with stats, executes left-join merge |
+| `JoinSpec` | Join specification: keys, overlap percentage, warnings |
+| `MergePreview` | Pre-merge stats: sample rows, matched/unmatched counts, column conflicts, null-fill columns |
+| `MergeResult` | Final merged DataFrame with preview metadata and join specs |
+
+Used by the Data Onboarding page to accept N CSV files, classify roles, preview the merge, and feed a single combined DataFrame to `DataAnalyzer`.
+
 ### `src/auth/` — RBAC & Authentication
 
 | Class/Function | Description |
@@ -768,6 +787,8 @@ python -m pytest forecasting-platform/tests/ \
 | `test_data_integrity.py` | 9 | Data integrity checks |
 | `test_multi_horizon.py` | 8 | Multi-horizon forecast evaluation |
 | `test_regressor_screen.py` | 16 | Variance, correlation, MI screening; auto-drop; SeriesBuilder integration |
+| `test_file_classifier.py` | 26 | File role classification: time_series, dimension, regressor, unknown; confidence scoring; cross-file resolution |
+| `test_file_merger.py` | 20 | Join key detection, merge preview, full merge, column conflict resolution, null filling |
 | `test_pipeline_manifest.py` | 15 | Manifest build, write, read roundtrip; hash determinism; ForecastPipeline integration |
 | `test_external_regressors.py` | 6 | Regressor validation, SeriesBuilder with/without features |
 | `test_data_loader.py` | 6 | Data loading from files |

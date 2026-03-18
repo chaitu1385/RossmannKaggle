@@ -198,3 +198,30 @@ A catalog of the failure modes that break forecasting platforms — what goes wr
 **How the platform handles it:** The `DataAnalyzer.analyze()` call is wrapped with `@st.cache_data`, so repeat analyses of the same data are instant. Plotly charts render client-side, avoiding server-side image generation bottlenecks. Each page shows graceful empty states (info messages) when no data is loaded, so the app never crashes on missing inputs. The Rossmann sample dataset (18 MB, 1M rows) is bundled as a one-click demo to bypass upload friction.
 
 **What to watch for:** Streamlit re-runs the entire page script on every widget interaction. Heavy computations (DataAnalyzer, FVA cascade) must be cached or they re-execute on every click. If users upload datasets larger than the Rossmann sample, consider adding `st.session_state` checkpoints to avoid redundant recomputation. The Docker container should be provisioned with at least 2 GB RAM for datasets with 1000+ series.
+
+
+---
+
+## 21. Multi-File Upload: No Time-Series File Detected
+
+**What happens:** A user uploads multiple CSV files (e.g., a stores lookup table and a promotions calendar) but none contains a recognizable time-series structure — no date column paired with a numeric target and repeating identifiers.
+
+**How the platform handles it:** The `FileClassifier.classify_files()` method scores each file for the `time_series` role using heuristics: date column detection (type + name pattern), target column name matching, ID column repetition, and row count. If no file scores above the 0.4 confidence threshold, `ClassificationResult.primary_file` is `None` and a clear warning is emitted. The Data Onboarding page shows an `st.error()` explaining exactly what format is expected (date column, numeric target, identifier columns) and stops the flow before any merge or analysis is attempted.
+
+**What to watch for:** Files with date columns but no clear target (e.g., a holiday calendar with `date` and `holiday_name`) might score near the threshold. If a user's time-series file uses an unusual target column name (e.g., `y`, `total`), it may not match the known patterns and get classified as a regressor instead. Users can override the auto-detected role via the interactive confirmation step.
+
+## 22. Multi-File Upload: Duplicate Column Names Across Files
+
+**What happens:** Two files share a non-key column name — e.g., both `sales.csv` and `stores.csv` have a column called `quantity`. A naive join would silently overwrite one column or create ambiguous `_right` suffixes.
+
+**How the platform handles it:** `MultiFileMerger._resolve_column_conflicts()` detects non-key columns that exist in both the left (merged-so-far) and right DataFrames before each join. Conflicting columns in the right DataFrame are renamed with a `_<filename_stem>` suffix (e.g., `quantity` from `stores.csv` becomes `quantity_stores`). The list of renames is recorded in `MergePreview.column_name_conflicts` and displayed to the user in an expandable section.
+
+**What to watch for:** If many files have overlapping column names, the renamed columns (e.g., `temperature_weather`, `temperature_climate`) can be confusing. Review the conflict list in the merge preview. Column renames only apply to non-key columns — join keys are never renamed.
+
+## 23. Multi-File Upload: Mismatched Granularity
+
+**What happens:** The primary time series is at store-level granularity (`store_id × week`), but an external regressor file is at region-level (`region × week`). A direct join on `[week]` would broadcast region-level features to all stores, which may be correct for weather data but misleading for store-specific regressors.
+
+**How the platform handles it:** The `MultiFileMerger` performs a left join, so all primary rows are preserved regardless of granularity mismatch. When a regressor has no ID column overlap with the primary, it joins on `[time_col]` only — effectively broadcasting global features. When it has partial ID overlap (e.g., `region` but not `store_id`), the join uses the available keys. Low key overlap percentages (< 50%) trigger warnings in `JoinSpec.warnings`, displayed in the merge preview.
+
+**What to watch for:** Broadcast features can introduce multicollinearity if the same value appears across many series. The `RegressorScreen` (run during model fitting) catches near-constant columns via variance threshold, but it's worth reviewing the merge preview to ensure the join makes business sense.

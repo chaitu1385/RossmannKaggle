@@ -60,7 +60,9 @@ forecasting-platform/
 │   │   ├── validator.py    # DataValidator — schema enforcement, duplicate/frequency/range checks
 │   │   ├── cleanser.py     # DemandCleanser — outlier detection, stockout imputation, period exclusion
 │   │   ├── regressor_screen.py # RegressorScreen — variance, correlation, MI screening
-│   │   └── regressors.py   # External regressor loader, holiday calendar, validation
+│   │   ├── regressors.py   # External regressor loader, holiday calendar, validation
+│   │   ├── file_classifier.py # FileClassifier — auto-detect file roles (time_series, dimension, regressor)
+│   │   └── file_merger.py  # MultiFileMerger — join key detection, multi-file merge with preview
 │   ├── evaluation/         # Metric computations (WMAPE, RMSPE, bias, MAE)
 │   ├── forecasting/        # Model implementations + registry
 │   │   ├── naive.py        # SeasonalNaiveForecaster
@@ -149,10 +151,8 @@ Helper functions: `get_frequency_profile(freq)` returns the profile dict; `freq_
 - Test files mirror source structure with `test_` prefix
 - Helper fixtures use `_make_*` factory functions (e.g., `_make_weekly_actuals`)
 - Skip `test_metrics.py` and `test_feature_engineering.py` (legacy/slow)
-- 860+ tests across 35 test files
-- Key test modules: `test_platform.py` (85 tests), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55)
-- 860+ tests across 38 test files
-- Key test modules: `test_platform.py` (85 tests), `test_ai_*.py` (73), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55)
+- 900+ tests across 40 test files
+- Key test modules: `test_platform.py` (85 tests), `test_ai_*.py` (73), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55), `test_file_classifier.py` (26), `test_file_merger.py` (20)
 
 ## Key Dependencies
 

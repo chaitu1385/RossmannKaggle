@@ -186,3 +186,9 @@ Forecasting platforms generate data (metrics, drift alerts, leaderboards) that p
 A forecasting platform that only data scientists can operate is incomplete — demand planners need to see forecasts, compare models, and review exceptions; platform admins need to monitor health and drift. The Streamlit dashboard provides a browser-based interface with four pages mapped to three user personas: Data Onboarding (upload data, assess forecastability, get a recommended config), Backtest Results (model leaderboard with FVA cascade), Forecast Viewer (interactive fan chart with seasonal decomposition), and Platform Health (drift alerts, pipeline manifests, compute cost). It imports platform classes directly — no API round-trip — so a `docker compose up` gives a working demo in under two minutes.
 
 *Implementation: `streamlit/` — `app.py`, `pages/1_Data_Onboarding.py`, `pages/2_Backtest_Results.py`, `pages/3_Forecast_Viewer.py`, `pages/4_Platform_Health.py`*
+
+### Multi-File Upload Classification
+
+Real-world forecasting projects rarely have a single tidy CSV — sales history lives in one extract, store attributes in another, promotions in a third, and weather data from an external API. Asking users to pre-join everything is error-prone and kills the onboarding experience. The `FileClassifier` auto-detects each file's role (time series, dimension lookup, external regressor) using heuristics on column types, naming patterns, and cardinality, then `MultiFileMerger` detects join keys and produces a merged DataFrame for analysis. The Data Onboarding page exposes this as an interactive confirmation step: users upload N files, review the auto-detected roles, see a merge preview with join stats, and then run the full analysis on the combined data.
+
+*Implementation: `src/data/file_classifier.py` — `FileClassifier`, `src/data/file_merger.py` — `MultiFileMerger`*
