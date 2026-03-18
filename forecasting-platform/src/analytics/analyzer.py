@@ -78,6 +78,8 @@ class AnalysisReport:
     config_reasoning: List[str]
     hypotheses: List[str]
     warnings: List[str] = field(default_factory=list)
+    regressor_columns: List[str] = field(default_factory=list)
+    dimension_sources: List[str] = field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- #
