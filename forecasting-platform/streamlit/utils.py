@@ -155,3 +155,62 @@ def severity_badge(severity: str) -> str:
     """Return a coloured markdown badge for alert severity."""
     colour = SEVERITY_COLORS.get(severity.lower(), "#8d99ae")
     return f":{severity.upper()}: `{severity}`"
+
+
+# ---------------------------------------------------------------------------
+#  Model & metric display helpers
+# ---------------------------------------------------------------------------
+MODEL_DISPLAY_NAMES: Dict[str, str] = {
+    "naive_seasonal": "Seasonal Naive",
+    "auto_arima": "AutoARIMA",
+    "auto_ets": "AutoETS",
+    "auto_theta": "AutoTheta",
+    "mstl": "MSTL",
+    "lgbm_direct": "LightGBM",
+    "xgboost_direct": "XGBoost",
+    "nhits": "N-HiTS",
+    "nbeats": "N-BEATS",
+    "tft": "TFT",
+    "chronos": "Chronos",
+    "timegpt": "TimeGPT",
+    "croston": "Croston",
+    "croston_sba": "Croston SBA",
+    "tsb": "TSB",
+    "weighted_ensemble": "Weighted Ensemble",
+}
+
+METRIC_TOOLTIPS: Dict[str, str] = {
+    "wmape": "Weighted Mean Absolute Percentage Error — lower is better. Measures forecast accuracy weighted by actual volume.",
+    "normalized_bias": "Forecast bias — negative means under-forecasting, positive means over-forecasting. Close to 0 is ideal.",
+    "mase": "Mean Absolute Scaled Error — compares forecast error to a naive seasonal baseline. Below 1.0 means better than naive.",
+    "rmspe": "Root Mean Squared Percentage Error — penalizes large errors more heavily than WMAPE.",
+}
+
+
+def model_display_name(model_id: str) -> str:
+    """Return a human-friendly name for a model ID."""
+    return MODEL_DISPLAY_NAMES.get(model_id, model_id)
+
+
+def format_duration(seconds: float) -> str:
+    """Format seconds as a human-readable duration string.
+
+    Examples: ``45s``, ``2m 30s``, ``1h 15m 30s``.
+    """
+    s = int(seconds)
+    if s < 60:
+        return f"{s}s"
+    m, s = divmod(s, 60)
+    if m < 60:
+        return f"{m}m {s}s"
+    h, m = divmod(m, 60)
+    return f"{h}h {m}m {s}s"
+
+
+# Sample CSV template for data onboarding guidance
+CSV_TEMPLATE = """\
+week,store_id,product_id,quantity
+2023-01-02,store_1,prod_A,150
+2023-01-02,store_1,prod_B,80
+2023-01-09,store_1,prod_A,145
+"""
