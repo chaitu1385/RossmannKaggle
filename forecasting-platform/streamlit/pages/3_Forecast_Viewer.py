@@ -31,8 +31,15 @@ st.title("Forecast Viewer")
 # ---------------------------------------------------------------------------
 st.sidebar.header("Data Sources")
 
-forecast_file = st.sidebar.file_uploader("Forecast Parquet/CSV", type=["parquet", "csv"], key="fc_file")
-actuals_file = st.sidebar.file_uploader("Actuals Parquet/CSV", type=["parquet", "csv"], key="act_file")
+forecast_file = st.sidebar.file_uploader(
+    "Forecast Parquet/CSV", type=["parquet", "csv"], key="fc_file",
+)
+actuals_file = st.sidebar.file_uploader(
+    "Actuals Parquet/CSV (optional)",
+    type=["parquet", "csv"],
+    key="act_file",
+    help="Upload actuals to overlay on the forecast chart and enable decomposition. Leave blank to view forecasts only.",
+)
 
 forecast_df = None
 actuals_df = None
@@ -43,26 +50,44 @@ def _load_file(uploaded):
     import io
     raw = uploaded.getvalue()
     name = uploaded.name.lower()
-    if name.endswith(".parquet"):
-        return pl.read_parquet(io.BytesIO(raw))
-    return pl.read_csv(io.BytesIO(raw), try_parse_dates=True)
+    try:
+        if name.endswith(".parquet"):
+            return pl.read_parquet(io.BytesIO(raw))
+        return pl.read_csv(io.BytesIO(raw), try_parse_dates=True)
+    except Exception as exc:
+        st.error(
+            f"Failed to parse `{uploaded.name}`: {exc}\n\n"
+            "Ensure the file is a valid Parquet or CSV."
+        )
+        return None
 
 
 if forecast_file is not None:
     forecast_df = _load_file(forecast_file)
-    st.session_state["forecast_df"] = forecast_df
+    if forecast_df is not None:
+        st.session_state["forecast_df"] = forecast_df
 
 if actuals_file is not None:
     actuals_df = _load_file(actuals_file)
-    st.session_state["actuals_df"] = actuals_df
+    if actuals_df is not None:
+        st.session_state["actuals_df"] = actuals_df
 
 forecast_df = forecast_df or st.session_state.get("forecast_df")
 actuals_df = actuals_df or st.session_state.get("actuals_df")
 
 if forecast_df is None:
     st.info(
-        "Upload forecast output (Parquet or CSV) in the sidebar. "
-        "Run `python scripts/run_forecast.py` first to generate forecasts."
+        "Upload forecast output (Parquet or CSV) in the sidebar."
+    )
+    st.markdown(
+        "**To generate forecasts:**\n"
+        "```bash\n"
+        "python scripts/run_forecast.py \\\n"
+        "  --config configs/platform_config.yaml \\\n"
+        "  --lob retail\n"
+        "```\n\n"
+        "The output should contain columns like: "
+        "`series_id`, `week`, `forecast`, `forecast_p10`, `forecast_p90`."
     )
     st.stop()
 
@@ -87,12 +112,25 @@ value_col = _detect_col(forecast_df, ["forecast", "prediction", "yhat", "y_hat"]
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("**Detected columns**")
-id_col = st.sidebar.text_input("Series ID column", value=id_col or "")
-time_col = st.sidebar.text_input("Time column", value=time_col or "")
-value_col = st.sidebar.text_input("Forecast column", value=value_col or "")
+id_col = st.sidebar.text_input(
+    "Series ID column", value=id_col or "",
+    help="Column that identifies each time series (e.g., store_id, sku).",
+)
+time_col = st.sidebar.text_input(
+    "Time column", value=time_col or "",
+    help="Column containing dates or timestamps.",
+)
+value_col = st.sidebar.text_input(
+    "Forecast column", value=value_col or "",
+    help="Column containing the point forecast values.",
+)
 
 if not id_col or not time_col or not value_col:
-    st.warning("Could not auto-detect columns. Please specify them in the sidebar.")
+    st.warning(
+        "Could not auto-detect all required columns. "
+        "Please specify them in the sidebar."
+    )
+    st.caption(f"Available columns: {', '.join(forecast_df.columns)}")
     st.stop()
 
 # ---------------------------------------------------------------------------
@@ -100,17 +138,43 @@ if not id_col or not time_col or not value_col:
 # ---------------------------------------------------------------------------
 series_list = forecast_df[id_col].unique().sort().to_list()
 
+# Cross-page: pre-select series from Backtest Results or Platform Health
+pre_selected = st.session_state.get("selected_series_id")
+
+# Check for drift warnings
+drift_alerts = st.session_state.get("drift_alerts", [])
+drift_series = {a.series_id for a in drift_alerts} if drift_alerts else set()
+
+# Build display labels with drift indicators
+def _series_label(s):
+    if s in drift_series:
+        return f"{s} (drift alert)"
+    return str(s)
+
+default_idx = 0
+if pre_selected and pre_selected in series_list:
+    default_idx = series_list.index(pre_selected)
+
 selected_series = st.selectbox(
     "Select series",
     series_list,
-    index=0 if series_list else None,
+    index=default_idx,
+    format_func=_series_label,
 )
 
 if selected_series is None:
     st.stop()
 
+# Clear the pre-selection after use
+if pre_selected:
+    del st.session_state["selected_series_id"]
+
 # Filter to selected series
 fc_series = forecast_df.filter(pl.col(id_col) == selected_series).sort(time_col)
+
+if fc_series.is_empty():
+    st.warning(f"No data found for series `{selected_series}`.")
+    st.stop()
 
 # ---------------------------------------------------------------------------
 #  Forecast chart with fan chart
@@ -202,6 +266,10 @@ fig.update_layout(
 )
 st.plotly_chart(fig, use_container_width=True)
 
+# Chart explanation
+if p10_col and p90_col and p10_col in fc_pd.columns and p90_col in fc_pd.columns:
+    st.caption("Shaded area shows the 80% prediction interval (P10-P90).")
+
 # ---------------------------------------------------------------------------
 #  Seasonal Decomposition
 # ---------------------------------------------------------------------------
@@ -221,14 +289,15 @@ if actuals_df is not None:
             # Determine season_length from data frequency
             explainer = ForecastExplainer(season_length=7)
 
-            decomp = explainer.decompose(
-                history=act_series,
-                forecast=fc_series,
-                id_col=act_id_col,
-                time_col=act_time_col,
-                target_col=target_col,
-                value_col=value_col,
-            )
+            with st.spinner("Computing decomposition..."):
+                decomp = explainer.decompose(
+                    history=act_series,
+                    forecast=fc_series,
+                    id_col=act_id_col,
+                    time_col=act_time_col,
+                    target_col=target_col,
+                    value_col=value_col,
+                )
 
             if not decomp.is_empty():
                 decomp_pd = polars_to_pandas(decomp)
@@ -262,21 +331,31 @@ if actuals_df is not None:
 
             # Narrative
             try:
-                narratives = explainer.narrative(
-                    decomposition=decomp,
-                    id_col=act_id_col,
-                    time_col=act_time_col,
-                )
+                with st.spinner("Generating narrative..."):
+                    narratives = explainer.narrative(
+                        decomposition=decomp,
+                        id_col=act_id_col,
+                        time_col=act_time_col,
+                    )
                 series_key = str(selected_series)
                 if series_key in narratives:
                     st.subheader("Explainer Narrative")
                     st.info(narratives[series_key])
+                else:
+                    st.caption("Narrative not available for this series.")
             except Exception:
-                pass  # narrative is optional
+                st.caption("Narrative not available for this series.")
     except Exception as e:
-        st.warning(f"Decomposition not available: {e}")
+        st.warning(
+            f"Decomposition not available: {e}\n\n"
+            "This can happen if the series is too short for seasonal decomposition "
+            "or if the data contains too many missing values."
+        )
 else:
-    st.info("Upload actuals data in the sidebar to enable seasonal decomposition.")
+    st.info(
+        "Upload actuals data in the sidebar to enable seasonal decomposition. "
+        "Actuals are optional — leave blank to view forecasts only."
+    )
 
 # ---------------------------------------------------------------------------
 #  Raw data preview
@@ -284,3 +363,9 @@ else:
 st.divider()
 with st.expander("Raw forecast data"):
     st.dataframe(fc_pd, use_container_width=True)
+    st.download_button(
+        "Download series data as CSV",
+        data=fc_series.write_csv(),
+        file_name=f"forecast_{selected_series}.csv",
+        mime="text/csv",
+    )

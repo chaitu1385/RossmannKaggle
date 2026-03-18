@@ -27,13 +27,28 @@ from utils import (
     COLORS,
     DATA_DIR,
     FVA_COLORS,
+    METRIC_TOOLTIPS,
     MODEL_LAYER_COLORS,
+    model_display_name,
     polars_to_pandas,
     format_pct,
 )
 
 st.set_page_config(page_title="Backtest Results", page_icon="🏆", layout="wide")
 st.title("Backtest Results")
+
+# ---------------------------------------------------------------------------
+#  Cross-page: show config from Data Onboarding if available
+# ---------------------------------------------------------------------------
+accepted_config = st.session_state.get("accepted_config")
+if accepted_config:
+    n_models = len(accepted_config.forecast.forecasters)
+    horizon = accepted_config.forecast.horizon_weeks
+    st.info(
+        f"Using config from Data Onboarding: **{n_models} models**, "
+        f"**{horizon}-period horizon**, "
+        f"**{accepted_config.backtest.n_folds} folds**."
+    )
 
 # ---------------------------------------------------------------------------
 #  Data source: MetricStore or uploaded Parquet
@@ -47,24 +62,34 @@ metrics_df = None
 with tab_store:
     lob = st.text_input("Line of Business", value="retail", key="lob_store")
     if st.button("Load from metric store", key="load_store"):
-        try:
-            store = MetricStore(base_path=metrics_dir)
-            metrics_df = store.read(run_type="backtest", lob=lob)
-            if metrics_df is not None and not metrics_df.is_empty():
-                st.session_state["backtest_metrics"] = metrics_df
-                st.success(f"Loaded {metrics_df.shape[0]:,} metric records.")
-            else:
-                st.warning("No backtest results found for this LOB.")
-        except Exception as e:
-            st.error(f"Error loading metrics: {e}")
+        with st.spinner("Loading metrics..."):
+            try:
+                store = MetricStore(base_path=metrics_dir)
+                metrics_df = store.read(run_type="backtest", lob=lob)
+                if metrics_df is not None and not metrics_df.is_empty():
+                    st.session_state["backtest_metrics"] = metrics_df
+                    st.success(f"Loaded {metrics_df.shape[0]:,} metric records.")
+                else:
+                    st.warning(
+                        f"No backtest results found for LOB '{lob}'. "
+                        f"Run `python scripts/run_backtest.py --lob {lob}` first."
+                    )
+            except Exception as e:
+                st.error(
+                    f"Error loading metrics: {e}\n\n"
+                    f"Check that the metric store directory exists: `{metrics_dir}`"
+                )
 
 with tab_upload:
     uploaded = st.file_uploader("Upload backtest metrics Parquet", type=["parquet"])
     if uploaded is not None:
-        import io
-        metrics_df = pl.read_parquet(io.BytesIO(uploaded.getvalue()))
-        st.session_state["backtest_metrics"] = metrics_df
-        st.success(f"Loaded {metrics_df.shape[0]:,} records from upload.")
+        try:
+            import io
+            metrics_df = pl.read_parquet(io.BytesIO(uploaded.getvalue()))
+            st.session_state["backtest_metrics"] = metrics_df
+            st.success(f"Loaded {metrics_df.shape[0]:,} records from upload.")
+        except Exception as e:
+            st.error(f"Failed to read Parquet file: {e}")
 
 # Retrieve from session if previously loaded
 if metrics_df is None:
@@ -72,8 +97,17 @@ if metrics_df is None:
 
 if metrics_df is None:
     st.info(
-        "Load backtest results from the metric store or upload a Parquet file. "
-        "Run `python scripts/run_backtest.py` first to populate the store."
+        "Load backtest results from the metric store or upload a Parquet file."
+    )
+    st.markdown(
+        "**To generate backtest results:**\n"
+        "```bash\n"
+        "python scripts/run_backtest.py \\\n"
+        "  --config configs/platform_config.yaml \\\n"
+        "  --lob retail\n"
+        "```\n\n"
+        "The output Parquet should contain columns: "
+        "`model_id`, `series_id`, `wmape`, `normalized_bias`, `fold`."
     )
     st.stop()
 
@@ -95,6 +129,11 @@ if "model_id" in metrics_df.columns and "wmape" in metrics_df.columns:
         ])
         .sort("mean_wmape")
         .with_row_index("rank", offset=1)
+        .with_columns(
+            pl.col("model_id").map_elements(
+                model_display_name, return_dtype=pl.Utf8,
+            ).alias("model_name")
+        )
     )
 
     st.dataframe(
@@ -102,9 +141,16 @@ if "model_id" in metrics_df.columns and "wmape" in metrics_df.columns:
         use_container_width=True,
         column_config={
             "rank": st.column_config.NumberColumn("Rank"),
-            "model_id": "Model",
-            "mean_wmape": st.column_config.NumberColumn("WMAPE", format="%.4f"),
-            "mean_bias": st.column_config.NumberColumn("Bias", format="%.4f"),
+            "model_id": "Model ID",
+            "model_name": "Model",
+            "mean_wmape": st.column_config.NumberColumn(
+                "WMAPE", format="%.4f",
+                help=METRIC_TOOLTIPS.get("wmape", ""),
+            ),
+            "mean_bias": st.column_config.NumberColumn(
+                "Bias", format="%.4f",
+                help=METRIC_TOOLTIPS.get("normalized_bias", ""),
+            ),
             "n_series": st.column_config.NumberColumn("Series"),
         },
     )
@@ -113,7 +159,7 @@ if "model_id" in metrics_df.columns and "wmape" in metrics_df.columns:
     lb_pd = polars_to_pandas(leaderboard)
     fig_lb = go.Figure()
     fig_lb.add_trace(go.Bar(
-        x=lb_pd["model_id"],
+        x=lb_pd["model_name"],
         y=lb_pd["mean_wmape"],
         marker_color=COLORS["primary"],
         text=[f"{v:.4f}" for v in lb_pd["mean_wmape"]],
@@ -122,23 +168,32 @@ if "model_id" in metrics_df.columns and "wmape" in metrics_df.columns:
     fig_lb.update_layout(
         title="Mean WMAPE by Model",
         xaxis_title="Model",
-        yaxis_title="WMAPE",
+        yaxis_title="WMAPE (lower is better)",
         height=350,
         margin=dict(t=40, b=40),
     )
     st.plotly_chart(fig_lb, use_container_width=True)
 else:
-    st.warning("Expected columns `model_id` and `wmape` not found in data.")
+    available = ", ".join(metrics_df.columns)
+    st.warning(
+        f"Expected columns `model_id` and `wmape` not found in data.\n\n"
+        f"Available columns: {available}"
+    )
 
 # ---------------------------------------------------------------------------
 #  FVA Cascade
 # ---------------------------------------------------------------------------
 st.divider()
 st.header("Forecast Value-Add (FVA) Cascade")
+st.caption(
+    "FVA measures whether each model layer improves accuracy over the naive baseline. "
+    "Green = adds value, gray = neutral, red = destroys value."
+)
 
 try:
-    fva = FVAAnalyzer()
-    fva_detail = fva.compute_fva_detail(metrics_df)
+    with st.spinner("Computing FVA cascade..."):
+        fva = FVAAnalyzer()
+        fva_detail = fva.compute_fva_detail(metrics_df)
 
     if not fva_detail.is_empty():
         # Summary by layer
@@ -223,9 +278,9 @@ try:
             # Colour the recommendation column
             def style_recommendation(val):
                 colors = {
-                    "Keep": f"background-color: {FVA_COLORS['ADDS_VALUE']}20",
+                    "Keep": f"background-color: {FVA_COLORS['ADDS_VALUE']}40; font-weight: bold",
                     "Review": f"background-color: {FVA_COLORS['NEUTRAL']}40",
-                    "Remove": f"background-color: {FVA_COLORS['DESTROYS_VALUE']}20",
+                    "Remove": f"background-color: {FVA_COLORS['DESTROYS_VALUE']}30; font-weight: bold",
                 }
                 return colors.get(val, "")
 
@@ -236,7 +291,10 @@ try:
                 use_container_width=True,
             )
     else:
-        st.info("No FVA data available. Ensure backtest results contain multiple model layers.")
+        st.info(
+            "No FVA data available. FVA requires backtest results with "
+            "multiple model layers (e.g., naive + statistical + ML)."
+        )
 except Exception as e:
     st.warning(f"FVA analysis not available: {e}")
 
@@ -256,12 +314,17 @@ if "model_id" in metrics_df.columns and "series_id" in metrics_df.columns:
         .group_by("series_id")
         .first()
         .sort("series_id")
+        .with_columns(
+            pl.col("model_id").map_elements(
+                model_display_name, return_dtype=pl.Utf8,
+            ).alias("model_name")
+        )
     )
 
     # Champion distribution
     champ_dist = (
         champion_map
-        .group_by("model_id")
+        .group_by("model_name")
         .len()
         .sort("len", descending=True)
         .rename({"len": "n_series"})
@@ -275,7 +338,7 @@ if "model_id" in metrics_df.columns and "series_id" in metrics_df.columns:
         dist_pd = polars_to_pandas(champ_dist)
         fig_champ = px.pie(
             dist_pd,
-            names="model_id",
+            names="model_name",
             values="n_series",
             title="Champion Model Distribution",
             hole=0.4,
@@ -285,5 +348,25 @@ if "model_id" in metrics_df.columns and "series_id" in metrics_df.columns:
 
     with st.expander("Full champion map"):
         st.dataframe(polars_to_pandas(champion_map), use_container_width=True)
+
+    # Cross-page link: view a series in Forecast Viewer
+    st.markdown("---")
+    series_list = champion_map["series_id"].to_list()
+    selected = st.selectbox(
+        "Select a series to view in Forecast Viewer",
+        series_list,
+        index=None,
+        placeholder="Choose a series...",
+    )
+    if selected:
+        st.session_state["selected_series_id"] = selected
+        st.success(
+            f"Series `{selected}` selected. Go to **Forecast Viewer** in the "
+            f"sidebar to see the forecast chart."
+        )
 else:
-    st.info("Champion map requires `series_id` and `model_id` columns.")
+    available = ", ".join(metrics_df.columns)
+    st.info(
+        f"Champion map requires `series_id` and `model_id` columns.\n\n"
+        f"Available columns: {available}"
+    )

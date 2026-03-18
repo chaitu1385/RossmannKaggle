@@ -28,6 +28,8 @@ from src.data.file_classifier import FileClassifier
 from src.data.file_merger import MultiFileMerger
 from utils import (
     COLORS,
+    CSV_TEMPLATE,
+    METRIC_TOOLTIPS,
     load_sample_data,
     load_uploaded_csv,
     load_uploaded_csvs,
@@ -53,19 +55,23 @@ _ROLE_LABELS = {
     "unknown": "Unknown",
 }
 _ROLE_OPTIONS = list(_ROLE_LABELS.keys())
-_CONFIDENCE_COLORS = {
-    "high": "🟢",
-    "medium": "🟡",
-    "low": "🔴",
+
+_CONFIDENCE_STYLES = {
+    "high": ("High", COLORS["success"]),
+    "medium": ("Medium", COLORS["warning"]),
+    "low": ("Low", COLORS["danger"]),
 }
 
 
-def _confidence_badge(score: float) -> str:
+def _confidence_label(score: float) -> str:
+    """Return a text label with confidence level and percentage."""
     if score >= 0.7:
-        return f"{_CONFIDENCE_COLORS['high']} {score:.0%}"
+        level, _ = _CONFIDENCE_STYLES["high"]
     elif score >= 0.4:
-        return f"{_CONFIDENCE_COLORS['medium']} {score:.0%}"
-    return f"{_CONFIDENCE_COLORS['low']} {score:.0%}"
+        level, _ = _CONFIDENCE_STYLES["medium"]
+    else:
+        level, _ = _CONFIDENCE_STYLES["low"]
+    return f"{level} ({score:.0%})"
 
 
 # --------------------------------------------------------------------------- #
@@ -83,6 +89,24 @@ with col_upload:
 with col_sample:
     use_sample = st.button("Use sample data")
 
+# CSV format guide
+with st.expander("What does my CSV need?"):
+    st.markdown(
+        "Your primary time-series file should have at least:\n"
+        "- A **date column** (`week`, `date`, `ds`) with dates\n"
+        "- A **numeric target** (`quantity`, `sales`, `demand`) with the values to forecast\n"
+        "- One or more **ID columns** (`store_id`, `product_id`) identifying each series\n\n"
+        "You can also upload **dimension tables** (store attributes, product metadata) "
+        "and **external regressors** (weather, promotions) — they'll be auto-detected and merged."
+    )
+    st.code(CSV_TEMPLATE, language="csv")
+    st.download_button(
+        "Download CSV template",
+        data=CSV_TEMPLATE,
+        file_name="forecast_template.csv",
+        mime="text/csv",
+    )
+
 # --------------------------------------------------------------------------- #
 #  Single-file fast path (backward compatible)
 # --------------------------------------------------------------------------- #
@@ -90,9 +114,15 @@ df = None
 multi_file_mode = False
 
 if uploaded_files and len(uploaded_files) == 1:
-    # Single file — original flow
-    df = load_uploaded_csv(uploaded_files[0])
-    st.success(f"Loaded {df.shape[0]:,} rows x {df.shape[1]} columns from upload.")
+    try:
+        df = load_uploaded_csv(uploaded_files[0])
+        st.success(f"Loaded {df.shape[0]:,} rows x {df.shape[1]} columns from upload.")
+    except Exception as exc:
+        st.error(
+            f"Failed to parse CSV: {exc}\n\n"
+            "Check that the file is a valid CSV with headers in the first row."
+        )
+        st.stop()
 
 elif uploaded_files and len(uploaded_files) > 1:
     multi_file_mode = True
@@ -107,18 +137,23 @@ elif use_sample or st.session_state.get("sample_loaded"):
 # --------------------------------------------------------------------------- #
 if multi_file_mode:
     # Step 1: Load and classify
-    files = load_uploaded_csvs(uploaded_files)
+    try:
+        files = load_uploaded_csvs(uploaded_files)
+    except Exception as exc:
+        st.error(f"Failed to read uploaded files: {exc}")
+        st.stop()
+
     st.success(f"Loaded {len(files)} files: {', '.join(files.keys())}")
 
-    classifier = FileClassifier()
-    classification = classifier.classify_files(files)
+    with st.spinner("Classifying files..."):
+        classifier = FileClassifier()
+        classification = classifier.classify_files(files)
 
-    # Store in session for persistence across reruns
     st.session_state["classification"] = classification
 
     # Show classification results
     st.divider()
-    st.header("Step 1: File Classification")
+    st.header("Step 1 of 3: File Classification")
 
     if classification.warnings:
         for w in classification.warnings:
@@ -130,6 +165,14 @@ if multi_file_mode:
             "contain a **date column**, a **numeric target** (e.g. 'quantity', "
             "'sales'), and **identifier columns** (e.g. 'store_id')."
         )
+        # Show what we found in each file to help debugging
+        for p in classification.profiles:
+            cols = ", ".join(p.df.columns[:8])
+            extra = f" (+{len(p.df.columns) - 8} more)" if len(p.df.columns) > 8 else ""
+            st.caption(
+                f"**{p.filename}**: {p.n_rows} rows, columns: {cols}{extra} "
+                f"| time col: {p.time_column or 'none'}"
+            )
         st.stop()
 
     # Interactive confirmation table
@@ -143,7 +186,7 @@ if multi_file_mode:
             st.caption(f"{profile.n_rows:,} rows, {profile.n_columns} cols")
         with col_role:
             selected = st.selectbox(
-                "Role",
+                f"Role for {profile.filename}",
                 options=_ROLE_OPTIONS,
                 index=_ROLE_OPTIONS.index(profile.role),
                 format_func=lambda x: _ROLE_LABELS[x],
@@ -152,7 +195,7 @@ if multi_file_mode:
             )
             role_overrides[profile.filename] = selected
         with col_conf:
-            st.markdown(_confidence_badge(profile.confidence))
+            st.markdown(_confidence_label(profile.confidence))
         with col_keys:
             key_cols = profile.id_columns[:3]
             time_info = f"time: {profile.time_column}" if profile.time_column else "no time col"
@@ -184,10 +227,11 @@ if multi_file_mode:
 
     # Step 2: Merge preview
     st.divider()
-    st.header("Step 2: Merge Preview")
+    st.header("Step 2 of 3: Merge Preview")
 
     merger = MultiFileMerger()
-    preview = merger.preview_merge(classification)
+    with st.spinner("Generating merge preview..."):
+        preview = merger.preview_merge(classification)
 
     col_s1, col_s2, col_s3, col_s4 = st.columns(4)
     col_s1.metric("Merged rows", f"{preview.total_rows:,}")
@@ -212,8 +256,10 @@ if multi_file_mode:
 
     # Step 3: Merge and analyze
     st.divider()
+    st.header("Step 3 of 3: Run Analysis")
     if st.button("Run Analysis on Merged Data", type="primary"):
-        merge_result = merger.merge(classification)
+        with st.spinner("Merging files..."):
+            merge_result = merger.merge(classification)
         df = merge_result.df
         st.session_state["merge_result"] = merge_result
         st.success(
@@ -248,7 +294,17 @@ def run_analysis(_df):
     return report
 
 
-report = run_analysis(df)
+try:
+    report = run_analysis(df)
+except Exception as exc:
+    st.error(
+        f"Analysis failed: {exc}\n\n"
+        "This usually means the data doesn't have a recognizable date column "
+        "paired with a numeric target. Check the 'What does my CSV need?' guide above."
+    )
+    # Show what columns were found for debugging
+    st.caption(f"Columns found: {', '.join(df.columns)}")
+    st.stop()
 
 # Enrich report with multi-source info if available
 if multi_file_mode and "classification" in st.session_state:
@@ -267,10 +323,22 @@ st.header("Schema Detection")
 
 schema = report.schema
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Rows", f"{schema.n_rows:,}")
-col2.metric("Series", f"{schema.n_series:,}")
-col3.metric("Frequency", schema.frequency_guess)
-col4.metric("Confidence", format_pct(schema.confidence))
+col1.metric(
+    "Rows", f"{schema.n_rows:,}",
+    help="Total number of rows in the uploaded data.",
+)
+col2.metric(
+    "Series", f"{schema.n_series:,}",
+    help="Number of unique time series (distinct ID combinations).",
+)
+col3.metric(
+    "Frequency", schema.frequency_guess,
+    help="Detected data frequency: D=daily, W=weekly, M=monthly, Q=quarterly.",
+)
+col4.metric(
+    "Confidence", format_pct(schema.confidence),
+    help="How confident the schema detection is. Higher means clearer column roles.",
+)
 
 col_a, col_b = st.columns(2)
 with col_a:
@@ -284,7 +352,8 @@ with col_b:
     if schema.dimension_columns:
         st.markdown("**Dimension columns**")
         for c in schema.dimension_columns:
-            st.markdown(f"- `{c}`")
+            n_unique = df[c].n_unique() if c in df.columns else "?"
+            st.markdown(f"- `{c}` ({n_unique} unique)")
     if schema.numeric_columns:
         st.markdown("**Numeric columns** (regressor candidates)")
         for c in schema.numeric_columns:
@@ -309,7 +378,11 @@ if hier.hierarchies:
             for r in hier.reasoning:
                 st.markdown(f"- {r}")
 else:
-    st.info("No hierarchical structure detected.")
+    st.info(
+        "No hierarchical structure detected. This is normal for flat datasets "
+        "with a single ID column. Hierarchy is optional — forecasting works "
+        "fine without it."
+    )
 
 if hier.warnings:
     for w in hier.warnings:
@@ -344,6 +417,13 @@ with col1:
     ))
     fig_gauge.update_layout(height=250, margin=dict(t=60, b=0, l=30, r=30))
     st.plotly_chart(fig_gauge, use_container_width=True)
+    # Interpretation
+    if fa.overall_score >= 0.6:
+        st.caption("High forecastability — expect strong model performance.")
+    elif fa.overall_score >= 0.3:
+        st.caption("Moderate forecastability — statistical models recommended.")
+    else:
+        st.caption("Low forecastability — consider intermittent-demand models or data enrichment.")
 
 with col2:
     # Score distribution bar chart
@@ -453,6 +533,35 @@ with col_accept:
         st.session_state["analysis_report"] = report
         st.success("Config accepted and stored in session.")
 
+# What's Next section (after config acceptance)
+if st.session_state.get("accepted_config") is not None:
+    st.divider()
+    st.subheader("What's Next?")
+    st.markdown(
+        "Your configuration is ready. Here are the next steps:"
+    )
+    col_n1, col_n2 = st.columns(2)
+    with col_n1:
+        st.markdown(
+            "**Run a backtest** to evaluate model performance:\n"
+            "```bash\n"
+            "python scripts/run_backtest.py \\\n"
+            "  --config platform_config.yaml \\\n"
+            "  --lob uploaded\n"
+            "```\n"
+            "Then view results on the **Backtest Results** page."
+        )
+    with col_n2:
+        st.markdown(
+            "**Run a forecast** to generate predictions:\n"
+            "```bash\n"
+            "python scripts/run_forecast.py \\\n"
+            "  --config platform_config.yaml \\\n"
+            "  --lob uploaded\n"
+            "```\n"
+            "Then view forecasts on the **Forecast Viewer** page."
+        )
+
 # --------------------------------------------------------------------------- #
 #  LLM Interpreter (optional)
 # --------------------------------------------------------------------------- #
@@ -499,4 +608,7 @@ if st.button("Generate AI Interpretation"):
                 for a in insight.config_adjustments:
                     st.info(a)
     except ImportError:
-        st.warning("LLM module not available. Install `anthropic` package.")
+        st.warning("LLM module not available. Install the `anthropic` package.")
+    except Exception as exc:
+        st.error(f"AI interpretation failed: {exc}")
+        st.caption("This may be a transient API issue. Try again in a moment.")

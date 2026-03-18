@@ -31,6 +31,7 @@ from utils import (
     polars_to_pandas,
     format_pct,
     format_number,
+    format_duration,
 )
 
 st.set_page_config(page_title="Platform Health", page_icon="🏥", layout="wide")
@@ -46,26 +47,35 @@ manifest_files = sorted(manifest_dir.rglob("*_manifest.json"), reverse=True)[:20
 
 if manifest_files:
     manifests = []
-    for mf in manifest_files:
-        try:
-            m = read_manifest(str(mf))
-            manifests.append({
-                "run_id": m.run_id[:12] + "..." if len(m.run_id) > 12 else m.run_id,
-                "timestamp": m.timestamp,
-                "lob": m.lob,
-                "series": m.input_series_count,
-                "rows": m.input_row_count,
-                "champion": m.champion_model_id,
-                "wmape": m.backtest_wmape,
-                "horizon": m.forecast_horizon,
-                "forecast_rows": m.forecast_row_count,
-                "cleansing": m.cleansing_applied,
-                "outliers_clipped": m.outliers_clipped,
-                "validation_passed": m.validation_passed,
-                "file": str(mf.name),
-            })
-        except Exception:
-            continue
+    parse_errors = 0
+    with st.spinner("Loading manifests..."):
+        for mf in manifest_files:
+            try:
+                m = read_manifest(str(mf))
+                manifests.append({
+                    "run_id": m.run_id[:12] + "..." if len(m.run_id) > 12 else m.run_id,
+                    "timestamp": m.timestamp,
+                    "lob": m.lob,
+                    "series": m.input_series_count,
+                    "rows": m.input_row_count,
+                    "champion": m.champion_model_id,
+                    "wmape": m.backtest_wmape,
+                    "horizon": m.forecast_horizon,
+                    "forecast_rows": m.forecast_row_count,
+                    "cleansing": m.cleansing_applied,
+                    "outliers_clipped": m.outliers_clipped,
+                    "validation_passed": m.validation_passed,
+                    "file": str(mf.name),
+                })
+            except Exception:
+                parse_errors += 1
+                continue
+
+    if parse_errors > 0:
+        st.caption(
+            f"Loaded {len(manifests)} of {len(manifest_files)} manifests "
+            f"({parse_errors} could not be parsed)."
+        )
 
     if manifests:
         manifest_df = pl.DataFrame(manifests)
@@ -73,6 +83,9 @@ if manifest_files:
             polars_to_pandas(manifest_df),
             use_container_width=True,
             column_config={
+                "run_id": st.column_config.TextColumn(
+                    "Run ID", help="Unique identifier for this pipeline run."
+                ),
                 "wmape": st.column_config.NumberColumn("WMAPE", format="%.4f"),
                 "cleansing": st.column_config.CheckboxColumn("Cleansed"),
                 "validation_passed": st.column_config.CheckboxColumn("Valid"),
@@ -92,12 +105,25 @@ if manifest_files:
                 with st.expander("Full manifest JSON"):
                     raw = json.loads(selected_path.read_text())
                     st.json(raw)
+            else:
+                st.warning(
+                    f"Manifest file `{selected_manifest}` not found. "
+                    "It may have been moved or deleted."
+                )
     else:
-        st.info("No valid manifests found.")
+        st.info("No valid manifests found. Check that manifest JSON files are not corrupted.")
 else:
     st.info(
-        "No pipeline manifests found. Run `python scripts/run_forecast.py` "
-        "to generate forecast manifests."
+        "No pipeline manifests found."
+    )
+    st.markdown(
+        "**To generate manifests:**\n"
+        "```bash\n"
+        "python scripts/run_forecast.py \\\n"
+        "  --config configs/platform_config.yaml \\\n"
+        "  --lob retail\n"
+        "```\n\n"
+        "Manifests are saved as `*_manifest.json` in the `data/` directory."
     )
 
 # ---------------------------------------------------------------------------
@@ -116,28 +142,39 @@ tab_auto, tab_upload = st.tabs(["From Metric Store", "Upload Metrics"])
 
 with tab_auto:
     if st.button("Detect drift", key="detect_drift"):
-        try:
-            store = MetricStore(base_path=metrics_dir)
-            metrics_df = store.read(run_type="backtest", lob=lob)
-            if metrics_df is not None and not metrics_df.is_empty():
-                detector = ForecastDriftDetector()
-                drift_alerts = detector.detect(metrics_df)
-                st.session_state["drift_alerts"] = drift_alerts
-            else:
-                st.warning("No metrics found for drift detection.")
-        except Exception as e:
-            st.error(f"Drift detection error: {e}")
+        with st.spinner("Detecting drift..."):
+            try:
+                store = MetricStore(base_path=metrics_dir)
+                metrics_df = store.read(run_type="backtest", lob=lob)
+                if metrics_df is not None and not metrics_df.is_empty():
+                    detector = ForecastDriftDetector()
+                    drift_alerts = detector.detect(metrics_df)
+                    st.session_state["drift_alerts"] = drift_alerts
+                else:
+                    st.warning(
+                        f"No metrics found for LOB '{lob}'. "
+                        f"Run a backtest first: `python scripts/run_backtest.py --lob {lob}`"
+                    )
+            except Exception as e:
+                st.error(
+                    f"Drift detection error: {e}\n\n"
+                    f"Check that the metric store exists at: `{metrics_dir}`"
+                )
 
 with tab_upload:
     uploaded_metrics = st.file_uploader(
         "Upload metrics Parquet for drift detection", type=["parquet"], key="drift_upload"
     )
     if uploaded_metrics is not None:
-        import io
-        metrics_df = pl.read_parquet(io.BytesIO(uploaded_metrics.getvalue()))
-        detector = ForecastDriftDetector()
-        drift_alerts = detector.detect(metrics_df)
-        st.session_state["drift_alerts"] = drift_alerts
+        try:
+            import io
+            metrics_df = pl.read_parquet(io.BytesIO(uploaded_metrics.getvalue()))
+            with st.spinner("Detecting drift..."):
+                detector = ForecastDriftDetector()
+                drift_alerts = detector.detect(metrics_df)
+            st.session_state["drift_alerts"] = drift_alerts
+        except Exception as e:
+            st.error(f"Failed to process metrics file: {e}")
 
 # Display drift alerts
 drift_alerts = drift_alerts or st.session_state.get("drift_alerts", [])
@@ -148,9 +185,18 @@ if drift_alerts:
     warnings = [a for a in drift_alerts if a.severity.value == "warning"]
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total Alerts", len(drift_alerts))
-    col2.metric("Critical", len(critical))
-    col3.metric("Warning", len(warnings))
+    col1.metric(
+        "Total Alerts", len(drift_alerts),
+        help="Total number of drift alerts detected across all series.",
+    )
+    col2.metric(
+        "Critical", len(critical),
+        help="Alerts indicating significant accuracy degradation that requires attention.",
+    )
+    col3.metric(
+        "Warning", len(warnings),
+        help="Alerts indicating minor accuracy changes worth monitoring.",
+    )
 
     # Alert table
     alert_data = []
@@ -178,6 +224,21 @@ if drift_alerts:
         alert_pd.style.map(style_severity, subset=["severity"]),
         use_container_width=True,
     )
+
+    # Cross-page: view a drifting series in Forecast Viewer
+    drifting_series = alert_df["series_id"].unique().to_list()
+    selected_drift = st.selectbox(
+        "View drifting series in Forecast Viewer",
+        drifting_series,
+        index=None,
+        placeholder="Choose a series...",
+    )
+    if selected_drift:
+        st.session_state["selected_series_id"] = selected_drift
+        st.success(
+            f"Series `{selected_drift}` selected. Go to **Forecast Viewer** "
+            f"in the sidebar to investigate."
+        )
 
     # Alert distribution by metric type
     fig_alert = px.histogram(
@@ -210,10 +271,22 @@ if report is not None:
     fa = report.forecastability
 
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Series", f"{schema.n_series:,}")
-    col2.metric("Rows", f"{schema.n_rows:,}")
-    col3.metric("Forecastability", f"{fa.overall_score:.2f}")
-    col4.metric("Frequency", schema.frequency_guess)
+    col1.metric(
+        "Series", f"{schema.n_series:,}",
+        help="Number of unique time series in the analyzed data.",
+    )
+    col2.metric(
+        "Rows", f"{schema.n_rows:,}",
+        help="Total number of data rows.",
+    )
+    col3.metric(
+        "Forecastability", f"{fa.overall_score:.2f}",
+        help="Overall forecastability score (0-1). Higher means easier to forecast accurately.",
+    )
+    col4.metric(
+        "Frequency", schema.frequency_guess,
+        help="Detected data frequency: D=daily, W=weekly, M=monthly, Q=quarterly.",
+    )
 
     # Score distribution
     dist = fa.score_distribution
@@ -243,7 +316,7 @@ if report is not None:
 else:
     st.info(
         "Data quality info is populated after running Data Onboarding. "
-        "Go to the Data Onboarding page to analyze your data first."
+        "Go to the **Data Onboarding** page to analyze your data first."
     )
 
 # ---------------------------------------------------------------------------
@@ -262,6 +335,7 @@ if manifest_files:
                 cost_data.append({
                     "run_id": raw.get("run_id", "")[:12],
                     "timestamp": raw.get("timestamp", ""),
+                    "duration": format_duration(raw.get("total_seconds", 0)),
                     "total_seconds": raw.get("total_seconds", 0),
                     "series_count": raw.get("input_series_count", 0),
                 })
@@ -270,7 +344,10 @@ if manifest_files:
 
     if cost_data:
         cost_df = pl.DataFrame(cost_data)
-        st.dataframe(polars_to_pandas(cost_df), use_container_width=True)
+        st.dataframe(
+            polars_to_pandas(cost_df.select(["run_id", "timestamp", "duration", "series_count"])),
+            use_container_width=True,
+        )
 
         fig_cost = go.Figure()
         cost_pd = polars_to_pandas(cost_df)
@@ -278,6 +355,8 @@ if manifest_files:
             x=cost_pd["run_id"],
             y=cost_pd["total_seconds"],
             marker_color=COLORS["primary"],
+            text=cost_pd["duration"],
+            textposition="auto",
         ))
         fig_cost.update_layout(
             title="Compute Time by Run",
@@ -288,6 +367,9 @@ if manifest_files:
         )
         st.plotly_chart(fig_cost, use_container_width=True)
     else:
-        st.info("No compute cost data found in manifests.")
+        st.info(
+            "No compute cost data found in manifests. "
+            "Cost tracking requires a `total_seconds` field in the manifest JSON."
+        )
 else:
     st.info("No pipeline runs found. Cost data is collected from pipeline manifests.")
