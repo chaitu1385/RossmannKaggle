@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Weekly sales forecasting platform for retail S&OP. Python 3.8+, built on FastAPI (REST API), PySpark (distributed execution), and Polars (data processing). Combines statistical, ML, neural, and foundation model forecasting with hierarchical reconciliation.
+Multi-frequency (daily/weekly/monthly/quarterly) sales forecasting platform for retail S&OP. Python 3.8+, built on FastAPI (REST API), PySpark (distributed execution), and Polars (data processing). Combines statistical, ML, neural, and foundation model forecasting with hierarchical reconciliation.
 
 Main code lives in `forecasting-platform/`.
 
@@ -59,6 +59,7 @@ forecasting-platform/
 │   ├── data/               # Data loading, preprocessing, validation, demand cleansing, regressor screening, external regressors
 │   │   ├── validator.py    # DataValidator — schema enforcement, duplicate/frequency/range checks
 │   │   ├── cleanser.py     # DemandCleanser — outlier detection, stockout imputation, period exclusion
+│   │   ├── quality_report.py # DataQualityAnalyzer — profiling, gap/zero/short series reporting
 │   │   ├── regressor_screen.py # RegressorScreen — variance, correlation, MI screening
 │   │   ├── regressors.py   # External regressor loader, holiday calendar, validation
 │   │   ├── file_classifier.py # FileClassifier — auto-detect file roles (time_series, dimension, regressor)
@@ -87,7 +88,8 @@ forecasting-platform/
 │   │   ├── manifest.py     # PipelineManifest — provenance sidecar (JSON) for each forecast run
 │   │   ├── batch_runner.py # BatchInferenceRunner — partitioned parallel forecasting
 │   │   └── scheduler.py    # PipelineScheduler — recurring runs with retry + dead-letter
-│   ├── series/             # Series builder, sparse detector, SKU transitions
+│   ├── series/             # Series builder, sparse detector, SKU transitions, structural break detection
+│   │   ├── break_detector.py # StructuralBreakDetector — CUSUM/PELT changepoint detection
 │   ├── sku_mapping/        # New/discontinued SKU mapping
 │   ├── spark/              # PySpark distributed execution
 │   ├── fabric/             # Microsoft Fabric / Delta Lake deployment
@@ -101,6 +103,19 @@ forecasting-platform/
 │       ├── 3_Forecast_Viewer.py    # Time series + fan chart + decomposition
 │       └── 4_Platform_Health.py    # Manifests, drift alerts, data quality, cost
 ├── tests/                  # 860+ tests (pytest)
+│   └── analytics/          # BI export, comparators, explainability, governance, FVA, data profiling, causal analysis
+│       ├── analyzer.py     # DataAnalyzer — automated data profiling + config recommendation
+│       ├── forecastability.py # ForecastabilityAnalyzer — CV, ApEn, spectral entropy, SNR scoring
+│       ├── causal.py       # CausalAnalyzer — price elasticity, cannibalization, promo lift
+│       ├── llm_analyzer.py # LLMAnalyzer — Claude-powered interpretation of analysis reports
+│       ├── governance.py   # ModelCard, ModelCardRegistry, ForecastLineage
+│       ├── fva_analyzer.py # FVAAnalyzer — aggregate FVA across series/folds/LOBs
+│       ├── explainer.py    # ForecastExplainer — STL decomposition + SHAP attribution
+│       ├── comparator.py   # ForecastComparator — multi-source forecast alignment
+│       ├── notebook_api.py # ForecastAnalytics — notebook-ready analytics API
+│       ├── bi_export.py    # BIExporter — Parquet export for BI tools
+│       └── exceptions.py   # ExceptionEngine — S&OP exception flagging
+├── tests/                  # 980+ tests (pytest)
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
 └── notebooks/              # Jupyter notebooks for exploration
@@ -127,8 +142,7 @@ YAML-driven config system with dataclass schema validation:
 - `configs/lob/` — line-of-business overrides (inherit from base)
 - Schema defined in `src/config/schema.py`
 
-Key config dataclasses: `ForecastConfig`, `BacktestConfig`, `DataQualityConfig` (contains `ValidationConfig`, `CleansingConfig`), `ConstraintConfig`, `ExternalRegressorConfig` (contains `RegressorScreenConfig`), `ParallelismConfig`, `ObservabilityConfig` (contains `AlertConfig`)
-Key config dataclasses: `ForecastConfig`, `BacktestConfig`, `DataQualityConfig` (contains `ValidationConfig`, `CleansingConfig`), `ConstraintConfig`, `ExternalRegressorConfig` (contains `RegressorScreenConfig`), `AIConfig`
+Key config dataclasses: `ForecastConfig`, `BacktestConfig`, `DataQualityConfig` (contains `ValidationConfig`, `CleansingConfig`), `ConstraintConfig`, `ExternalRegressorConfig` (contains `RegressorScreenConfig`), `ParallelismConfig`, `ObservabilityConfig` (contains `AlertConfig`), `AIConfig`
 
 ### Multi-frequency support
 
@@ -153,6 +167,8 @@ Helper functions: `get_frequency_profile(freq)` returns the profile dict; `freq_
 - Skip `test_metrics.py` and `test_feature_engineering.py` (legacy/slow)
 - 900+ tests across 40 test files
 - Key test modules: `test_platform.py` (85 tests), `test_ai_*.py` (73), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55), `test_file_classifier.py` (26), `test_file_merger.py` (20)
+- 980+ tests across 46 test files
+- Key test modules: `test_platform.py` (85 tests), `test_sku_mapping.py` (81), `test_ai_*.py` (66), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55), `test_observability.py` (41)
 
 ## Key Dependencies
 
