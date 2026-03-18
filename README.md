@@ -11,6 +11,7 @@ No Docker? See [QUICKSTART.md](QUICKSTART.md) for the local Python path.
 ---
 
 A production-grade, modular weekly sales forecasting platform. Covers the full lifecycle from raw data ingestion to hierarchically reconciled, explained, and governed forecasts — with a REST API, Microsoft Fabric/Delta Lake deployment layer, Spark distributed execution, and S&OP exception management.
+A production-grade, modular multi-frequency sales forecasting platform (daily, weekly, monthly, quarterly). Covers the full lifecycle from raw data ingestion to hierarchically reconciled, explained, and governed forecasts — with a REST API, Microsoft Fabric/Delta Lake deployment layer, Spark distributed execution, and S&OP exception management.
 
 **See also:** [QUICKSTART.md](QUICKSTART.md) — get running in 2 minutes | [CONCEPTS.md](CONCEPTS.md) — why each component exists | [EDGE_CASES.md](EDGE_CASES.md) — failure modes and how the platform handles them
 
@@ -37,8 +38,9 @@ A production-grade, modular weekly sales forecasting platform. Covers the full l
 │  AuditLogger (append-only, Parquet, date-partitioned)       │
 ├─────────────────────────────────────────────────────────────┤
 │  Analytics Layer                      src/analytics/        │
-│  ForecastAnalytics (notebook API)                           │
-│  BIExporter (Power BI / Parquet)                            │
+│  DataAnalyzer · ForecastabilityAnalyzer · CausalAnalyzer    │
+│  LLMAnalyzer (Claude-powered interpretation)                │
+│  ForecastAnalytics (notebook API) · BIExporter              │
 │  ForecastComparator · ExceptionEngine                       │
 │  ForecastExplainer (STL + SHAP + narrative)                 │
 │  DriftDetector · ModelCard · ModelCardRegistry              │
@@ -82,11 +84,13 @@ A production-grade, modular weekly sales forecasting platform. Covers the full l
 ├─────────────────────────────────────────────────────────────┤
 │  Series Management                    src/series/           │
 │  SeriesBuilder · SparseDetector · TransitionEngine          │
+│  StructuralBreakDetector (CUSUM / PELT)                     │
 ├─────────────────────────────────────────────────────────────┤
 │  Data Layer                           src/data/             │
 │  DataLoader · DataPreprocessor · FeatureEngineer            │
 │  ExternalRegressorLoader · HolidayCalendar                  │
-│  DataValidator · DemandCleanser · RegressorScreen            │
+│  DataValidator · DemandCleanser · RegressorScreen           │
+│  DataQualityAnalyzer (profiling & gap/zero reporting)        │
 ├─────────────────────────────────────────────────────────────┤
 │  Infrastructure                       src/fabric/ src/spark/│
 │  DeploymentOrchestrator · FabricLakehouse · DeltaWriter     │
@@ -102,13 +106,13 @@ A production-grade, modular weekly sales forecasting platform. Covers the full l
 ```
 forecasting-platform/
 ├── src/
-│   ├── analytics/          # Notebook API, BI export, comparators, exception engine, explainability, governance, FVA
+│   ├── analytics/          # Data profiling, forecastability, causal analysis, LLM interpretation, BI export, explainability, governance, FVA
 │   ├── api/                # FastAPI REST serving layer (auth-protected)
 │   ├── audit/              # Append-only Parquet audit log (immutable, date-partitioned)
 │   ├── auth/               # RBAC, JWT authentication, role/permission models
 │   ├── backtesting/        # Walk-forward backtest engine, champion selection
 │   ├── config/             # YAML config schema + loader (incl. external regressor config)
-│   ├── data/               # Data loading, preprocessing, validation, demand cleansing, regressor screening, external regressors
+│   ├── data/               # Data loading, preprocessing, validation, demand cleansing, regressor screening, external regressors, quality profiling
 │   ├── evaluation/         # Metrics (WMAPE, RMSPE, bias, MAE) + evaluator
 │   ├── fabric/             # Microsoft Fabric / Delta Lake deployment
 │   ├── forecasting/        # Model implementations + registry (statistical, ML, neural, foundation, intermittent)
@@ -118,7 +122,7 @@ forecasting-platform/
 │   ├── observability/      # Structured logging, metrics, alerts, cost tracking
 │   ├── overrides/          # Planner manual override store (DuckDB + Parquet fallback)
 │   ├── pipeline/           # End-to-end backtest + forecast pipelines, provenance manifest, batch runner, scheduler
-│   ├── series/             # Series builder, sparse detector, lifecycle transitions
+│   ├── series/             # Series builder, sparse detector, lifecycle transitions, structural break detection
 │   ├── sku_mapping/        # New/discontinued SKU mapping (4 methods + Bayesian fusion)
 │   ├── spark/              # PySpark distributed execution layer
 │   └── utils/              # Logger, config utilities
@@ -131,6 +135,7 @@ forecasting-platform/
 │       ├── 3_Forecast_Viewer.py    # Fan chart + decomposition + narrative
 │       └── 4_Platform_Health.py    # Manifests, drift alerts, data quality, cost
 ├── tests/                  # 860+ unit + integration tests
+├── tests/                  # 980+ unit + integration tests
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
 ├── notebooks/              # Jupyter notebooks for exploration
@@ -209,7 +214,7 @@ def predict_quantiles(self, horizon: int, quantiles: list[float]) -> pl.DataFram
 | Function | Description |
 |----------|-------------|
 | `load_external_features(path)` | Load external feature data from Parquet or CSV |
-| `generate_holiday_calendar(country, start, end)` | Generate weekly holiday flags using the `holidays` library (optional dep) |
+| `generate_holiday_calendar(country, start, end)` | Generate period-level holiday flags using the `holidays` library (optional dep) |
 | `validate_regressors(features, actuals, columns)` | Validate grain alignment, null checks, future coverage for forecast horizon |
 
 ML models (`LGBMDirectForecaster`, `XGBoostDirectForecaster`) automatically detect and use external feature columns during `fit()` and `predict()`. Statistical and naive models silently ignore them.
@@ -242,6 +247,12 @@ Runs after gap-filling in `SeriesBuilder.build()` when `cleansing.enabled = True
 | `RegressorScreenReport` | Result with `screened_columns`, `dropped_columns`, `low_variance_columns`, `high_correlation_pairs`, `low_mi_columns`, per-column stats |
 
 Runs after feature join in `SeriesBuilder.build()` when `external_regressors.screen.enabled = True`. Optionally auto-drops flagged columns (`auto_drop=True`).
+
+#### DataQualityAnalyzer (data profiling)
+
+| Class | Description |
+|-------|-------------|
+| `DataQualityAnalyzer` | Profiles input data: missing percentage, zero-value series count, short series count, gap detection; complements `DataValidator` with aggregate-level quality metrics |
 
 ### `src/auth/` — RBAC & Authentication
 
@@ -290,9 +301,10 @@ No UPDATE or DELETE operations — append-only by design for SOX compliance.
 
 | Class | Description |
 |-------|-------------|
-| `SeriesBuilder` | Builds weekly panel DataFrames from raw transactional data; fills gaps; integrates validation and cleansing |
+| `SeriesBuilder` | Builds frequency-aware panel DataFrames from raw transactional data; fills gaps; integrates validation and cleansing |
 | `SparseDetector` | Classifies series as smooth / intermittent / erratic / lumpy using CV-squared and ADI |
 | `TransitionEngine` | Handles new-product launches: stitches history, applies linear/S-curve/step ramps |
+| `StructuralBreakDetector` | Identifies permanent level shifts via CUSUM (zero-dependency) or PELT (`ruptures`); truncates history to post-break regime |
 
 **Sparse classification thresholds:**
 
@@ -359,7 +371,16 @@ Tikhonov regularisation (lambda = 1e-6) applied for numerical stability.
 | `wmape()` / `normalized_bias()` / `mape()` / `mae()` / `rmse()` | Standalone metric functions |
 | `compute_all_metrics()` | Compute all metrics in one pass |
 
-### `src/analytics/` — Explainability, Governance & BI
+### `src/analytics/` — Data Profiling, Explainability, Governance & BI
+
+#### `DataAnalyzer` (automated data profiling)
+
+| Class | Description |
+|-------|-------------|
+| `DataAnalyzer` | Orchestrates automated data profiling: schema detection, hierarchy detection, forecastability assessment, data quality profiling, and `PlatformConfig` recommendation |
+| `ForecastabilityAnalyzer` | Per-series statistical signals: CV, approximate entropy (ApEn), spectral entropy, SNR, trend/seasonal strength; produces a forecastability score per series |
+| `CausalAnalyzer` | Econometric analysis: price elasticity estimation (detrended/deseasonalized), cannibalization detection (cross-correlation), promotional lift (before/after comparison) |
+| `LLMAnalyzer` | Sends analysis reports to Claude for plain-language interpretation: key findings, hypotheses, model selection rationale, risk identification; gracefully degrades when `ANTHROPIC_API_KEY` is unset |
 
 #### `ForecastAnalytics` (notebook API)
 Notebook-ready queries over the MetricStore:
@@ -554,6 +575,10 @@ from src.analytics import (
     BIExporter,
 )
 from src.analytics.fva_analyzer import FVAAnalyzer
+from src.analytics.analyzer import DataAnalyzer
+from src.analytics.forecastability import ForecastabilityAnalyzer
+from src.analytics.causal import CausalAnalyzer
+from src.analytics.llm_analyzer import LLMAnalyzer
 from src.data.regressors import load_external_features, validate_regressors
 from src.data.validator import DataValidator
 from src.data.cleanser import DemandCleanser
@@ -733,7 +758,7 @@ pip install -r forecasting-platform/requirements.txt
 python -m pytest forecasting-platform/tests/ \
   --ignore=forecasting-platform/tests/test_metrics.py \
   --ignore=forecasting-platform/tests/test_feature_engineering.py -v
-# 860+ tests collected
+# 980+ tests collected
 ```
 
 | Test file | Tests | Covers |
@@ -771,7 +796,8 @@ python -m pytest forecasting-platform/tests/ \
 | `test_pipeline_manifest.py` | 15 | Manifest build, write, read roundtrip; hash determinism; ForecastPipeline integration |
 | `test_external_regressors.py` | 6 | Regressor validation, SeriesBuilder with/without features |
 | `test_data_loader.py` | 6 | Data loading from files |
-| `test_observability.py` | 33 | PipelineContext, StructuredLogger, MetricsEmitter, AlertDispatcher, CostEstimator, PipelineScheduler |
+| `test_sku_mapping.py` | 81 | SKU transition engine, predecessor matching (attribute, naming, curve fitting, temporal), Bayesian fusion |
+| `test_observability.py` | 41 | PipelineContext, StructuredLogger, MetricsEmitter, AlertDispatcher, CostEstimator, PipelineScheduler |
 | `test_batch_runner.py` | 8 | BatchInferenceRunner, ParallelismConfig |
 | `test_fabric_portability.py` | 19 | requirements-fabric.txt, ParquetOverrideStore, get_override_store factory, FabricNotebookAdapter |
 | `test_evaluator.py` | 5 | Evaluation orchestration |
