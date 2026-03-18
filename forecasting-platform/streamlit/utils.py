@@ -74,11 +74,62 @@ def polars_to_pandas(df: pl.DataFrame):
     return df.to_pandas()
 
 
-def load_sample_data() -> Optional[pl.DataFrame]:
-    """Load the bundled Rossmann sample dataset (if present)."""
+def load_sample_data() -> pl.DataFrame:
+    """Load the bundled Rossmann sample dataset, or generate synthetic data.
+
+    Tries Rossmann CSV first. If not found, generates a synthetic retail
+    dataset so the sample button always works on first click.
+    """
     if SAMPLE_DATA.exists():
-        return pl.read_csv(str(SAMPLE_DATA), try_parse_dates=True)
-    return None
+        try:
+            return pl.read_csv(
+                str(SAMPLE_DATA),
+                try_parse_dates=True,
+                infer_schema_length=10000,
+            )
+        except Exception:
+            pass  # fall through to synthetic
+    return _generate_synthetic_retail()
+
+
+def _generate_synthetic_retail() -> pl.DataFrame:
+    """Generate a synthetic retail dataset for demo purposes.
+
+    20 stores x 3 categories x 104 weeks = 6,240 rows with trend,
+    seasonality, noise, and a promo regressor.
+    """
+    import numpy as np
+    from datetime import date, timedelta
+
+    rng = np.random.RandomState(42)
+    rows = []
+    base = date(2020, 1, 6)
+    n_weeks = 104
+
+    stores = {
+        f"store_{i}": rng.choice(["North", "South", "East", "West"])
+        for i in range(20)
+    }
+    categories = ["Food", "Electronics", "Clothing"]
+
+    for store_id, region in stores.items():
+        for cat in categories:
+            base_demand = rng.uniform(50, 200)
+            for w in range(n_weeks):
+                seasonal = 30 * np.sin(2 * np.pi * w / 52)
+                trend = 0.2 * w
+                noise = rng.normal(0, 10)
+                qty = max(0, base_demand + seasonal + trend + noise)
+                rows.append({
+                    "week": base + timedelta(weeks=w),
+                    "store_id": store_id,
+                    "region": region,
+                    "category": cat,
+                    "quantity": round(qty, 2),
+                    "promo_intensity": round(rng.uniform(0, 1), 2),
+                })
+
+    return pl.DataFrame(rows)
 
 
 def format_pct(value: float, decimals: int = 1) -> str:

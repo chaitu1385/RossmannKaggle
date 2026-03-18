@@ -16,11 +16,14 @@ import streamlit as st
 import yaml
 
 _PLATFORM_ROOT = Path(__file__).resolve().parent.parent.parent
+_STREAMLIT_DIR = Path(__file__).resolve().parent.parent
 if str(_PLATFORM_ROOT) not in sys.path:
     sys.path.insert(0, str(_PLATFORM_ROOT))
+if str(_STREAMLIT_DIR) not in sys.path:
+    sys.path.insert(0, str(_STREAMLIT_DIR))
 
 from src.analytics.analyzer import DataAnalyzer
-from streamlit.utils import (
+from utils import (
     COLORS,
     load_sample_data,
     load_uploaded_csv,
@@ -41,22 +44,19 @@ with col_upload:
     uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
 
 with col_sample:
-    use_sample = st.button("Use Rossmann sample data")
+    use_sample = st.button("Use sample data")
 
 df = None
 if uploaded_file is not None:
     df = load_uploaded_csv(uploaded_file)
-    st.success(f"Loaded {df.shape[0]:,} rows × {df.shape[1]} columns from upload.")
+    st.success(f"Loaded {df.shape[0]:,} rows x {df.shape[1]} columns from upload.")
 elif use_sample or st.session_state.get("sample_loaded"):
     df = load_sample_data()
-    if df is not None:
-        st.session_state["sample_loaded"] = True
-        st.success(f"Loaded Rossmann sample: {df.shape[0]:,} rows × {df.shape[1]} columns.")
-    else:
-        st.warning("Sample data not found. Place Rossmann train.csv in data/rossmann/.")
+    st.session_state["sample_loaded"] = True
+    st.success(f"Loaded sample data: {df.shape[0]:,} rows x {df.shape[1]} columns.")
 
 if df is None:
-    st.info("Upload a CSV or load the sample data to get started.")
+    st.info("Upload a CSV or click **Use sample data** to get started.")
     st.stop()
 
 # ---------------------------------------------------------------------------
