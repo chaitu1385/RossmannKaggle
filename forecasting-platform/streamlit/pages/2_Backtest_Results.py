@@ -13,14 +13,17 @@ import plotly.graph_objects as go
 import streamlit as st
 
 _PLATFORM_ROOT = Path(__file__).resolve().parent.parent.parent
+_STREAMLIT_DIR = Path(__file__).resolve().parent.parent
 if str(_PLATFORM_ROOT) not in sys.path:
     sys.path.insert(0, str(_PLATFORM_ROOT))
+if str(_STREAMLIT_DIR) not in sys.path:
+    sys.path.insert(0, str(_STREAMLIT_DIR))
 
 import polars as pl
 
 from src.analytics.fva_analyzer import FVAAnalyzer
 from src.metrics.store import MetricStore
-from streamlit.utils import (
+from utils import (
     COLORS,
     DATA_DIR,
     FVA_COLORS,

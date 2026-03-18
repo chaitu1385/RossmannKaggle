@@ -1,8 +1,19 @@
 # Forecasting Platform
 
+```bash
+git clone https://github.com/chaitu1385/Forecasting-Platform.git
+cd Forecasting-Platform
+docker compose up          # open http://localhost:8501
+```
+
+No Docker? See [QUICKSTART.md](QUICKSTART.md) for the local Python path.
+
+---
+
+A production-grade, modular weekly sales forecasting platform. Covers the full lifecycle from raw data ingestion to hierarchically reconciled, explained, and governed forecasts — with a REST API, Microsoft Fabric/Delta Lake deployment layer, Spark distributed execution, and S&OP exception management.
 A production-grade, modular multi-frequency sales forecasting platform (daily, weekly, monthly, quarterly). Covers the full lifecycle from raw data ingestion to hierarchically reconciled, explained, and governed forecasts — with a REST API, Microsoft Fabric/Delta Lake deployment layer, Spark distributed execution, and S&OP exception management.
 
-**See also:** [CONCEPTS.md](CONCEPTS.md) — why each component exists and when to use it | [EDGE_CASES.md](EDGE_CASES.md) — failure modes and how the platform handles them
+**See also:** [QUICKSTART.md](QUICKSTART.md) — get running in 2 minutes | [CONCEPTS.md](CONCEPTS.md) — why each component exists | [EDGE_CASES.md](EDGE_CASES.md) — failure modes and how the platform handles them
 
 ---
 

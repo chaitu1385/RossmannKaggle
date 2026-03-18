@@ -32,21 +32,29 @@ st.set_page_config(
 #  Landing page
 # ---------------------------------------------------------------------------
 st.title("Forecasting Platform")
+
+st.markdown(
+    "Weekly sales forecasting for retail S&OP — statistical, ML, neural, "
+    "and foundation models with hierarchical reconciliation."
+)
+
+st.info(
+    "**Start here:** Open **Data Onboarding** in the sidebar, "
+    "then click **Use sample data** to see the platform in action."
+)
+
 st.markdown(
     """
-    Weekly sales forecasting for retail S&OP — statistical, ML, neural, and
-    foundation models with hierarchical reconciliation.
+**Pages**
 
-    Use the sidebar to navigate between pages:
+1. **Data Onboarding** — Upload data or use the built-in sample to auto-detect schema, assess forecastability, and get a recommended config.
+2. **Backtest Results** — Model leaderboard, FVA cascade showing which layers add or destroy value, per-series champion map.
+3. **Forecast Viewer** — Interactive forecast chart with P10/P90 confidence intervals, actuals overlay, and seasonal decomposition.
+4. **Platform Health** — Pipeline manifests, drift alerts, data quality summary, and compute cost.
 
-    | Page | Purpose |
-    |------|---------|
-    | **Data Onboarding** | Upload data, detect schema & hierarchy, assess forecastability, get a recommended config |
-    | **Backtest Results** | Model leaderboard, FVA cascade, champion map |
-    | **Forecast Viewer** | Interactive forecast chart with confidence intervals and decomposition |
-    | **Platform Health** | Pipeline manifests, drift alerts, data quality, compute cost |
+**Need help?** See [QUICKSTART.md](https://github.com/chaitu1385/Forecasting-Platform/blob/master/QUICKSTART.md) for setup instructions.
     """
 )
 
 st.divider()
-st.caption("Built with Streamlit · Powered by the Forecasting Platform engine")
+st.caption("Built with Streamlit")
