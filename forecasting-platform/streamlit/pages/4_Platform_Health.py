@@ -114,16 +114,8 @@ if manifest_files:
         st.info("No valid manifests found. Check that manifest JSON files are not corrupted.")
 else:
     st.info(
-        "No pipeline manifests found."
-    )
-    st.markdown(
-        "**To generate manifests:**\n"
-        "```bash\n"
-        "python scripts/run_forecast.py \\\n"
-        "  --config configs/platform_config.yaml \\\n"
-        "  --lob retail\n"
-        "```\n\n"
-        "Manifests are saved as `*_manifest.json` in the `data/` directory."
+        "No pipeline manifests found. Manifests are generated automatically "
+        "when you run a forecast from the **Data Onboarding** page."
     )
 
 # ---------------------------------------------------------------------------
@@ -153,7 +145,7 @@ with tab_auto:
                 else:
                     st.warning(
                         f"No metrics found for LOB '{lob}'. "
-                        f"Run a backtest first: `python scripts/run_backtest.py --lob {lob}`"
+                        f"Run a backtest from the **Data Onboarding** page first."
                     )
             except Exception as e:
                 st.error(
