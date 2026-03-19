@@ -1,6 +1,8 @@
 name: Cleanup Old Branches
 
 on:
+  push:
+    branches: [master]
   workflow_dispatch:
     inputs:
       dry_run:
