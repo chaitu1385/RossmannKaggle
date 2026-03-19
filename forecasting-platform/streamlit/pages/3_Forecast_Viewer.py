@@ -77,17 +77,9 @@ actuals_df = actuals_df or st.session_state.get("actuals_df")
 
 if forecast_df is None:
     st.info(
-        "Upload forecast output (Parquet or CSV) in the sidebar."
-    )
-    st.markdown(
-        "**To generate forecasts:**\n"
-        "```bash\n"
-        "python scripts/run_forecast.py \\\n"
-        "  --config configs/platform_config.yaml \\\n"
-        "  --lob retail\n"
-        "```\n\n"
-        "The output should contain columns like: "
-        "`series_id`, `week`, `forecast`, `forecast_p10`, `forecast_p90`."
+        "No forecast loaded yet. You can either:\n\n"
+        "- **Generate a forecast** from the **Data Onboarding** page (upload data \u2192 accept config \u2192 click *Run Forecast*)\n"
+        "- **Upload** forecast output (Parquet or CSV) in the sidebar"
     )
     st.stop()
 

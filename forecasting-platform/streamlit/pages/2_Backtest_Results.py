@@ -97,17 +97,9 @@ if metrics_df is None:
 
 if metrics_df is None:
     st.info(
-        "Load backtest results from the metric store or upload a Parquet file."
-    )
-    st.markdown(
-        "**To generate backtest results:**\n"
-        "```bash\n"
-        "python scripts/run_backtest.py \\\n"
-        "  --config configs/platform_config.yaml \\\n"
-        "  --lob retail\n"
-        "```\n\n"
-        "The output Parquet should contain columns: "
-        "`model_id`, `series_id`, `wmape`, `normalized_bias`, `fold`."
+        "No backtest results loaded yet. You can either:\n\n"
+        "- **Run a backtest** from the **Data Onboarding** page (upload data \u2192 accept config \u2192 click *Run Backtest*)\n"
+        "- **Load from metric store** or **upload a Parquet file** using the tabs above"
     )
     st.stop()
 
