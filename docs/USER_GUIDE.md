@@ -1,0 +1,370 @@
+# User Guide
+
+An end-to-end guide for using the Forecasting Platform — from choosing models to interpreting results.
+
+---
+
+## Workflow Overview
+
+```
+1. Prepare data (CSV/Parquet)
+2. Upload via Streamlit or run pipeline script
+3. Backtest: evaluate candidate models
+4. Review results: leaderboard, FVA, champion map
+5. Forecast: generate production forecasts
+6. Monitor: drift alerts, data quality, cost
+```
+
+---
+
+## Model Selection
+
+The platform includes 18 registered models across 6 families. Use this decision tree:
+
+### Quick Reference
+
+| Family | Models | Best For | Data Needs | Speed |
+|--------|--------|----------|-----------|-------|
+| **Naive** | `naive_seasonal` | Baseline benchmark | Any series length | Instant |
+| **Statistical** | `auto_arima`, `auto_ets`, `auto_theta`, `mstl` | Stable demand with clear trend/seasonality | 52+ weeks (weekly) | Fast |
+| **ML** | `lgbm_direct`, `xgboost_direct` | Complex patterns, external regressors | 52+ weeks + features | Fast |
+| **Neural** | `nbeats`, `nhits`, `tft` | Large datasets, complex interactions | 100+ series, 100+ weeks | Slow |
+| **Foundation** | `chronos`, `timegpt` | Cold start, limited history | Any (zero-shot) | Medium |
+| **Intermittent** | `croston`, `croston_sba`, `tsb` | Sparse/lumpy demand | 10+ non-zero observations | Fast |
+
+### Decision Tree
+
+1. **Is demand intermittent (many zeros)?**
+   - Yes -> Enable sparse detection (`sparse_detection: true`). The platform auto-routes sparse series to intermittent models.
+   - No -> Continue.
+
+2. **Do you have external features (promotions, holidays, price)?**
+   - Yes -> Use ML models (`lgbm_direct`, `xgboost_direct`). They automatically pick up feature columns.
+   - Statistical and naive models silently ignore external features.
+
+3. **How much history do you have?**
+   - < 52 weeks -> Foundation models (`chronos`), or `naive_seasonal` with cyclic fallback.
+   - 52-104 weeks -> Statistical (`auto_ets`, `auto_arima`) or ML (`lgbm_direct`).
+   - 104+ weeks -> All models viable. Use backtest to compare.
+
+4. **How many series?**
+   - < 100 -> Any model. Neural models may overfit.
+   - 100-10,000 -> ML models shine. Run backtest with 3-4 candidates.
+   - 10,000+ -> Enable `batch_size` and `n_workers` for parallelism.
+
+### Recommended Starting Configuration
+
+```yaml
+forecast:
+  forecasters: [naive_seasonal, auto_ets, lgbm_direct]
+  sparse_detection: true
+  intermittent_forecasters: [croston_sba, tsb]
+```
+
+This gives you a baseline (naive), a strong statistical model (ETS), and an ML model (LightGBM). The backtest will pick the best per your data.
+
+---
+
+## Running a Backtest
+
+Backtesting evaluates models using walk-forward cross-validation: train on past data, forecast the next N weeks, measure accuracy, slide the window forward.
+
+### Configuration
+
+```yaml
+backtest:
+  n_folds: 3                    # number of CV folds
+  val_weeks: 13                 # validation window (one quarter)
+  gap_weeks: 0                  # gap between train and test (for delayed data)
+  champion_granularity: lob     # pick one champion for the whole LOB
+  primary_metric: wmape          # rank by Weighted MAPE
+  selection_strategy: champion   # "champion" (single best) or "weighted_ensemble"
+```
+
+### Run
+
+```bash
+python forecasting-platform/scripts/run_backtest.py \
+  --config configs/platform_config.yaml --lob retail
+```
+
+### Champion Selection Strategies
+
+- **`champion`** — Picks the single model with lowest WMAPE across all folds. Simple, interpretable.
+- **`weighted_ensemble`** — Blends top models using inverse-WMAPE weights. Often 1-3% more accurate, but harder to explain.
+
+### Granularity Options
+
+| Granularity | What It Does | When to Use |
+|-------------|-------------|-------------|
+| `lob` | One champion for all series in the LOB | Default — simple and reliable |
+| `product_group` | Different champion per product group | When product categories have very different demand patterns |
+| `series` | Different champion per series | Large datasets (1000+ series) where per-series tuning matters |
+
+---
+
+## Interpreting Backtest Results
+
+### Metrics
+
+| Metric | Formula | What It Means | Good Range |
+|--------|---------|-------------|-----------|
+| **WMAPE** | sum(\|error\|) / sum(\|actual\|) | Overall accuracy weighted by volume | < 20% is good, < 10% is excellent |
+| **Normalized Bias** | sum(error) / sum(\|actual\|) | Systematic over/under-forecast | -5% to +5% is acceptable |
+| **MAE** | mean(\|error\|) | Average error in original units | Domain-dependent |
+| **RMSE** | sqrt(mean(error²)) | Penalizes large errors more | Domain-dependent |
+
+### Leaderboard
+
+The leaderboard ranks models by the primary metric (WMAPE by default), aggregated across all folds and series.
+
+```
+Rank | Model          | WMAPE  | Bias   | MAE
+-----|----------------|--------|--------|-----
+1    | lgbm_direct    | 12.3%  | -1.2%  | 234
+2    | auto_ets       | 14.1%  | +0.8%  | 267
+3    | naive_seasonal | 18.7%  | +2.1%  | 312
+```
+
+### Forecast Value Added (FVA)
+
+FVA measures how much accuracy each model layer contributes compared to the naive baseline.
+
+**Layers:**
+
+| Layer | Models | Purpose |
+|-------|--------|---------|
+| L1: Naive | `naive_seasonal` | Baseline — always computed |
+| L2: Statistical | `auto_arima`, `auto_ets`, `croston`, etc. | Best statistical per series |
+| L3: ML | `lgbm_direct`, `xgboost_direct` | Best ML per series |
+| L4: Override | Planner-adjusted | If planner override exists |
+
+**FVA Classification:**
+
+| Classification | WMAPE Change | Meaning |
+|---------------|-------------|---------|
+| `ADDS_VALUE` | > 2 percentage points improvement | Model is helping |
+| `NEUTRAL` | Within ±2 pp | No meaningful difference |
+| `DESTROYS_VALUE` | > 2 pp degradation | Model is hurting — consider removing |
+
+**Reading the FVA cascade chart (Streamlit Backtest Results page):**
+- Bars show WMAPE at each layer
+- Green arrows = layers that add value
+- Red arrows = layers that destroy value
+- If L3 (ML) destroys value vs L2 (Statistical), the ML model isn't learning anything useful beyond what ETS/ARIMA already captures
+
+---
+
+## Generating Forecasts
+
+After backtesting, generate production forecasts:
+
+```bash
+python forecasting-platform/scripts/run_forecast.py \
+  --config configs/platform_config.yaml \
+  --lob retail \
+  --champion lgbm_direct
+```
+
+### Output
+
+- **Forecast Parquet** — Point forecasts and prediction intervals per series per period
+- **Pipeline Manifest** — JSON provenance file tracking what data, config, and model produced the forecast
+
+See [DATA_FORMAT.md](DATA_FORMAT.md) for complete output schemas.
+
+---
+
+## Hierarchical Forecasting
+
+When you have a hierarchy (e.g., SKU -> Category -> Total), hierarchical reconciliation ensures forecasts sum correctly at every level.
+
+### Setup
+
+```yaml
+hierarchies:
+  - name: product
+    levels: [total, category, sku]
+    reconciliation:
+      method: mint     # bottom_up | top_down | ols | wls | mint
+```
+
+Your dimension data must include the hierarchy columns (e.g., `category` for each `sku`).
+
+### Reconciliation Methods
+
+| Method | When to Use |
+|--------|-------------|
+| `bottom_up` | Leaf (SKU) forecasts are accurate; upper levels are just sums |
+| `top_down` | Top-level forecast is accurate; disaggregate by historical proportions |
+| `ols` | No prior knowledge about which level is most accurate |
+| `wls` | Some levels have more data (weights by leaf count or residual variance) |
+| `mint` | Best overall accuracy — uses covariance of forecast errors (recommended) |
+
+---
+
+## External Regressors
+
+Add external features (promotions, holidays, price) to improve ML model accuracy.
+
+### End-to-End Example
+
+1. **Prepare features file** (see [DATA_FORMAT.md](DATA_FORMAT.md) for schema):
+
+```csv
+week,store_id,promotion_flag,holiday_flag,price_index
+2024-01-07,1,1,0,1.05
+...
+```
+
+2. **Configure:**
+
+```yaml
+forecast:
+  external_regressors:
+    enabled: true
+    feature_columns: [promotion_flag, holiday_flag, price_index]
+    future_features_path: data/future_features.parquet
+    screen:
+      enabled: true              # auto-drop low-quality features
+      variance_threshold: 1.0e-6
+      correlation_threshold: 0.95
+```
+
+3. **Run pipeline** — ML models (`lgbm_direct`, `xgboost_direct`) automatically use the features. Statistical models ignore them.
+
+### Regressor Screening
+
+When `screen.enabled: true`, the platform automatically drops:
+- **Near-zero variance** features (threshold: 1e-6)
+- **Highly correlated** feature pairs (threshold: 0.95, keeps first)
+- **Low mutual information** features (optional, `mi_enabled: true`)
+
+Dropped features are logged in the pipeline manifest.
+
+---
+
+## AI Features
+
+Four Claude-powered endpoints provide AI-native analysis. Requires `ANTHROPIC_API_KEY` environment variable.
+
+### Natural Language Query (`POST /ai/explain`)
+
+Ask questions about forecasts in plain English:
+
+```json
+{
+  "lob": "retail",
+  "series_id": "STORE_001",
+  "question": "Why did sales drop last week?"
+}
+```
+
+Returns an answer with supporting data, confidence level, and sources used.
+
+### Anomaly Triage (`POST /ai/triage`)
+
+Prioritizes drift alerts by business impact:
+
+```json
+{
+  "lob": "retail",
+  "severity_filter": "critical",
+  "max_alerts": 50
+}
+```
+
+Returns ranked alerts with impact scores, suggested actions, and an executive summary.
+
+### Config Recommendation (`POST /ai/recommend-config`)
+
+Analyzes backtest results and recommends config changes:
+
+```json
+{ "lob": "retail" }
+```
+
+Returns specific recommendations (e.g., "switch from `naive_seasonal` to `lgbm_direct`") with expected impact and risk level.
+
+### Executive Commentary (`POST /ai/commentary`)
+
+Generates S&OP-ready executive summaries:
+
+```json
+{ "lob": "retail" }
+```
+
+Returns a 3-5 sentence summary, key metrics with trends, exceptions, and action items.
+
+### Graceful Degradation
+
+All AI features work without Claude — they fall back to template-based responses using the same data structures. The UI and downstream consumers don't need to handle a different schema.
+
+---
+
+## Planner Overrides
+
+Demand planners can manually adjust forecasts through the override store.
+
+```python
+from src.overrides import OverrideStore
+
+store = OverrideStore()
+
+# Add an override
+store.add_override(
+    lob="retail",
+    old_sku="PROD_A",
+    new_sku="PROD_B",
+    proportion=0.6,
+    scenario="replacement",
+    ramp_shape="linear"
+)
+
+# Retrieve overrides
+overrides = store.get_overrides(lob="retail", week="2024-09-07")
+```
+
+The override store uses DuckDB by default, with automatic fallback to Parquet in environments where DuckDB is unavailable (e.g., Microsoft Fabric).
+
+---
+
+## Streamlit Dashboard
+
+### Page 1: Data Onboarding
+
+Upload CSV files, auto-detect schema, preview data quality, and get a recommended config.
+
+- Upload single or multiple files
+- Auto-classification into time series / dimension / regressor roles
+- Merge preview with conflict detection
+- Forecastability scoring (0-1 scale per series)
+- Recommended YAML config output
+
+### Page 2: Backtest Results
+
+Evaluate model performance after running a backtest.
+
+- **Leaderboard** — Models ranked by WMAPE
+- **FVA Cascade** — Accuracy improvement at each model layer
+- **Champion Map** — Which model won for which series/product group
+- **Layer Leaderboard** — Keeps/Review/Remove recommendations per layer
+
+### Page 3: Forecast Viewer
+
+Explore forecasts for individual series.
+
+- Series selector (search/filter)
+- Forecast line with actuals overlay
+- P10/P90 fan chart (prediction intervals)
+- Seasonal decomposition (trend + seasonal + residual)
+- Explainer narrative (natural language description)
+
+### Page 4: Platform Health
+
+Monitor pipeline runs and system health.
+
+- Pipeline manifests (provenance for each run)
+- Drift alerts (severity-colored: warning/critical)
+- Data quality summary (validation + cleansing reports)
+- Compute cost tracking per model

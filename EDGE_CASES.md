@@ -181,7 +181,7 @@ A catalog of the failure modes that break forecasting platforms — what goes wr
 **How the platform handles it:** The `AlertConfig` has a `min_severity` filter — set to `"critical"` to suppress warning-level alerts. The `ForecastDriftDetector` uses configurable `baseline_weeks` and `recent_weeks` windows, so transient spikes in a 1-week window don't trigger alerts if the baseline window is 12+ weeks. The alert payload includes `current_value` and `baseline_value`, enabling downstream filtering rules. The `AlertDispatcher` counts dispatched alerts via `dispatched_count` for monitoring alert volume.
 
 **What to watch for:** Alert fatigue is a serious operational risk. Start with `min_severity: critical` and only drop to `warning` once you've tuned the drift detection thresholds for your data. Set `baseline_weeks` to at least 8-12 to absorb seasonal variation. Monitor `dispatched_count` — if it exceeds a few per week, your thresholds are too sensitive. Consider adding a cooldown period (not yet built-in) where the same series can't trigger the same alert type within N days.
-## 16. Claude API Unavailability (AI Features)
+## 19. Claude API Unavailability (AI Features)
 
 **What happens:** The Anthropic API is unreachable — no API key configured, network timeout, rate limiting, or the `anthropic` package is not installed. All four AI endpoints (`/ai/explain`, `/ai/triage`, `/ai/recommend-config`, `/ai/commentary`) would fail if they depended on a live API call.
 

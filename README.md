@@ -16,6 +16,17 @@ A production-grade, modular weekly sales forecasting platform. Covers the full l
 
 ---
 
+## User Guides
+
+| Guide | Description |
+|-------|-------------|
+| [Data Format](docs/DATA_FORMAT.md) | Input/output schemas, column rules, sample data |
+| [Deployment](docs/DEPLOYMENT.md) | Docker, env vars, production checklist, scaling |
+| [User Guide](docs/USER_GUIDE.md) | Model selection, backtest interpretation, AI features |
+| [Troubleshooting](docs/TROUBLESHOOTING.md) | Common errors, FAQ, debugging tips |
+
+---
+
 ## System Layers
 
 ```
@@ -130,7 +141,7 @@ forecasting-platform/
 │       ├── 2_Backtest_Results.py   # Leaderboard, FVA cascade, champion map
 │       ├── 3_Forecast_Viewer.py    # Fan chart + decomposition + narrative
 │       └── 4_Platform_Health.py    # Manifests, drift alerts, data quality, cost
-├── tests/                  # 860+ unit + integration tests
+├── tests/                  # 1030+ unit + integration tests
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
 ├── notebooks/              # Jupyter notebooks for exploration
@@ -752,7 +763,7 @@ pip install -r forecasting-platform/requirements.txt
 python -m pytest forecasting-platform/tests/ \
   --ignore=forecasting-platform/tests/test_metrics.py \
   --ignore=forecasting-platform/tests/test_feature_engineering.py -v
-# 860+ tests collected
+# 1030+ tests collected across 48 test files
 ```
 
 | Test file | Tests | Covers |
