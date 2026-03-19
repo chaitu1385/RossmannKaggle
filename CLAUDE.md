@@ -102,20 +102,7 @@ forecasting-platform/
 │       ├── 2_Backtest_Results.py   # Leaderboard, FVA cascade, champion map
 │       ├── 3_Forecast_Viewer.py    # Time series + fan chart + decomposition
 │       └── 4_Platform_Health.py    # Manifests, drift alerts, data quality, cost
-├── tests/                  # 860+ tests (pytest)
-│   └── analytics/          # BI export, comparators, explainability, governance, FVA, data profiling, causal analysis
-│       ├── analyzer.py     # DataAnalyzer — automated data profiling + config recommendation
-│       ├── forecastability.py # ForecastabilityAnalyzer — CV, ApEn, spectral entropy, SNR scoring
-│       ├── causal.py       # CausalAnalyzer — price elasticity, cannibalization, promo lift
-│       ├── llm_analyzer.py # LLMAnalyzer — Claude-powered interpretation of analysis reports
-│       ├── governance.py   # ModelCard, ModelCardRegistry, ForecastLineage
-│       ├── fva_analyzer.py # FVAAnalyzer — aggregate FVA across series/folds/LOBs
-│       ├── explainer.py    # ForecastExplainer — STL decomposition + SHAP attribution
-│       ├── comparator.py   # ForecastComparator — multi-source forecast alignment
-│       ├── notebook_api.py # ForecastAnalytics — notebook-ready analytics API
-│       ├── bi_export.py    # BIExporter — Parquet export for BI tools
-│       └── exceptions.py   # ExceptionEngine — S&OP exception flagging
-├── tests/                  # 980+ tests (pytest)
+├── tests/                  # 1030+ tests (pytest)
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
 └── notebooks/              # Jupyter notebooks for exploration
@@ -165,7 +152,7 @@ Helper functions: `get_frequency_profile(freq)` returns the profile dict; `freq_
 - Test files mirror source structure with `test_` prefix
 - Helper fixtures use `_make_*` factory functions (e.g., `_make_weekly_actuals`)
 - Skip `test_metrics.py` and `test_feature_engineering.py` (legacy/slow)
-- 900+ tests across 40 test files
+- 1030+ tests across 48 test files
 - Key test modules: `test_platform.py` (85 tests), `test_ai_*.py` (73), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55), `test_file_classifier.py` (26), `test_file_merger.py` (20)
 - 980+ tests across 46 test files
 - Key test modules: `test_platform.py` (85 tests), `test_sku_mapping.py` (81), `test_ai_*.py` (66), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55), `test_observability.py` (41)
@@ -185,5 +172,7 @@ When adding a new module or capability, update these files:
 3. **`CONCEPTS.md`** (root) — Add a concept entry if the feature introduces a new "why" that non-domain-experts need to understand (3-4 sentences: what, why, when).
 4. **`EDGE_CASES.md`** (root) — Add an entry if the feature handles a new failure mode (what happens, how we handle it, what to watch for).
 5. **`ARCHITECTURE.md`** (root) — Visual Mermaid diagrams showing system overview, data flow, pipeline sequences, and component interactions. Update if adding new subsystems or changing data flow.
+6. **`QUICKSTART.md`** (root) — Get-running-in-2-minutes guide. Update if setup steps, Docker config, or prerequisites change.
+7. **`docs/`** (directory) — User-facing guides: `DATA_FORMAT.md` (input/output schemas), `DEPLOYMENT.md` (deployment & config), `USER_GUIDE.md` (end-to-end usage), `TROUBLESHOOTING.md` (common issues & FAQ). Update the relevant guide when adding user-visible features or changing data schemas.
 
 These are the only documentation files in the repo. All other docs (plans, specs, analyses) are transient working documents — delete them once the work is merged.
