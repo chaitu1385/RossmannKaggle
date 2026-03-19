@@ -26,6 +26,7 @@ if str(_STREAMLIT_DIR) not in sys.path:
 from src.analytics.analyzer import DataAnalyzer
 from src.data.file_classifier import FileClassifier
 from src.data.file_merger import MultiFileMerger
+from src.pipeline import BacktestPipeline, ForecastPipeline
 from utils import (
     COLORS,
     CSV_TEMPLATE,
@@ -533,34 +534,150 @@ with col_accept:
         st.session_state["analysis_report"] = report
         st.success("Config accepted and stored in session.")
 
-# What's Next section (after config acceptance)
+# Run Pipelines section (after config acceptance)
 if st.session_state.get("accepted_config") is not None:
     st.divider()
-    st.subheader("What's Next?")
+    st.subheader("Run Pipelines")
     st.markdown(
-        "Your configuration is ready. Here are the next steps:"
+        "Your configuration is ready. Run backtest to evaluate models, "
+        "then run forecast to generate predictions — all within this app."
     )
-    col_n1, col_n2 = st.columns(2)
-    with col_n1:
-        st.markdown(
-            "**Run a backtest** to evaluate model performance:\n"
-            "```bash\n"
-            "python scripts/run_backtest.py \\\n"
-            "  --config platform_config.yaml \\\n"
-            "  --lob uploaded\n"
-            "```\n"
-            "Then view results on the **Backtest Results** page."
+
+    accepted = st.session_state["accepted_config"]  # PlatformConfig
+
+    col_bt, col_fc = st.columns(2)
+
+    # ── Backtest column ───────────────────────────────────────────────
+    with col_bt:
+        st.markdown("**Step 1: Backtest**")
+        st.caption(
+            f"{len(accepted.forecast.forecasters)} models \u00b7 "
+            f"{accepted.backtest.n_folds} folds \u00b7 "
+            f"{accepted.backtest.val_periods}-period validation"
         )
-    with col_n2:
-        st.markdown(
-            "**Run a forecast** to generate predictions:\n"
-            "```bash\n"
-            "python scripts/run_forecast.py \\\n"
-            "  --config platform_config.yaml \\\n"
-            "  --lob uploaded\n"
-            "```\n"
-            "Then view forecasts on the **Forecast Viewer** page."
+        run_backtest = st.button(
+            "Run Backtest",
+            type="primary",
+            key="run_backtest_btn",
         )
+
+    # ── Forecast column ───────────────────────────────────────────────
+    with col_fc:
+        st.markdown("**Step 2: Forecast**")
+        champions = st.session_state.get("backtest_champions")
+        forecaster_options = list(accepted.forecast.forecasters)
+        default_idx = 0
+        if champions is not None and not champions.is_empty():
+            top_champion = champions["model_id"][0]
+            if top_champion in forecaster_options:
+                default_idx = forecaster_options.index(top_champion)
+        selected_model = st.selectbox(
+            "Champion model",
+            options=forecaster_options,
+            index=default_idx,
+            help="Auto-selected from backtest results when available. Override if needed.",
+        )
+        run_forecast = st.button(
+            "Run Forecast",
+            type="primary",
+            key="run_forecast_btn",
+        )
+
+    # ── Execute Backtest ──────────────────────────────────────────────
+    if run_backtest:
+        with st.status("Running backtest\u2026", expanded=True) as status:
+            try:
+                st.write("Initializing backtest pipeline\u2026")
+                pipeline = BacktestPipeline(accepted)
+
+                st.write(
+                    f"Evaluating {len(accepted.forecast.forecasters)} models "
+                    f"across {accepted.backtest.n_folds} folds\u2026"
+                )
+                results = pipeline.run(df)
+
+                # Store results for downstream pages
+                st.session_state["backtest_metrics"] = results["backtest_results"]
+                st.session_state["backtest_champions"] = results.get("champions")
+                st.session_state["actuals_df"] = df
+
+                status.update(label="Backtest complete!", state="complete")
+
+                # Show leaderboard preview
+                leaderboard = results.get("leaderboard")
+                if leaderboard is not None and not leaderboard.is_empty():
+                    st.markdown("**Top models:**")
+                    st.dataframe(
+                        polars_to_pandas(leaderboard.head(5)),
+                        use_container_width=True,
+                    )
+
+                champs = results.get("champions")
+                if champs is not None and not champs.is_empty():
+                    best = champs["model_id"][0]
+                    st.success(
+                        f"Champion model: **{best}**. "
+                        f"View detailed results on the **Backtest Results** page."
+                    )
+                else:
+                    st.warning("Backtest produced no champion selection.")
+
+                # Rerun so forecast selectbox picks up the champion
+                st.rerun()
+
+            except Exception as exc:
+                status.update(label="Backtest failed", state="error")
+                st.error(f"Backtest pipeline failed: {exc}")
+                st.caption(
+                    "Common causes: insufficient data length, column name mismatch, "
+                    "or incompatible model configuration. Check the config above."
+                )
+
+    # ── Execute Forecast ──────────────────────────────────────────────
+    if run_forecast:
+        with st.status("Running forecast\u2026", expanded=True) as status:
+            try:
+                st.write("Initializing forecast pipeline\u2026")
+                pipeline = ForecastPipeline(accepted)
+
+                st.write(
+                    f"Generating {accepted.forecast.horizon_periods}-period "
+                    f"forecast with **{selected_model}**\u2026"
+                )
+                forecast_result = pipeline.run(
+                    actuals=df,
+                    champion_model=selected_model,
+                )
+
+                # Store results for downstream pages
+                st.session_state["forecast_df"] = forecast_result
+                st.session_state["actuals_df"] = df
+
+                status.update(label="Forecast complete!", state="complete")
+                st.success(
+                    f"Generated {len(forecast_result):,} forecast rows. "
+                    f"View results on the **Forecast Viewer** page."
+                )
+
+                with st.expander("Forecast preview"):
+                    st.dataframe(
+                        polars_to_pandas(forecast_result.head(100)),
+                        use_container_width=True,
+                    )
+
+            except Exception as exc:
+                status.update(label="Forecast failed", state="error")
+                st.error(f"Forecast pipeline failed: {exc}")
+                st.caption(
+                    "Common causes: model not found in registry, data shape "
+                    "mismatch, or missing required columns."
+                )
+
+    # ── Status indicators ─────────────────────────────────────────────
+    if st.session_state.get("backtest_metrics") is not None:
+        st.info("Backtest results available \u2014 go to **Backtest Results** page.")
+    if st.session_state.get("forecast_df") is not None:
+        st.info("Forecast available \u2014 go to **Forecast Viewer** page.")
 
 # --------------------------------------------------------------------------- #
 #  LLM Interpreter (optional)
