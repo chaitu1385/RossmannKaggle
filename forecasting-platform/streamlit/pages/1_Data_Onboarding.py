@@ -538,29 +538,51 @@ if st.session_state.get("accepted_config") is not None:
     st.divider()
     st.subheader("What's Next?")
     st.markdown(
-        "Your configuration is ready. Here are the next steps:"
+        "Your configuration is ready. Run these commands in your **terminal** "
+        "(not in this browser window)."
+    )
+    st.info(
+        "**Using Docker Compose?** Prefix each command with "
+        "`docker compose exec api` so it runs inside the container.",
+        icon="\u2139\ufe0f",
     )
     col_n1, col_n2 = st.columns(2)
     with col_n1:
-        st.markdown(
-            "**Run a backtest** to evaluate model performance:\n"
-            "```bash\n"
-            "python scripts/run_backtest.py \\\n"
-            "  --config platform_config.yaml \\\n"
-            "  --lob uploaded\n"
-            "```\n"
-            "Then view results on the **Backtest Results** page."
-        )
+        st.markdown("**Run a backtest** to evaluate model performance:")
+        with st.expander("Docker Compose", expanded=True):
+            st.code(
+                "docker compose exec api python \\\n"
+                "  forecasting-platform/scripts/run_backtest.py \\\n"
+                "  --config forecasting-platform/configs/platform_config.yaml \\\n"
+                "  --lob uploaded",
+                language="bash",
+            )
+        with st.expander("Local Python"):
+            st.code(
+                "python forecasting-platform/scripts/run_backtest.py \\\n"
+                "  --config forecasting-platform/configs/platform_config.yaml \\\n"
+                "  --lob uploaded",
+                language="bash",
+            )
+        st.markdown("Then view results on the **Backtest Results** page.")
     with col_n2:
-        st.markdown(
-            "**Run a forecast** to generate predictions:\n"
-            "```bash\n"
-            "python scripts/run_forecast.py \\\n"
-            "  --config platform_config.yaml \\\n"
-            "  --lob uploaded\n"
-            "```\n"
-            "Then view forecasts on the **Forecast Viewer** page."
-        )
+        st.markdown("**Run a forecast** to generate predictions:")
+        with st.expander("Docker Compose", expanded=True):
+            st.code(
+                "docker compose exec api python \\\n"
+                "  forecasting-platform/scripts/run_forecast.py \\\n"
+                "  --config forecasting-platform/configs/platform_config.yaml \\\n"
+                "  --lob uploaded",
+                language="bash",
+            )
+        with st.expander("Local Python"):
+            st.code(
+                "python forecasting-platform/scripts/run_forecast.py \\\n"
+                "  --config forecasting-platform/configs/platform_config.yaml \\\n"
+                "  --lob uploaded",
+                language="bash",
+            )
+        st.markdown("Then view forecasts on the **Forecast Viewer** page.")
 
 # --------------------------------------------------------------------------- #
 #  LLM Interpreter (optional)

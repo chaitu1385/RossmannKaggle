@@ -45,15 +45,47 @@ You'll see: schema detection (columns, frequency, date range), a forecastability
 
 <!-- screenshot: Data Onboarding page with forecastability gauge and config -->
 
-### 2. Backtest Results
+### 2. Run a backtest
 
-After running a backtest (`python forecasting-platform/scripts/run_backtest.py`), this page shows the model leaderboard, an FVA cascade chart showing which model layers add or destroy value, and a per-series champion map.
+After onboarding, run a backtest to evaluate model performance. The command depends on how you started the platform:
+
+**Docker (Path A):**
+```bash
+docker compose exec api python forecasting-platform/scripts/run_backtest.py \
+  --config forecasting-platform/configs/platform_config.yaml \
+  --lob uploaded
+```
+
+**Local Python (Path B):**
+```bash
+python forecasting-platform/scripts/run_backtest.py \
+  --config forecasting-platform/configs/platform_config.yaml \
+  --lob uploaded
+```
+
+Then switch to the **Backtest Results** page in the sidebar to see the model leaderboard, FVA cascade chart, and per-series champion map.
 
 <!-- screenshot: FVA cascade bar chart with ADDS_VALUE / DESTROYS_VALUE annotations -->
 
-### 3. Forecast Viewer
+### 3. Run a forecast
 
-Upload forecast output to see an interactive chart with P10/P90 confidence intervals. Add actuals to overlay historical data and see the seasonal decomposition (trend, seasonal, residual).
+Similarly, generate predictions:
+
+**Docker (Path A):**
+```bash
+docker compose exec api python forecasting-platform/scripts/run_forecast.py \
+  --config forecasting-platform/configs/platform_config.yaml \
+  --lob uploaded
+```
+
+**Local Python (Path B):**
+```bash
+python forecasting-platform/scripts/run_forecast.py \
+  --config forecasting-platform/configs/platform_config.yaml \
+  --lob uploaded
+```
+
+Then switch to the **Forecast Viewer** page to see an interactive chart with P10/P90 confidence intervals. Add actuals to overlay historical data and see the seasonal decomposition (trend, seasonal, residual).
 
 <!-- screenshot: Fan chart with actuals overlay -->
 
