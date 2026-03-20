@@ -65,7 +65,8 @@ graph TD
 
     subgraph Consumers["Consumers"]
         API["FastAPI REST<br/><small>auth-protected</small>"]
-        ST["Streamlit Dashboard<br/><small>4 pages</small>"]
+        ST["Streamlit Dashboard<br/><small>8 pages</small>"]
+        NX["Next.js Frontend<br/><small>8 pages, REST client</small>"]
         AI["AI Features<br/><small>NL Query, Triage,<br/>Commentary, Config Tuner</small>"]
     end
 
@@ -575,9 +576,13 @@ graph TD
 
     subgraph Dashboard["Streamlit Pages"]
         P1["1. Data Onboarding<br/><small>upload → classify →<br/>merge → config</small>"]
-        P2["2. Backtest Results<br/><small>leaderboard, FVA,<br/>champion map</small>"]
-        P3["3. Forecast Viewer<br/><small>fan chart, decomposition,<br/>narrative</small>"]
-        P4["4. Platform Health<br/><small>manifests, drift,<br/>cost tracking</small>"]
+        P2["2. Series Explorer<br/><small>SBC, breaks, quality,<br/>cleansing, AI Q&A</small>"]
+        P3["3. SKU Transitions<br/><small>mapping, overrides,<br/>transition viz</small>"]
+        P4["4. Hierarchy Manager<br/><small>tree, aggregation,<br/>reconciliation</small>"]
+        P5["5. Backtest Results<br/><small>leaderboard, FVA,<br/>champion map</small>"]
+        P6["6. Forecast Viewer<br/><small>fan chart, decomposition,<br/>narrative</small>"]
+        P7["7. Platform Health<br/><small>manifests, drift,<br/>cost tracking</small>"]
+        P8["8. S&OP Meeting<br/><small>commentary, governance,<br/>BI export</small>"]
     end
 
     subgraph DataStores["Data Stores"]
@@ -595,13 +600,14 @@ graph TD
     AN --> P1
     AIE1 & AIE2 & AIE3 & AIE4 --> CLAUDE2
 
-    P1 -.->|session_state| P2
-    P2 -.->|selected_series_id| P3
-    P4 -.->|drift_alerts| P3
+    P1 -.->|session_state| P5
+    P5 -.->|selected_series_id| P6
+    P7 -.->|drift_alerts| P6
 
-    P2 --> MS2
-    P3 --> FS2
-    P4 --> MF2 & MS2
+    P5 --> MS2
+    P6 --> FS2
+    P7 --> MF2 & MS2
+    P8 --> CLAUDE2
 ```
 
 ### Deep Dive: API Endpoint Map
@@ -630,26 +636,70 @@ graph LR
         AR["analysis_report"]
     end
 
-    subgraph Page2["Page 2: Backtest Results"]
+    subgraph Page2["Page 2: Series Explorer"]
+        SQ["series_quality"]
+        BC["break_candidates"]
+    end
+
+    subgraph Page5["Page 5: Backtest Results"]
         CB["Config Banner<br/><small>shows accepted_config</small>"]
         SS["selected_series_id"]
     end
 
-    subgraph Page3["Page 3: Forecast Viewer"]
+    subgraph Page6["Page 6: Forecast Viewer"]
         PS["Pre-select series<br/><small>from selected_series_id</small>"]
         DI["Drift indicators<br/><small>from drift_alerts</small>"]
     end
 
-    subgraph Page4["Page 4: Platform Health"]
+    subgraph Page7["Page 7: Platform Health"]
         DA["drift_alerts"]
         SL["Series links<br/><small>→ Forecast Viewer</small>"]
     end
 
+    subgraph Page8["Page 8: S&OP Meeting"]
+        CM["commentary"]
+    end
+
     AC -->|session_state| CB
     AR -->|session_state| CB
+    AR -->|session_state| SQ
     SS -->|session_state| PS
     DA -->|session_state| DI
     SL -->|session_state| PS
+```
+
+### Deep Dive: Next.js Frontend
+
+The Next.js frontend is an alternative UI that communicates with the same FastAPI backend over REST. It mirrors the 8-page workflow but runs as a standalone Node.js application.
+
+```mermaid
+graph TB
+    subgraph NextJS["Next.js Frontend (port 3000)"]
+        direction TB
+        NL["Login"] --> NP["8 Workflow Pages"]
+        NP --> NH["React Query Hooks"]
+        NH --> NC["API Client<br/><small>typed fetch + JWT</small>"]
+    end
+
+    subgraph API["FastAPI Backend (port 8000)"]
+        EP["12 REST Endpoints"]
+    end
+
+    NC -->|HTTP/JSON| EP
+
+    subgraph LiveFeatures["Live (API-connected)"]
+        LF1["File upload / analysis"]
+        LF2["Model leaderboard"]
+        LF3["Drift alerts + audit log"]
+        LF4["AI: explain, triage, config, commentary"]
+    end
+
+    subgraph Placeholder["Coming Soon (no endpoint yet)"]
+        PH1["Multi-file classification"]
+        PH2["Pipeline execution"]
+        PH3["Hierarchy / SKU ops"]
+        PH4["SHAP / BI export"]
+    end
 ```
 
 ---

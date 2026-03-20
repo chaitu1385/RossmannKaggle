@@ -365,3 +365,35 @@ pip install holidays          # for holiday calendar generation
 pip install PyJWT             # for JWT authentication
 pip install anthropic         # for AI features
 ```
+
+---
+
+## Next.js Frontend Issues
+
+### Frontend can't connect to API
+
+**Issue:** Pages show "Network Error" or data doesn't load.
+
+**Fix:**
+1. Ensure the FastAPI backend is running (`python forecasting-platform/scripts/serve.py --port 8000`)
+2. Check `.env.local` has `NEXT_PUBLIC_API_URL=http://localhost:8000`
+3. If running on different hosts/ports, check for CORS — the API must allow the frontend's origin
+
+### `npm install` fails
+
+**Issue:** Dependency installation errors.
+
+**Fix:** Ensure Node.js 18+ is installed (`node --version`). Delete `node_modules` and `package-lock.json`, then retry:
+```bash
+rm -rf node_modules package-lock.json
+npm install
+```
+
+### Login doesn't work
+
+**Issue:** Login form submits but redirects back or shows error.
+
+**Fix:**
+1. Ensure the API is running and `POST /auth/token` returns a response
+2. Check that `NEXTAUTH_SECRET` is set in `.env.local` for production
+3. In development, NextAuth uses a default secret — verify the API returns valid JWT tokens
