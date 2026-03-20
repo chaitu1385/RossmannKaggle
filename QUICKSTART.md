@@ -35,7 +35,7 @@ Open **http://localhost:8501** in your browser.
 
 ## What to do next
 
-Once the app is open, follow these four pages in order:
+Once the app is open, follow these eight pages in order:
 
 ### 1. Data Onboarding
 
@@ -45,7 +45,19 @@ You'll see: schema detection (columns, frequency, date range), a forecastability
 
 <!-- screenshot: Data Onboarding page with forecastability gauge and config -->
 
-### 2. Run a backtest
+### 2. Series Explorer
+
+Click **Series Explorer** to see demand classification (SBC scatter: smooth, intermittent, erratic, lumpy), structural break detection, data quality audit, and cleansing before/after views. Use the AI Q&A panel to ask questions about individual series.
+
+### 3. SKU Transitions
+
+Click **SKU Transitions** to manage new/discontinued product mapping. The pipeline finds predecessors using attribute matching, naming conventions, curve fitting, and temporal co-movement. Planners can review and override mappings.
+
+### 4. Hierarchy Manager
+
+Click **Hierarchy Manager** to visualize the product/location hierarchy tree, configure aggregation levels, and select reconciliation methods (bottom-up, top-down, MinT, OLS, WLS).
+
+### 5. Run a backtest
 
 After onboarding, run a backtest to evaluate model performance. The command depends on how you started the platform:
 
@@ -63,11 +75,11 @@ python forecasting-platform/scripts/run_backtest.py \
   --lob uploaded
 ```
 
-Then switch to the **Backtest Results** page in the sidebar to see the model leaderboard, FVA cascade chart, and per-series champion map.
+Then switch to the **Backtest Results** page (page 5) in the sidebar to see the model leaderboard, FVA cascade chart, and per-series champion map.
 
 <!-- screenshot: FVA cascade bar chart with ADDS_VALUE / DESTROYS_VALUE annotations -->
 
-### 3. Run a forecast
+### 6. Run a forecast
 
 Similarly, generate predictions:
 
@@ -85,15 +97,19 @@ python forecasting-platform/scripts/run_forecast.py \
   --lob uploaded
 ```
 
-Then switch to the **Forecast Viewer** page to see an interactive chart with P10/P90 confidence intervals. Add actuals to overlay historical data and see the seasonal decomposition (trend, seasonal, residual).
+Then switch to the **Forecast Viewer** page (page 6) to see an interactive chart with P10/P90 confidence intervals. Add actuals to overlay historical data and see the seasonal decomposition (trend, seasonal, residual).
 
 <!-- screenshot: Fan chart with actuals overlay -->
 
-### 4. Platform Health
+### 7. Platform Health
 
 Monitor pipeline runs, drift alerts, data quality, and compute cost. Drift alerts are colour-coded by severity (warning, critical).
 
 <!-- screenshot: Drift alerts table with severity colouring -->
+
+### 8. S&OP Meeting
+
+The final page generates AI executive commentary, enables cross-run forecast comparison, shows model governance (model cards, lineage), and provides BI export for downstream tools.
 
 ## Optional: AI features
 
@@ -102,6 +118,19 @@ Set `ANTHROPIC_API_KEY` to enable Claude-powered features (natural-language expl
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
+
+## Alternative: Next.js Frontend
+
+If you prefer a production-grade React UI over Streamlit, the Next.js frontend mirrors the same 8-page workflow:
+
+```bash
+cd forecasting-platform/frontend
+npm install
+npm run dev
+# → Open http://localhost:3000
+```
+
+Set `NEXT_PUBLIC_API_URL=http://localhost:8000` in `.env.local`. The FastAPI backend must be running (Path A or B above).
 
 ## Next steps
 

@@ -341,7 +341,33 @@ Upload CSV files, auto-detect schema, preview data quality, and get a recommende
 - Forecastability scoring (0-1 scale per series)
 - Recommended YAML config output
 
-### Page 2: Backtest Results
+### Page 2: Series Explorer
+
+Explore individual series characteristics and data quality before modelling.
+
+- **SBC Classification** — ADI vs CV² scatter (smooth, intermittent, erratic, lumpy)
+- **Structural Breaks** — CUSUM/PELT changepoint detection with visual markers
+- **Data Quality Audit** — Gap analysis, zero-run detection, short series warnings
+- **Cleansing Before/After** — Side-by-side comparison of raw vs cleansed data
+- **AI Q&A** — Ask natural language questions about a selected series
+
+### Page 3: SKU Transitions
+
+Manage new and discontinued product mapping.
+
+- **SKU Mapping Pipeline** — Predecessor matching via attribute, naming, curve fitting, temporal co-movement
+- **Planner Overrides** — Manual review and correction of auto-detected mappings
+- **Transition Visualization** — Ramp shape charts showing old→new product share over time
+
+### Page 4: Hierarchy Manager
+
+Configure and visualize the product/location hierarchy.
+
+- **Hierarchy Tree** — Interactive sunburst or tree visualization
+- **Aggregation** — Roll up series to any hierarchy level
+- **Reconciliation** — Select method (bottom-up, top-down, middle-out, OLS, WLS, MinT) and preview results
+
+### Page 5: Backtest Results
 
 Evaluate model performance after running a backtest.
 
@@ -349,8 +375,9 @@ Evaluate model performance after running a backtest.
 - **FVA Cascade** — Accuracy improvement at each model layer
 - **Champion Map** — Which model won for which series/product group
 - **Layer Leaderboard** — Keeps/Review/Remove recommendations per layer
+- **AI Config Tuner** — Claude-powered config recommendations based on backtest results
 
-### Page 3: Forecast Viewer
+### Page 6: Forecast Viewer
 
 Explore forecasts for individual series.
 
@@ -359,12 +386,30 @@ Explore forecasts for individual series.
 - P10/P90 fan chart (prediction intervals)
 - Seasonal decomposition (trend + seasonal + residual)
 - Explainer narrative (natural language description)
+- Forecast comparison (upload external forecast for overlay)
 
-### Page 4: Platform Health
+### Page 7: Platform Health
 
 Monitor pipeline runs and system health.
 
 - Pipeline manifests (provenance for each run)
 - Drift alerts (severity-colored: warning/critical)
+- AI anomaly triage (ranked alerts with impact scores)
+- Audit log viewer
 - Data quality summary (validation + cleansing reports)
 - Compute cost tracking per model
+
+### Page 8: S&OP Meeting
+
+Prepare materials for S&OP review meetings.
+
+- **AI Executive Commentary** — Claude-generated narrative summarizing forecast performance, exceptions, and action items
+- **Cross-Run Comparison** — Overlay forecasts from different pipeline runs
+- **Model Governance** — Model cards, lineage tracking, approval workflows
+- **BI Export** — Download data for Excel, Power BI, or other downstream tools
+
+---
+
+### Next.js Frontend (Alternative)
+
+The same 8-page workflow is also available as a Next.js frontend at `forecasting-platform/frontend/`. It connects to the FastAPI backend over REST and provides dark mode, responsive layout, and role-based navigation. See [DEPLOYMENT.md](DEPLOYMENT.md) for setup instructions.

@@ -86,6 +86,33 @@ streamlit run forecasting-platform/streamlit/app.py
 
 Opens at http://localhost:8501.
 
+### Start the Next.js Frontend (Alternative UI)
+
+Requires Node.js 18+. The frontend connects to the FastAPI backend over REST.
+
+```bash
+cd forecasting-platform/frontend
+npm install
+npm run dev
+```
+
+Opens at http://localhost:3000.
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | FastAPI backend URL |
+| `NEXTAUTH_SECRET` | (required for production) | Secret for NextAuth.js session encryption |
+| `NEXTAUTH_URL` | `http://localhost:3000` | Canonical URL of the frontend |
+
+For production builds:
+
+```bash
+npm run build
+npm start          # starts production server on port 3000
+```
+
+> **Note:** The Docker Compose setup currently runs the API and Streamlit dashboard only. To add the Next.js frontend to Docker, a separate service definition is needed in `docker-compose.yml`.
+
 ---
 
 ## Running Pipelines

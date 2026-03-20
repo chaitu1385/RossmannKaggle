@@ -825,14 +825,18 @@ python -m pytest forecasting-platform/tests/ \
 
 ## Streamlit Dashboard
 
-A 4-page interactive dashboard that puts the platform in a browser for data scientists, demand planners, and platform admins.
+An 8-page interactive dashboard that puts the platform in a browser for data scientists, demand planners, and platform admins.
 
 | Page | Persona | What it does |
 |------|---------|-------------|
-| **Data Onboarding** | Data Scientist | Upload CSV → auto-detect schema, hierarchy, forecastability scores → recommended config with optional LLM narrative |
-| **Backtest Results** | Data Scientist / Manager | Model leaderboard, FVA cascade chart (naive → statistical → ML), per-series champion map, layer leaderboard with Keep/Review/Remove |
-| **Forecast Viewer** | Demand Planner | Series selector → forecast line with P10/P90 fan chart, actuals overlay, seasonal decomposition, explainer narrative |
-| **Platform Health** | Platform Admin | Pipeline manifests, drift alerts (severity-coloured), data quality summary, compute cost tracking |
+| **1. Data Onboarding** | Data Scientist | Upload CSV → auto-detect schema, hierarchy, forecastability scores → recommended config with optional LLM narrative |
+| **2. Series Explorer** | Data Scientist | SBC demand classification, structural break detection, data quality audit, cleansing before/after, AI Q&A |
+| **3. SKU Transitions** | Data Scientist / Planner | SKU mapping pipeline (predecessor matching), planner overrides, transition visualization |
+| **4. Hierarchy Manager** | Data Scientist | Hierarchy tree visualization, aggregation, reconciliation method selection (MinT/OLS/WLS) |
+| **5. Backtest Results** | Data Scientist / Manager | Model leaderboard, FVA cascade chart (naive → statistical → ML), per-series champion map, layer leaderboard with Keep/Review/Remove |
+| **6. Forecast Viewer** | Demand Planner | Series selector → forecast line with P10/P90 fan chart, actuals overlay, seasonal decomposition, explainer narrative |
+| **7. Platform Health** | Platform Admin | Pipeline manifests, drift alerts (severity-coloured), data quality summary, compute cost tracking |
+| **8. S&OP Meeting** | Manager / S&OP Leader | AI executive commentary, cross-run forecast comparison, model governance, BI export |
 
 **Run locally:**
 ```bash
@@ -846,6 +850,36 @@ docker compose up
 ```
 
 The Streamlit app imports platform classes directly (DataAnalyzer, MetricStore, FVAAnalyzer, ForecastExplainer, etc.) — no network overhead, no dual-service dependency for development. Charts use Plotly for hover/zoom/pan interactivity.
+
+---
+
+## Next.js Frontend
+
+A production-grade alternative UI built with Next.js 15 (App Router), TypeScript, and Tailwind CSS. Mirrors the same 8-page workflow as the Streamlit dashboard but communicates with the FastAPI backend over REST instead of importing Python classes directly.
+
+| Feature | Details |
+|---------|---------|
+| **Framework** | Next.js 15, React 19, TypeScript 5.7 |
+| **Styling** | Tailwind CSS, Radix UI primitives |
+| **Charts** | Recharts (bar, line, pie, area), Plotly (fan chart, sunburst, SBC scatter) |
+| **Data fetching** | TanStack React Query with typed API client |
+| **Auth** | NextAuth.js wrapping existing JWT/RBAC (5 roles) |
+| **Pages** | Login + 8 workflow pages matching Streamlit |
+| **Dark mode** | Toggle with localStorage persistence |
+
+**Live features** (connected to existing API): file upload/analysis, model leaderboard, drift alerts, audit log, AI explain/triage/config-tuner/commentary.
+
+**Placeholder features** (marked "Coming Soon" until new API endpoints): multi-file classification, pipeline execution, SHAP, hierarchy ops, SKU mapping, BI export.
+
+**Run locally:**
+```bash
+cd forecasting-platform/frontend
+npm install
+npm run dev
+# → Open http://localhost:3000
+```
+
+Set `NEXT_PUBLIC_API_URL=http://localhost:8000` in `.env.local` to connect to the FastAPI backend.
 
 ---
 
@@ -870,6 +904,16 @@ fastapi + uvicorn           # REST API
 ```
 streamlit >= 1.30.0         # Interactive web UI
 plotly >= 5.18.0            # Interactive charts (fan charts, gauges, bar charts)
+```
+
+**Frontend** (Node.js 18+):
+```
+next >= 15.1.0              # React framework (App Router)
+react >= 19.0.0             # UI library
+tailwindcss >= 4.0.0        # Utility-first CSS
+recharts >= 2.15.0          # Chart components
+@tanstack/react-query       # Server state management
+next-auth >= 4.24.0         # Authentication (JWT wrapper)
 ```
 
 **Optional:**

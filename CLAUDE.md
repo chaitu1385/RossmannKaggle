@@ -27,6 +27,9 @@ python forecasting-platform/scripts/serve.py --port 8000 --data-dir data/
 # Start Streamlit dashboard
 streamlit run forecasting-platform/streamlit/app.py
 
+# Start Next.js frontend (alternative UI)
+cd forecasting-platform/frontend && npm install && npm run dev
+
 # Docker quick-start (API + Streamlit)
 docker compose up
 
@@ -106,6 +109,11 @@ forecasting-platform/
 │       ├── 6_Forecast_Viewer.py    # Fan chart, decomposition, AI NL query, comparison, constraints
 │       ├── 7_Platform_Health.py    # Manifests, drift + AI triage, audit log, cost tracking
 │       └── 8_SOP_Meeting.py        # AI commentary, cross-run comparison, governance, BI export
+├── frontend/               # Next.js 15 frontend (TypeScript, Tailwind, Recharts)
+│   ├── src/app/            # App Router pages (login + 8 workflow pages)
+│   ├── src/components/     # Reusable components (charts, AI panels, layout, shared)
+│   ├── src/hooks/          # React Query hooks for each API endpoint
+│   └── src/lib/            # API client, auth, types, constants
 ├── tests/                  # 1030+ tests (pytest)
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
@@ -157,14 +165,13 @@ Helper functions: `get_frequency_profile(freq)` returns the profile dict; `freq_
 - Helper fixtures use `_make_*` factory functions (e.g., `_make_weekly_actuals`)
 - Skip `test_metrics.py` and `test_feature_engineering.py` (legacy/slow)
 - 1030+ tests across 48 test files
-- Key test modules: `test_platform.py` (85 tests), `test_ai_*.py` (73), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55), `test_file_classifier.py` (26), `test_file_merger.py` (20)
-- 980+ tests across 46 test files
-- Key test modules: `test_platform.py` (85 tests), `test_sku_mapping.py` (81), `test_ai_*.py` (66), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55), `test_observability.py` (41)
+- Key test modules: `test_platform.py` (85 tests), `test_sku_mapping.py` (81), `test_ai_*.py` (73), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55), `test_observability.py` (41), `test_file_classifier.py` (26), `test_file_merger.py` (20)
 
 ## Key Dependencies
 
 Core: polars, statsforecast, mlforecast, lightgbm, xgboost, scikit-learn, fastapi, pyyaml, duckdb
 Dashboard: streamlit, plotly
+Frontend: next, react, typescript, tailwindcss, recharts, @tanstack/react-query, next-auth
 Optional: neuralforecast, pyspark, shap, pyjwt, bcrypt, holidays, delta-spark, azure-identity
 
 ## Documentation Convention
