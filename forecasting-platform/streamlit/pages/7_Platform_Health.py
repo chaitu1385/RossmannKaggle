@@ -36,9 +36,11 @@ from utils import (
     format_duration,
     ai_available,
     render_ai_unavailable_notice,
+    render_api_key_sidebar,
 )
 
 st.set_page_config(page_title="Platform Health", page_icon="🏥", layout="wide")
+render_api_key_sidebar()
 st.title("Platform Health")
 
 # ---------------------------------------------------------------------------

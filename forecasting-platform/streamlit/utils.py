@@ -240,17 +240,63 @@ TREND_ICONS = {
 # ---------------------------------------------------------------------------
 #  AI helpers
 # ---------------------------------------------------------------------------
-def ai_available() -> bool:
-    """Check whether the Anthropic API key is configured."""
+def _sync_api_key_to_env():
+    """Push the session-state API key into ``os.environ`` so backend classes pick it up."""
     import os
+    key = st.session_state.get("anthropic_api_key", "").strip()
+    if key:
+        os.environ["ANTHROPIC_API_KEY"] = key
+    elif "ANTHROPIC_API_KEY" not in os.environ:
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+
+
+def render_api_key_sidebar():
+    """Render a sidebar widget for entering the Anthropic API key.
+
+    The key is stored in ``st.session_state["anthropic_api_key"]`` and
+    automatically synced into ``os.environ["ANTHROPIC_API_KEY"]`` so that
+    every downstream consumer (``AIFeatureBase``, ``LLMAnalyzer``,
+    ``ai_available()``) picks it up without any extra wiring.
+
+    Call this once at the top of any page that uses AI features.
+    """
+    import os
+
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown("**AI Settings**")
+        # Pre-fill from env var if user hasn't entered one yet
+        default = st.session_state.get(
+            "anthropic_api_key",
+            os.environ.get("ANTHROPIC_API_KEY", ""),
+        )
+        st.text_input(
+            "Anthropic API Key",
+            value=default,
+            type="password",
+            key="anthropic_api_key",
+            help="Entered key is used for this session only and is never stored to disk.",
+        )
+    _sync_api_key_to_env()
+
+
+def ai_available() -> bool:
+    """Check whether the Anthropic API key is configured.
+
+    Checks both ``os.environ`` and Streamlit session state so it works
+    whether the key was set via env var, ``.env`` file, or the sidebar widget.
+    """
+    import os
+    if st.session_state.get("anthropic_api_key", "").strip():
+        return True
     return bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 
 def render_ai_unavailable_notice():
     """Show a standard info box when AI features are unavailable."""
     st.info(
-        "AI features require the `ANTHROPIC_API_KEY` environment variable "
-        "and the `anthropic` package. Set the key to enable AI-powered insights."
+        "AI features require an Anthropic API key. "
+        "Enter it in the sidebar or set the `ANTHROPIC_API_KEY` environment variable."
     )
 
 

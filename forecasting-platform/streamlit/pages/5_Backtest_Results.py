@@ -36,9 +36,11 @@ from utils import (
     format_pct,
     ai_available,
     render_ai_unavailable_notice,
+    render_api_key_sidebar,
 )
 
 st.set_page_config(page_title="Backtest Results", page_icon="🏆", layout="wide")
+render_api_key_sidebar()
 st.title("Backtest Results")
 
 # ---------------------------------------------------------------------------

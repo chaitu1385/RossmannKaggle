@@ -31,10 +31,12 @@ from utils import (
     format_pct,
     polars_to_pandas,
     render_ai_unavailable_notice,
+    render_api_key_sidebar,
     render_metric_card_with_trend,
 )
 
 st.set_page_config(page_title="S&OP Meeting Prep", page_icon="📋", layout="wide")
+render_api_key_sidebar()
 st.title("S&OP Meeting Prep")
 
 metrics_dir = str(DATA_DIR / "metrics")

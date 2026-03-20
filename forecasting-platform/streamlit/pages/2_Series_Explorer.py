@@ -31,10 +31,12 @@ from utils import (
     ai_available,
     render_ai_unavailable_notice,
     render_ai_confidence_badge,
+    render_api_key_sidebar,
     load_uploaded_csv,
 )
 
 st.set_page_config(page_title="Series Explorer", page_icon="🔍", layout="wide")
+render_api_key_sidebar()
 st.title("Series Explorer")
 st.markdown(
     "Deep-dive into series-level data quality, demand classification, "

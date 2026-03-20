@@ -36,9 +36,11 @@ from utils import (
     load_uploaded_csvs,
     polars_to_pandas,
     format_pct,
+    render_api_key_sidebar,
 )
 
 st.set_page_config(page_title="Data Onboarding", page_icon="📊", layout="wide")
+render_api_key_sidebar()
 st.title("Data Onboarding")
 st.markdown(
     "Upload one or more CSVs to auto-detect schema, assess forecastability, "
@@ -803,7 +805,7 @@ st.divider()
 st.header("AI Interpretation (optional)")
 st.markdown(
     "Generate an executive-level narrative using Claude. "
-    "Requires `ANTHROPIC_API_KEY` environment variable."
+    "Requires an Anthropic API key (enter in sidebar or set `ANTHROPIC_API_KEY`)."
 )
 
 if st.button("Generate AI Interpretation"):
@@ -813,8 +815,8 @@ if st.button("Generate AI Interpretation"):
         llm = LLMAnalyzer()
         if not llm.available:
             st.warning(
-                "LLM not available. Set the `ANTHROPIC_API_KEY` environment variable "
-                "and install the `anthropic` package."
+                "LLM not available. Enter your API key in the sidebar "
+                "or set the `ANTHROPIC_API_KEY` environment variable."
             )
         else:
             with st.spinner("Calling Claude..."):
