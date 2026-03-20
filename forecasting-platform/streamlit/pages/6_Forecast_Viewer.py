@@ -1,8 +1,9 @@
 """
-Page 3 — Forecast Viewer
+Page 6 — Forecast Viewer
 
 Interactive forecast chart with P10/P90 fan chart, actuals overlay,
-seasonal decomposition, and explainer narrative.
+seasonal decomposition, explainer narrative, AI natural-language query,
+forecast comparison, and constrained forecast toggle.
 """
 
 import sys
@@ -21,9 +22,16 @@ if str(_STREAMLIT_DIR) not in sys.path:
 import polars as pl
 
 from src.analytics.explainer import ForecastExplainer
-from utils import COLORS, DATA_DIR, polars_to_pandas
+from utils import (
+    COLORS,
+    DATA_DIR,
+    polars_to_pandas,
+    ai_available,
+    render_ai_unavailable_notice,
+    render_ai_confidence_badge,
+)
 
-st.set_page_config(page_title="Forecast Viewer", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Forecast Viewer", page_icon="🔮", layout="wide")
 st.title("Forecast Viewer")
 
 # ---------------------------------------------------------------------------
@@ -348,6 +356,215 @@ else:
         "Upload actuals data in the sidebar to enable seasonal decomposition. "
         "Actuals are optional — leave blank to view forecasts only."
     )
+
+# ---------------------------------------------------------------------------
+#  Ask About This Forecast (AI)
+# ---------------------------------------------------------------------------
+st.divider()
+st.header("Ask About This Forecast")
+
+if ai_available():
+    st.caption("Ask a natural-language question about this series forecast.")
+
+    col_q, col_suggest = st.columns([3, 1])
+    with col_q:
+        user_question = st.text_input(
+            "Your question",
+            placeholder="Why is the forecast trending up?",
+            key="nl_query_input",
+        )
+    with col_suggest:
+        st.caption("Suggestions:")
+        if st.button("Why this trend?", key="suggest_trend"):
+            user_question = "Why is the forecast trending in this direction?"
+        if st.button("What drives seasonality?", key="suggest_season"):
+            user_question = "What drives the seasonal pattern in this series?"
+
+    if user_question and st.button("Ask", type="primary", key="ask_ai"):
+        try:
+            from src.ai.nl_query import NaturalLanguageQueryEngine
+
+            engine = NaturalLanguageQueryEngine()
+            with st.spinner("Analyzing with Claude..."):
+                result = engine.query(
+                    series_id=str(selected_series),
+                    question=user_question,
+                    lob=st.session_state.get("accepted_config", None)
+                    and "uploaded"
+                    or "uploaded",
+                    history=actuals_df,
+                    forecast=forecast_df,
+                    metrics_df=st.session_state.get("backtest_metrics"),
+                )
+
+            st.subheader("Answer")
+            st.markdown(result.answer)
+            render_ai_confidence_badge(result.confidence)
+
+            if result.supporting_data:
+                with st.expander("Supporting data"):
+                    st.json(result.supporting_data)
+            if result.sources_used:
+                st.caption(f"Sources: {', '.join(result.sources_used)}")
+
+        except Exception as exc:
+            st.warning(f"AI query failed: {exc}")
+else:
+    render_ai_unavailable_notice()
+
+# ---------------------------------------------------------------------------
+#  Forecast Comparison
+# ---------------------------------------------------------------------------
+st.divider()
+st.header("Forecast Comparison")
+st.caption("Upload an external forecast to compare against the current forecast.")
+
+comparison_file = st.file_uploader(
+    "External forecast (CSV/Parquet)", type=["csv", "parquet"], key="comparison_upload"
+)
+
+if comparison_file is not None:
+    try:
+        external_df = _load_file(comparison_file)
+        if external_df is not None:
+            from src.analytics.comparator import ForecastComparator
+
+            comparator = ForecastComparator()
+            with st.spinner("Comparing forecasts..."):
+                comparison = comparator.compare(
+                    model_forecast=forecast_df,
+                    external_forecasts={"external": external_df},
+                    id_col=id_col,
+                    time_col=time_col,
+                    value_col=value_col,
+                )
+
+            # Filter to selected series
+            if id_col in comparison.columns:
+                comp_series = comparison.filter(pl.col(id_col) == selected_series)
+            else:
+                comp_series = comparison
+
+            if not comp_series.is_empty():
+                comp_pd = polars_to_pandas(comp_series)
+
+                fig_comp = go.Figure()
+                if value_col in comp_pd.columns:
+                    fig_comp.add_trace(go.Scatter(
+                        x=comp_pd[time_col],
+                        y=comp_pd[value_col],
+                        mode="lines+markers",
+                        line=dict(color=COLORS["primary"], width=2),
+                        name="Model Forecast",
+                    ))
+                ext_col = _detect_col(
+                    comp_series, ["external", "external_forecast", "comparison"]
+                )
+                if ext_col and ext_col in comp_pd.columns:
+                    fig_comp.add_trace(go.Scatter(
+                        x=comp_pd[time_col],
+                        y=comp_pd[ext_col],
+                        mode="lines+markers",
+                        line=dict(color=COLORS["accent"], width=2),
+                        name="External Forecast",
+                    ))
+
+                fig_comp.update_layout(
+                    title=f"Comparison — {selected_series}",
+                    xaxis_title="Date",
+                    yaxis_title="Value",
+                    hovermode="x unified",
+                    height=400,
+                    margin=dict(t=40, b=40),
+                )
+                st.plotly_chart(fig_comp, use_container_width=True)
+
+                # Summary
+                try:
+                    summary = comparator.summary(comparison, id_col=id_col, time_col=time_col)
+                    if not summary.is_empty():
+                        with st.expander("Comparison summary"):
+                            st.dataframe(polars_to_pandas(summary), use_container_width=True)
+                except Exception:
+                    pass
+            else:
+                st.info(f"No comparison data for series `{selected_series}`.")
+    except Exception as exc:
+        st.warning(f"Comparison failed: {exc}")
+
+# ---------------------------------------------------------------------------
+#  Constrained Forecast
+# ---------------------------------------------------------------------------
+st.divider()
+st.header("Constrained Forecast")
+st.caption("Apply capacity or budget constraints to the forecast.")
+
+enable_constraints = st.checkbox("Enable constraints", key="enable_constraints")
+
+if enable_constraints:
+    col_cap, col_budget = st.columns(2)
+    with col_cap:
+        capacity = st.number_input(
+            "Max capacity per period",
+            min_value=0.0,
+            value=0.0,
+            help="Maximum forecast value per series per period. Set 0 to disable.",
+        )
+    with col_budget:
+        budget = st.number_input(
+            "Aggregate budget",
+            min_value=0.0,
+            value=0.0,
+            help="Total budget across all series. Set 0 to disable.",
+        )
+
+    if (capacity > 0 or budget > 0) and st.button("Apply Constraints", key="apply_constraints"):
+        try:
+            from src.config.schema import ConstraintConfig
+            from src.forecasting.constrained import ConstrainedDemandEstimator
+            from src.forecasting.registry import ForecasterRegistry
+
+            constraint_cfg = ConstraintConfig(
+                enabled=True,
+                capacity=capacity if capacity > 0 else None,
+                aggregate_max=budget if budget > 0 else None,
+            )
+
+            # Apply element-wise constraints directly to the forecast
+            constrained = fc_series.clone()
+            if capacity > 0:
+                constrained = constrained.with_columns(
+                    pl.col(value_col).clip(upper_bound=capacity).alias(value_col)
+                )
+
+            const_pd = polars_to_pandas(constrained)
+
+            fig_const = go.Figure()
+            fig_const.add_trace(go.Scatter(
+                x=fc_pd[time_col], y=fc_pd[value_col],
+                mode="lines", line=dict(color=COLORS["neutral"], width=1.5, dash="dot"),
+                name="Unconstrained",
+            ))
+            fig_const.add_trace(go.Scatter(
+                x=const_pd[time_col], y=const_pd[value_col],
+                mode="lines+markers", line=dict(color=COLORS["primary"], width=2),
+                name="Constrained",
+            ))
+            if capacity > 0:
+                fig_const.add_hline(
+                    y=capacity, line_dash="dash", line_color=COLORS["danger"],
+                    annotation_text="Capacity",
+                )
+
+            fig_const.update_layout(
+                title="Constrained vs Unconstrained",
+                height=350, margin=dict(t=40, b=40),
+                hovermode="x unified",
+            )
+            st.plotly_chart(fig_const, use_container_width=True)
+
+        except Exception as exc:
+            st.warning(f"Constraint application failed: {exc}")
 
 # ---------------------------------------------------------------------------
 #  Raw data preview

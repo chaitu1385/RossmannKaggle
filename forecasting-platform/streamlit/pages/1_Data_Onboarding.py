@@ -470,6 +470,123 @@ if fa.per_series is not None and not fa.per_series.is_empty():
         st.dataframe(polars_to_pandas(fa.per_series), use_container_width=True)
 
 # --------------------------------------------------------------------------- #
+#  Demand Cleansing Preview
+# --------------------------------------------------------------------------- #
+st.divider()
+st.header("Demand Cleansing Preview")
+st.caption(
+    "Preview how outlier detection and stockout imputation will affect your data. "
+    "See the full audit on the **Series Explorer** page."
+)
+
+try:
+    from src.config.schema import CleansingConfig
+    from src.data.cleanser import DemandCleanser
+
+    cleansing_cfg = CleansingConfig(enabled=True)
+    cleanser = DemandCleanser(config=cleansing_cfg)
+
+    with st.spinner("Running demand cleansing preview..."):
+        cleansing_result = cleanser.cleanse(
+            df=df,
+            time_col=schema.time_column,
+            value_col=schema.target_column,
+            sid_col=schema.id_columns[0] if schema.id_columns else "series_id",
+        )
+
+    cr = cleansing_result.report
+    col_o, col_s, col_r = st.columns(3)
+    col_o.metric("Outliers Clipped", cr.outliers_clipped)
+    col_s.metric("Stockout Periods Imputed", cr.stockout_periods_imputed)
+    col_r.metric("Rows Modified", cr.rows_modified)
+
+    st.session_state["cleansing_report"] = cr
+    st.caption("Go to **Series Explorer** for per-series cleansing audit.")
+
+except Exception as exc:
+    st.info(f"Cleansing preview not available: {exc}")
+
+# --------------------------------------------------------------------------- #
+#  Regressor Screening
+# --------------------------------------------------------------------------- #
+regressor_cols = [
+    c for c in df.columns
+    if c not in {schema.time_column, schema.target_column}
+    and c not in set(schema.id_columns)
+    and df[c].dtype in (pl.Float64, pl.Float32, pl.Int64, pl.Int32, pl.Int16, pl.Int8)
+]
+
+if regressor_cols:
+    st.divider()
+    st.header("Regressor Screening")
+    st.caption(
+        f"Screening {len(regressor_cols)} numeric columns as potential regressors."
+    )
+
+    try:
+        from src.data.regressor_screen import screen_regressors
+
+        with st.spinner("Screening regressors..."):
+            screen_report = screen_regressors(
+                df=df,
+                feature_columns=regressor_cols,
+                target_col=schema.target_column,
+            )
+
+        col_p, col_d = st.columns(2)
+        with col_p:
+            st.markdown("**Passed columns**")
+            for c in screen_report.passed_columns:
+                st.markdown(f"- `{c}`")
+        with col_d:
+            if screen_report.dropped_columns:
+                st.markdown("**Dropped columns**")
+                for c in screen_report.dropped_columns:
+                    st.markdown(f"- `{c}`")
+            else:
+                st.success("All regressor columns passed screening.")
+
+        if screen_report.warnings:
+            for w in screen_report.warnings:
+                st.warning(w)
+
+        st.session_state["regressor_screen_report"] = screen_report
+
+    except Exception as exc:
+        st.info(f"Regressor screening not available: {exc}")
+
+# --------------------------------------------------------------------------- #
+#  Structural Break Summary
+# --------------------------------------------------------------------------- #
+st.divider()
+st.header("Structural Break Summary")
+
+try:
+    from src.config.schema import StructuralBreakConfig
+    from src.series.break_detector import StructuralBreakDetector
+
+    break_cfg = StructuralBreakConfig(method="cusum")
+    detector = StructuralBreakDetector(config=break_cfg)
+
+    with st.spinner("Detecting structural breaks..."):
+        break_report = detector.detect(
+            df=df,
+            target_col=schema.target_column,
+            time_col=schema.time_column,
+            id_col=schema.id_columns[0] if schema.id_columns else "series_id",
+        )
+
+    col_tb, col_sb = st.columns(2)
+    col_tb.metric("Total Breaks", break_report.total_breaks)
+    col_sb.metric("Series with Breaks", break_report.series_with_breaks)
+
+    st.session_state["break_report"] = break_report
+    st.caption("Go to **Series Explorer** for detailed break analysis.")
+
+except Exception as exc:
+    st.info(f"Structural break detection not available: {exc}")
+
+# --------------------------------------------------------------------------- #
 #  Hypotheses & Warnings
 # --------------------------------------------------------------------------- #
 st.divider()

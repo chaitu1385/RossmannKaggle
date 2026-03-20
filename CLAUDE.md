@@ -94,14 +94,18 @@ forecasting-platform/
 │   ├── spark/              # PySpark distributed execution
 │   ├── fabric/             # Microsoft Fabric / Delta Lake deployment
 │   └── analytics/          # BI export, comparators, explainability, governance, FVA
-├── streamlit/              # Streamlit dashboard (4 pages)
-│   ├── app.py              # Main entry point / landing page
-│   ├── utils.py            # Shared helpers, colour palette, data loaders
-│   └── pages/              # Streamlit multi-page layout
-│       ├── 1_Data_Onboarding.py    # Upload CSV → DataAnalyzer → config recommendation
-│       ├── 2_Backtest_Results.py   # Leaderboard, FVA cascade, champion map
-│       ├── 3_Forecast_Viewer.py    # Time series + fan chart + decomposition
-│       └── 4_Platform_Health.py    # Manifests, drift alerts, data quality, cost
+├── streamlit/              # Streamlit dashboard (8 pages)
+│   ├── app.py              # Main entry point / landing page (4 persona paths)
+│   ├── utils.py            # Shared helpers, colour palette, AI utilities
+│   └── pages/              # Streamlit multi-page layout (workflow-ordered)
+│       ├── 1_Data_Onboarding.py    # Upload CSV → DataAnalyzer → cleansing preview → config
+│       ├── 2_Series_Explorer.py    # SBC classification, breaks, quality, cleansing audit, AI Q&A
+│       ├── 3_SKU_Transitions.py    # SKU mapping pipeline, planner overrides, transition viz
+│       ├── 4_Hierarchy_Manager.py  # Hierarchy tree, aggregation, reconciliation (MinT/OLS/WLS)
+│       ├── 5_Backtest_Results.py   # Leaderboard, FVA, champions, calibration, SHAP, AI config tuner
+│       ├── 6_Forecast_Viewer.py    # Fan chart, decomposition, AI NL query, comparison, constraints
+│       ├── 7_Platform_Health.py    # Manifests, drift + AI triage, audit log, cost tracking
+│       └── 8_SOP_Meeting.py        # AI commentary, cross-run comparison, governance, BI export
 ├── tests/                  # 1030+ tests (pytest)
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)

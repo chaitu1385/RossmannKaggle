@@ -1,8 +1,9 @@
 """
-Page 2 — Backtest Results
+Page 5 — Backtest Results
 
 Model leaderboard, FVA cascade chart, per-series champion map,
-and layer leaderboard with Keep/Review/Remove recommendations.
+layer leaderboard, prediction interval calibration, SHAP feature
+attribution, and AI-powered configuration recommendations.
 """
 
 import sys
@@ -29,9 +30,12 @@ from utils import (
     FVA_COLORS,
     METRIC_TOOLTIPS,
     MODEL_LAYER_COLORS,
+    RISK_COLORS,
     model_display_name,
     polars_to_pandas,
     format_pct,
+    ai_available,
+    render_ai_unavailable_notice,
 )
 
 st.set_page_config(page_title="Backtest Results", page_icon="🏆", layout="wide")
@@ -362,3 +366,212 @@ else:
         f"Champion map requires `series_id` and `model_id` columns.\n\n"
         f"Available columns: {available}"
     )
+
+# ---------------------------------------------------------------------------
+#  Prediction Interval Calibration
+# ---------------------------------------------------------------------------
+st.divider()
+st.header("Prediction Interval Calibration")
+
+# Check if quantile columns exist in the metrics
+quantile_cols = [c for c in metrics_df.columns if c.startswith("forecast_p") or c.startswith("p")]
+has_quantiles = bool(quantile_cols) or ("actual" in metrics_df.columns and "forecast" in metrics_df.columns)
+
+if has_quantiles:
+    try:
+        from src.evaluation.calibration import (
+            compute_calibration_report,
+            compute_conformal_residuals,
+        )
+
+        quantiles = [0.1, 0.5, 0.9]
+        coverage_targets = {"p10_p90": 0.80}
+
+        with st.spinner("Computing calibration report..."):
+            cal_report = compute_calibration_report(
+                backtest_results=metrics_df,
+                quantiles=quantiles,
+                coverage_targets=coverage_targets,
+            )
+
+        if cal_report is not None:
+            # Per-model coverage
+            if hasattr(cal_report, "per_model") and cal_report.per_model is not None:
+                st.subheader("Coverage by Model")
+                cal_pd = polars_to_pandas(cal_report.per_model) if isinstance(
+                    cal_report.per_model, pl.DataFrame
+                ) else cal_report.per_model
+                st.dataframe(cal_pd, use_container_width=True)
+
+            # Calibration plot
+            if hasattr(cal_report, "nominal_vs_empirical"):
+                nve = cal_report.nominal_vs_empirical
+                if nve:
+                    fig_cal = go.Figure()
+                    fig_cal.add_trace(go.Scatter(
+                        x=[0, 1], y=[0, 1],
+                        mode="lines", line=dict(dash="dash", color=COLORS["neutral"]),
+                        name="Perfect calibration",
+                    ))
+                    nominals = list(nve.keys())
+                    empiricals = list(nve.values())
+                    fig_cal.add_trace(go.Scatter(
+                        x=nominals, y=empiricals,
+                        mode="markers+lines",
+                        marker=dict(size=8, color=COLORS["primary"]),
+                        name="Empirical",
+                    ))
+                    fig_cal.update_layout(
+                        title="Calibration Plot",
+                        xaxis_title="Nominal Coverage",
+                        yaxis_title="Empirical Coverage",
+                        height=350, margin=dict(t=40, b=40),
+                    )
+                    st.plotly_chart(fig_cal, use_container_width=True)
+
+            st.session_state["calibration_report"] = cal_report
+        else:
+            st.info("Calibration report could not be computed with the available data.")
+
+    except Exception as exc:
+        st.info(
+            f"Calibration analysis not available: {exc}\n\n"
+            "Calibration requires quantile forecast columns (e.g., forecast_p10, forecast_p90) "
+            "and actual values in the backtest results."
+        )
+else:
+    st.info(
+        "Calibration requires prediction interval columns in the backtest results. "
+        "Enable quantile forecasting in your config to use this feature."
+    )
+
+# ---------------------------------------------------------------------------
+#  SHAP Feature Attribution
+# ---------------------------------------------------------------------------
+st.divider()
+st.header("SHAP Feature Attribution")
+
+# Check if ML models are in the leaderboard
+ml_models = {"lgbm_direct", "xgboost_direct"}
+model_ids_in_data = set(metrics_df["model_id"].unique().to_list()) if "model_id" in metrics_df.columns else set()
+ml_in_leaderboard = ml_models & model_ids_in_data
+
+if ml_in_leaderboard:
+    st.caption(
+        "View feature importance for tree-based models using SHAP values."
+    )
+
+    try:
+        from src.analytics.explainer import ForecastExplainer
+
+        selected_ml = st.selectbox(
+            "Select ML model",
+            sorted(ml_in_leaderboard),
+            format_func=model_display_name,
+            key="shap_model",
+        )
+
+        if st.button("Compute SHAP", key="compute_shap"):
+            with st.spinner("Computing SHAP values..."):
+                explainer = ForecastExplainer(season_length=7)
+                actuals_df = st.session_state.get("actuals_df")
+                if actuals_df is not None:
+                    shap_result = explainer.explain_ml(
+                        model_name=selected_ml,
+                        history=actuals_df,
+                    )
+
+                    if shap_result is not None and not shap_result.is_empty():
+                        shap_pd = polars_to_pandas(shap_result.head(10))
+                        fig_shap = go.Figure()
+                        fig_shap.add_trace(go.Bar(
+                            x=shap_pd.iloc[:, 1] if shap_pd.shape[1] > 1 else [],
+                            y=shap_pd.iloc[:, 0] if shap_pd.shape[0] > 0 else [],
+                            orientation="h",
+                            marker_color=COLORS["accent"],
+                        ))
+                        fig_shap.update_layout(
+                            title=f"Top Features — {model_display_name(selected_ml)}",
+                            xaxis_title="Mean |SHAP|",
+                            height=350, margin=dict(t=40, b=40, l=150),
+                        )
+                        st.plotly_chart(fig_shap, use_container_width=True)
+                    else:
+                        st.info("SHAP values could not be computed.")
+                else:
+                    st.warning("Upload actuals data on the Data Onboarding page first.")
+
+    except ImportError:
+        st.info(
+            "SHAP analysis requires the `shap` package. "
+            "Install it with: `pip install shap`"
+        )
+    except Exception as exc:
+        st.info(f"SHAP analysis not available: {exc}")
+else:
+    st.info(
+        "SHAP attribution is available for ML models (LightGBM, XGBoost). "
+        "Include `lgbm_direct` or `xgboost_direct` in your backtest to enable."
+    )
+
+# ---------------------------------------------------------------------------
+#  AI Config Tuner
+# ---------------------------------------------------------------------------
+st.divider()
+st.header("AI Configuration Recommendations")
+st.caption(
+    "Get AI-powered suggestions to improve your forecasting configuration "
+    "based on backtest performance."
+)
+
+if ai_available():
+    accepted_config = st.session_state.get("accepted_config")
+    if accepted_config is None:
+        st.info("Accept a config on the Data Onboarding page first.")
+    elif st.button("Get AI Recommendations", type="primary", key="config_tune_btn"):
+        try:
+            from src.ai.config_tuner import ConfigTunerEngine
+
+            engine = ConfigTunerEngine()
+            with st.spinner("Analyzing configuration with Claude..."):
+                tune_result = engine.recommend(
+                    lob="uploaded",
+                    current_config=accepted_config,
+                    leaderboard=leaderboard if "leaderboard" in dir() else None,
+                )
+
+            # Overall assessment
+            st.info(tune_result.overall_assessment)
+            if tune_result.risk_summary:
+                st.caption(f"Risk: {tune_result.risk_summary}")
+
+            # Recommendations
+            if tune_result.recommendations:
+                for i, rec in enumerate(tune_result.recommendations):
+                    with st.expander(
+                        f"{rec.field_path} — {rec.expected_impact}",
+                        expanded=(i == 0),
+                    ):
+                        col_cur, col_arrow, col_new = st.columns([2, 1, 2])
+                        with col_cur:
+                            st.markdown(f"**Current:** `{rec.current_value}`")
+                        with col_arrow:
+                            st.markdown("**→**")
+                        with col_new:
+                            st.markdown(f"**Recommended:** `{rec.recommended_value}`")
+
+                        st.markdown(rec.reasoning)
+
+                        risk_color = RISK_COLORS.get(rec.risk, COLORS["neutral"])
+                        st.markdown(
+                            f'Risk: <span style="color:{risk_color};font-weight:bold">'
+                            f'{rec.risk.upper()}</span>',
+                            unsafe_allow_html=True,
+                        )
+            else:
+                st.success("No configuration changes recommended — current config looks good.")
+
+        except Exception as exc:
+            st.warning(f"AI config tuning failed: {exc}")
+else:
+    render_ai_unavailable_notice()

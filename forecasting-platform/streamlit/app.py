@@ -34,8 +34,8 @@ st.set_page_config(
 st.title("Forecasting Platform")
 
 st.markdown(
-    "Weekly sales forecasting for retail S&OP — statistical, ML, neural, "
-    "and foundation models with hierarchical reconciliation."
+    "Multi-frequency sales forecasting for retail S&OP — statistical, ML, neural, "
+    "and foundation models with hierarchical reconciliation and AI-powered insights."
 )
 
 st.info(
@@ -48,34 +48,43 @@ st.info(
 # ---------------------------------------------------------------------------
 st.subheader("Quick Start")
 
-col_ds, col_dp, col_eng = st.columns(3)
+col_ds, col_dp, col_sop, col_eng = st.columns(4)
 
 with col_ds:
     st.markdown("**Data Scientist**")
     st.markdown(
-        "Upload your data on **Data Onboarding**, run a backtest, "
-        "then compare models on **Backtest Results**. The platform "
-        "auto-selects the best model per series and shows FVA analysis."
+        "Upload data on **Data Onboarding**, explore series quality on "
+        "**Series Explorer**, run backtests, then compare models on "
+        "**Backtest Results** with SHAP and AI config tuning."
     )
-    st.caption("Start with: Data Onboarding → Backtest Results")
+    st.caption("Pages 1 → 2 → 5 → 6")
 
 with col_dp:
     st.markdown("**Demand Planner**")
     st.markdown(
         "Review forecasts on the **Forecast Viewer** with confidence "
-        "intervals and actuals overlay. Check which series have "
-        "accuracy issues on **Platform Health**."
+        "intervals, AI Q&A, and comparison overlays. Manage SKU "
+        "transitions and overrides on **SKU Transitions**."
     )
-    st.caption("Start with: Forecast Viewer")
+    st.caption("Pages 6 → 3 → 7")
+
+with col_sop:
+    st.markdown("**S&OP Leader**")
+    st.markdown(
+        "Generate executive commentary on **S&OP Meeting Prep** "
+        "with AI-powered narratives. Review governance and export "
+        "data for BI tools."
+    )
+    st.caption("Pages 6 → 7 → 8")
 
 with col_eng:
     st.markdown("**Platform Engineer**")
     st.markdown(
-        "Monitor pipeline runs, drift alerts, and compute costs on "
-        "**Platform Health**. Each forecast run produces a provenance "
-        "manifest for full traceability."
+        "Monitor pipelines, AI-triage drift alerts, and track compute "
+        "costs on **Platform Health**. Review audit logs for full "
+        "traceability."
     )
-    st.caption("Start with: Platform Health")
+    st.caption("Pages 1 → 7")
 
 # ---------------------------------------------------------------------------
 #  Pages overview
@@ -85,15 +94,24 @@ st.subheader("Pages")
 
 st.markdown(
     """
-1. **Data Onboarding** — Upload one or more CSVs. The platform auto-detects
-   schema, classifies file roles, assesses forecastability, and recommends a
-   configuration. Supports multi-file upload with intelligent merge.
-2. **Backtest Results** — Model leaderboard ranked by WMAPE, FVA cascade
-   showing which model layers add or destroy value, per-series champion map.
-3. **Forecast Viewer** — Interactive forecast chart with P10/P90 confidence
-   intervals, actuals overlay, and seasonal decomposition with narrative.
-4. **Platform Health** — Pipeline manifests with provenance, drift alerts
-   with severity breakdown, data quality summary, and compute cost tracking.
+**Data → Understand → Prepare → Structure → Model → Forecast → Monitor → Report**
+
+1. **Data Onboarding** — Upload CSVs, auto-detect schema, assess forecastability,
+   preview demand cleansing, screen regressors, and get a recommended config.
+2. **Series Explorer** — Deep-dive into series quality: SBC demand classification,
+   structural break detection, data quality profiling, cleansing audit, and AI Q&A.
+3. **SKU Transitions** — Run SKU mapping pipeline (attribute matching, naming
+   conventions), manage planner overrides with approval workflow.
+4. **Hierarchy Manager** — Visualize hierarchy trees, explore aggregations,
+   run forecast reconciliation (bottom-up, MinT, OLS, WLS).
+5. **Backtest Results** — Model leaderboard, FVA cascade, champion map,
+   prediction interval calibration, SHAP attribution, and AI config tuning.
+6. **Forecast Viewer** — Interactive forecast chart with fan chart, decomposition,
+   AI natural-language Q&A, forecast comparison, and constrained forecast toggle.
+7. **Platform Health** — Pipeline manifests, drift alerts with AI triage,
+   audit log viewer, data quality summary, and compute cost tracking.
+8. **S&OP Meeting Prep** — AI-generated executive commentary, cross-run
+   comparison, model governance, and BI export for Power BI / Tableau.
     """
 )
 
@@ -113,6 +131,11 @@ with st.expander("Glossary — key terms explained"):
 | **Croston / TSB** | Intermittent demand models designed for sparse or lumpy time series where many periods have zero demand. |
 | **Walk-forward backtest** | Evaluation method that trains on past data and tests on the next N periods, walking forward through time. |
 | **Champion model** | The best-performing model for a given series, selected by backtest accuracy. |
+| **SBC matrix** | Syntetos-Boylan-Croston classification — categorizes demand patterns as Smooth, Intermittent, Erratic, or Lumpy based on ADI and CV-squared. |
+| **Structural break** | A sudden level shift or trend change in a time series, detected using CUSUM or PELT algorithms. |
+| **MinT reconciliation** | Minimum Trace — optimal reconciliation method using shrinkage covariance estimation. Best for large hierarchies. |
+| **SHAP** | SHapley Additive exPlanations — explains ML model predictions by quantifying each feature's contribution. |
+| **Conformal prediction** | A calibration technique that adjusts prediction intervals to achieve desired coverage using backtest residuals. |
         """
     )
 
