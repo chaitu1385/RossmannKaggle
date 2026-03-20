@@ -207,6 +207,124 @@ def format_duration(seconds: float) -> str:
     return f"{h}h {m}m {s}s"
 
 
+# ---------------------------------------------------------------------------
+#  Domain-specific colour maps
+# ---------------------------------------------------------------------------
+DEMAND_CLASS_COLORS = {
+    "Smooth": COLORS["success"],
+    "Intermittent": COLORS["warning"],
+    "Erratic": COLORS["accent"],
+    "Lumpy": COLORS["danger"],
+    "insufficient_data": COLORS["neutral"],
+}
+
+RISK_COLORS = {
+    "low": COLORS["success"],
+    "medium": COLORS["warning"],
+    "high": COLORS["danger"],
+}
+
+CONFIDENCE_BADGE_COLORS = {
+    "high": COLORS["success"],
+    "medium": COLORS["warning"],
+    "low": COLORS["danger"],
+}
+
+TREND_ICONS = {
+    "improving": "\u2191",
+    "stable": "\u2192",
+    "degrading": "\u2193",
+}
+
+
+# ---------------------------------------------------------------------------
+#  AI helpers
+# ---------------------------------------------------------------------------
+def _sync_api_key_to_env():
+    """Push the session-state API key into ``os.environ`` so backend classes pick it up."""
+    import os
+    key = st.session_state.get("anthropic_api_key", "").strip()
+    if key:
+        os.environ["ANTHROPIC_API_KEY"] = key
+    elif "ANTHROPIC_API_KEY" not in os.environ:
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+
+
+def render_api_key_sidebar():
+    """Render a sidebar widget for entering the Anthropic API key.
+
+    The key is stored in ``st.session_state["anthropic_api_key"]`` and
+    automatically synced into ``os.environ["ANTHROPIC_API_KEY"]`` so that
+    every downstream consumer (``AIFeatureBase``, ``LLMAnalyzer``,
+    ``ai_available()``) picks it up without any extra wiring.
+
+    Call this once at the top of any page that uses AI features.
+    """
+    import os
+
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown("**AI Settings**")
+        # Pre-fill from env var if user hasn't entered one yet
+        default = st.session_state.get(
+            "anthropic_api_key",
+            os.environ.get("ANTHROPIC_API_KEY", ""),
+        )
+        st.text_input(
+            "Anthropic API Key",
+            value=default,
+            type="password",
+            key="anthropic_api_key",
+            help="Entered key is used for this session only and is never stored to disk.",
+        )
+    _sync_api_key_to_env()
+
+
+def ai_available() -> bool:
+    """Check whether the Anthropic API key is configured.
+
+    Checks both ``os.environ`` and Streamlit session state so it works
+    whether the key was set via env var, ``.env`` file, or the sidebar widget.
+    """
+    import os
+    if st.session_state.get("anthropic_api_key", "").strip():
+        return True
+    return bool(os.environ.get("ANTHROPIC_API_KEY"))
+
+
+def render_ai_unavailable_notice():
+    """Show a standard info box when AI features are unavailable."""
+    st.info(
+        "AI features require an Anthropic API key. "
+        "Enter it in the sidebar or set the `ANTHROPIC_API_KEY` environment variable."
+    )
+
+
+def render_ai_confidence_badge(confidence: str):
+    """Render a coloured confidence badge."""
+    color = CONFIDENCE_BADGE_COLORS.get(confidence, COLORS["neutral"])
+    st.markdown(
+        f'<span style="background-color:{color}20;color:{color};'
+        f'padding:2px 8px;border-radius:4px;font-weight:bold">'
+        f'{confidence.upper()}</span>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_metric_card_with_trend(name: str, value, unit: str = "", trend: str = ""):
+    """Render a metric card with optional trend arrow."""
+    arrow = TREND_ICONS.get(trend, "")
+    trend_color = {
+        "improving": COLORS["success"],
+        "degrading": COLORS["danger"],
+        "stable": COLORS["neutral"],
+    }.get(trend, COLORS["neutral"])
+    display = f"{value}{unit}"
+    if arrow:
+        display += f" {arrow}"
+    st.metric(name, display)
+
+
 # Sample CSV template for data onboarding guidance
 CSV_TEMPLATE = """\
 week,store_id,product_id,quantity

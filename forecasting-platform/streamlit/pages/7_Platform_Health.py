@@ -1,11 +1,13 @@
 """
-Page 4 — Platform Health
+Page 7 — Platform Health
 
-Pipeline manifests, drift alerts, data quality summary, and compute cost.
+Pipeline manifests, drift alerts with AI triage, audit log,
+data quality summary, and compute cost tracking.
 """
 
 import json
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 import plotly.express as px
@@ -32,9 +34,13 @@ from utils import (
     format_pct,
     format_number,
     format_duration,
+    ai_available,
+    render_ai_unavailable_notice,
+    render_api_key_sidebar,
 )
 
 st.set_page_config(page_title="Platform Health", page_icon="🏥", layout="wide")
+render_api_key_sidebar()
 st.title("Platform Health")
 
 # ---------------------------------------------------------------------------
@@ -244,6 +250,78 @@ if drift_alerts:
     )
     fig_alert.update_layout(height=300, margin=dict(t=40, b=40))
     st.plotly_chart(fig_alert, use_container_width=True)
+
+    # -------------------------------------------------------------------
+    #  AI Anomaly Triage
+    # -------------------------------------------------------------------
+    st.subheader("AI Anomaly Triage")
+    st.caption(
+        "Rank alerts by business impact and get AI-suggested corrective actions."
+    )
+
+    if ai_available():
+        if st.button("Triage Alerts with AI", type="primary", key="triage_btn"):
+            try:
+                from src.ai.anomaly_triage import AnomalyTriageEngine
+
+                engine = AnomalyTriageEngine()
+                with st.spinner("Triaging alerts with Claude..."):
+                    triage_result = engine.query(
+                        lob=lob,
+                        drift_alerts=drift_alerts,
+                        max_alerts=50,
+                    )
+
+                # Executive summary
+                st.info(triage_result.executive_summary)
+
+                # Ranked alerts table
+                if triage_result.ranked_alerts:
+                    triage_data = []
+                    for ta in triage_result.ranked_alerts:
+                        triage_data.append({
+                            "impact_score": ta.business_impact_score,
+                            "series_id": ta.series_id,
+                            "metric": ta.metric,
+                            "severity": ta.severity,
+                            "suggested_action": ta.suggested_action,
+                            "reasoning": ta.reasoning,
+                        })
+                    triage_df = pl.DataFrame(triage_data).sort(
+                        "impact_score", descending=True
+                    )
+                    st.dataframe(
+                        polars_to_pandas(triage_df),
+                        use_container_width=True,
+                        column_config={
+                            "impact_score": st.column_config.NumberColumn(
+                                "Impact Score", format="%.0f",
+                                help="Business impact score (0-100). Higher = more urgent.",
+                            ),
+                        },
+                    )
+
+                    # Select triaged series to view in Forecast Viewer
+                    triaged_series = triage_df["series_id"].unique().to_list()
+                    selected_triage = st.selectbox(
+                        "Investigate series in Forecast Viewer",
+                        triaged_series,
+                        index=None,
+                        placeholder="Choose a series...",
+                        key="triage_series_select",
+                    )
+                    if selected_triage:
+                        st.session_state["selected_series_id"] = selected_triage
+                        st.success(
+                            f"Series `{selected_triage}` selected. "
+                            f"Go to **Forecast Viewer** to investigate."
+                        )
+
+            except Exception as exc:
+                st.warning(f"AI triage failed: {exc}")
+    else:
+        render_ai_unavailable_notice()
+
 elif st.session_state.get("drift_alerts") is not None:
     st.success("No drift alerts detected.")
 else:
@@ -358,6 +436,41 @@ if manifest_files:
             margin=dict(t=40, b=40),
         )
         st.plotly_chart(fig_cost, use_container_width=True)
+
+        # Cost per series
+        if any(d.get("series_count", 0) > 0 for d in cost_data):
+            st.subheader("Cost Efficiency")
+            efficiency_data = [
+                {
+                    "run_id": d["run_id"],
+                    "seconds_per_series": round(
+                        d["total_seconds"] / d["series_count"], 2
+                    )
+                    if d.get("series_count", 0) > 0
+                    else 0,
+                }
+                for d in cost_data
+                if d.get("series_count", 0) > 0
+            ]
+            if efficiency_data:
+                eff_df = pl.DataFrame(efficiency_data)
+                eff_pd = polars_to_pandas(eff_df)
+                fig_eff = go.Figure()
+                fig_eff.add_trace(go.Bar(
+                    x=eff_pd["run_id"],
+                    y=eff_pd["seconds_per_series"],
+                    marker_color=COLORS["accent"],
+                    text=[f"{v:.2f}s" for v in eff_pd["seconds_per_series"]],
+                    textposition="auto",
+                ))
+                fig_eff.update_layout(
+                    title="Seconds per Series",
+                    xaxis_title="Run ID",
+                    yaxis_title="Seconds / Series",
+                    height=300,
+                    margin=dict(t=40, b=40),
+                )
+                st.plotly_chart(fig_eff, use_container_width=True)
     else:
         st.info(
             "No compute cost data found in manifests. "
@@ -365,3 +478,44 @@ if manifest_files:
         )
 else:
     st.info("No pipeline runs found. Cost data is collected from pipeline manifests.")
+
+# ---------------------------------------------------------------------------
+#  Audit Log
+# ---------------------------------------------------------------------------
+st.divider()
+st.header("Audit Log")
+
+try:
+    from src.audit.logger import AuditLogger
+
+    audit_path = str(DATA_DIR / "audit_log")
+    logger = AuditLogger(base_path=audit_path)
+
+    col_action, col_limit = st.columns(2)
+    with col_action:
+        action_filter = st.text_input(
+            "Filter by action", value="", key="audit_action_filter",
+            help="Leave blank to show all actions.",
+        )
+    with col_limit:
+        audit_limit = st.number_input(
+            "Max entries", min_value=10, max_value=1000, value=100, key="audit_limit"
+        )
+
+    if st.button("Load Audit Log", key="load_audit"):
+        with st.spinner("Querying audit log..."):
+            audit_df = logger.query(
+                action=action_filter or None,
+                limit=audit_limit,
+            )
+        if audit_df is not None and not audit_df.is_empty():
+            st.dataframe(polars_to_pandas(audit_df), use_container_width=True)
+            st.caption(f"Showing {audit_df.shape[0]} entries.")
+        else:
+            st.info("No audit log entries found.")
+
+except Exception as exc:
+    st.info(
+        f"Audit log not available: {exc}\n\n"
+        "Audit entries are generated when pipeline actions are performed via the API."
+    )
