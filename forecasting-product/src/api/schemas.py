@@ -90,16 +90,6 @@ class AnalysisResponse(BaseModel):
     llm_risk_factors: Optional[List[str]] = None
 
 
-class AuditEventResponse(BaseModel):
-    """One audit event."""
-    audit_id: str
-    timestamp: str
-    user_id: str
-    action: str
-    resource_type: str
-    resource_id: str
-    status: str
-
 
 # --------------------------------------------------------------------------- #
 #  AI feature request/response models

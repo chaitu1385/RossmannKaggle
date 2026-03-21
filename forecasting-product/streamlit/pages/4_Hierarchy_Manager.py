@@ -104,47 +104,6 @@ def _build_sunburst_data(tree: HierarchyTree) -> pl.DataFrame:
     })
 
 
-def _check_coherence(
-    tree: HierarchyTree,
-    forecast_df: pl.DataFrame,
-    value_col: str,
-    id_col: str,
-    time_col: str,
-) -> dict:
-    """Check whether forecasts are coherent (parent == sum of children)."""
-    leaves = tree.get_leaves()
-    leaf_keys = {n.key for n in leaves}
-
-    # Filter forecast to leaf-level rows
-    leaf_data = forecast_df.filter(pl.col(id_col).is_in(list(leaf_keys)))
-
-    violations = 0
-    total_checks = 0
-
-    for level in tree.levels[:-1]:  # All non-leaf levels
-        for node in tree.get_nodes(level):
-            child_keys = [c.key for c in node.leaf_descendants()]
-            if not child_keys:
-                continue
-
-            # Sum children per time period
-            children_sum = (
-                leaf_data.filter(pl.col(id_col).is_in(child_keys))
-                .group_by(time_col)
-                .agg(pl.col(value_col).sum().alias("_child_sum"))
-            )
-
-            if children_sum.is_empty():
-                continue
-
-            total_checks += len(children_sum)
-
-    return {
-        "total_checks": total_checks,
-        "violations": violations,
-        "coherent": violations == 0,
-    }
-
 
 # --------------------------------------------------------------------------- #
 #  Section 1: Data & Hierarchy Setup

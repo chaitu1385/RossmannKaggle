@@ -7,9 +7,8 @@ import logging
 from typing import Dict, List, Optional
 
 import polars as pl
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 
-from ..deps import get_app_state
 from ...auth.models import Permission, User
 from ...auth.rbac import get_current_user, require_permission
 
@@ -25,14 +24,14 @@ router = APIRouter(tags=["analytics"])
 def get_fva(
     lob: str,
     run_type: str = Query("backtest"),
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(require_permission(Permission.VIEW_METRICS)),
 ):
     """Compute Forecast Value Add (FVA) cascade for a LOB."""
     from ...analytics.fva_analyzer import FVAAnalyzer
     from ...metrics.store import MetricStore
 
-    store = MetricStore(str(app_state.metrics_dir))
+    store = MetricStore(str(request.app.state.metrics_dir))
     try:
         df = store.read(lob=lob, run_type=run_type)
     except Exception as exc:
@@ -58,14 +57,14 @@ def get_fva(
 def get_calibration(
     lob: str,
     run_type: str = Query("backtest"),
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(require_permission(Permission.VIEW_METRICS)),
 ):
     """Compute prediction interval calibration report."""
     from ...evaluation.calibration import compute_calibration_report
     from ...metrics.store import MetricStore
 
-    store = MetricStore(str(app_state.metrics_dir))
+    store = MetricStore(str(request.app.state.metrics_dir))
     try:
         df = store.read(lob=lob, run_type=run_type)
     except Exception as exc:
@@ -111,7 +110,7 @@ async def compute_shap(
     model_name: str = Query("lgbm_direct", description="Model to explain"),
     season_length: int = Query(52),
     top_k: int = Query(10, description="Number of top features to return"),
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(require_permission(Permission.VIEW_METRICS)),
 ):
     """Compute SHAP feature attribution for tree-based models."""
@@ -131,7 +130,7 @@ async def compute_shap(
     else:
         # Try loading from data_dir
         for subdir in ("history", "actuals"):
-            d = app_state.data_dir / subdir / lob
+            d = request.app.state.data_dir / subdir / lob
             if d.exists():
                 files = sorted(d.glob("*.parquet"))
                 if files:
@@ -145,7 +144,7 @@ async def compute_shap(
     try:
         # explain_ml needs a trained model — for API use, we'll use the decompose + narrative approach
         # since we don't have a persisted model object. Return decomposition-based feature importance.
-        forecast_dir = app_state.data_dir / "forecasts" / lob
+        forecast_dir = request.app.state.data_dir / "forecasts" / lob
         forecast_df = pl.DataFrame()
         if forecast_dir.exists():
             pfiles = sorted(forecast_dir.glob("forecast_*.parquet"))

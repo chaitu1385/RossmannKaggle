@@ -7,11 +7,10 @@ import logging
 from typing import List, Optional
 
 import polars as pl
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 
 from ...auth.models import Permission, User
 from ...auth.rbac import get_current_user, require_permission
-from ..deps import get_app_state
 
 logger = logging.getLogger(__name__)
 
@@ -35,13 +34,13 @@ def _load_actuals(data_dir, lob: str) -> pl.DataFrame:
 @router.get("/{lob}")
 def list_series(
     lob: str,
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(get_current_user),
 ):
     """List all series with SBC demand classification (ADI, CV², demand_class)."""
     from ...series.sparse_detector import SparseDetector
 
-    df = _load_actuals(app_state.data_dir, lob)
+    df = _load_actuals(request.app.state.data_dir, lob)
 
     detector = SparseDetector()
     # Detect target and id columns
@@ -81,14 +80,14 @@ async def detect_breaks(
     penalty: float = Query(3.0, description="PELT penalty (higher = fewer breaks)"),
     min_segment_length: int = Query(13, description="Min periods between breaks"),
     max_breakpoints: int = Query(5),
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(get_current_user),
 ):
     """Detect structural breaks in time series data."""
     from ...config.schema import StructuralBreakConfig
     from ...series.break_detector import StructuralBreakDetector
 
-    df = await _read_upload_or_lob(file, app_state, lob)
+    df = await _read_upload_or_lob(file, request, lob)
 
     config = StructuralBreakConfig(
         enabled=True,
@@ -125,14 +124,14 @@ async def cleansing_audit(
     outlier_action: str = Query("clip", description="'clip', 'interpolate', or 'flag_only'"),
     stockout_detection: bool = Query(True),
     min_zero_run: int = Query(2),
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(get_current_user),
 ):
     """Run demand cleansing and return before/after audit report."""
     from ...config.schema import CleansingConfig
     from ...data.cleanser import DemandCleanser
 
-    df = await _read_upload_or_lob(file, app_state, lob)
+    df = await _read_upload_or_lob(file, request, lob)
 
     config = CleansingConfig(
         enabled=True,
@@ -177,14 +176,14 @@ async def regressor_screen(
     variance_threshold: float = Query(1e-6),
     correlation_threshold: float = Query(0.95),
     mi_enabled: bool = Query(False),
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(get_current_user),
 ):
     """Screen regressors for variance, correlation, and mutual information."""
     from ...config.schema import RegressorScreenConfig
     from ...data.regressor_screen import screen_regressors
 
-    df = await _read_upload_or_lob(file, app_state, lob)
+    df = await _read_upload_or_lob(file, request, lob)
 
     # Auto-detect feature columns if not provided
     if feature_columns:
@@ -228,7 +227,7 @@ async def regressor_screen(
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
 
-async def _read_upload_or_lob(file, app_state, lob):
+async def _read_upload_or_lob(file, request: Request, lob):
     """Read data from upload or from stored LOB actuals."""
     if file is not None:
         content = await file.read()
@@ -240,7 +239,7 @@ async def _read_upload_or_lob(file, app_state, lob):
         except Exception as exc:
             raise HTTPException(status_code=400, detail=f"Failed to read file: {exc}")
     elif lob:
-        return _load_actuals(app_state.data_dir, lob)
+        return _load_actuals(request.app.state.data_dir, lob)
     else:
         raise HTTPException(status_code=400, detail="Provide either a file upload or lob query parameter.")
 

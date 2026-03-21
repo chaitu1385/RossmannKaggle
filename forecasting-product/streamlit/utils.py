@@ -151,11 +151,6 @@ def format_number(value: float, decimals: int = 2) -> str:
     return f"{value:,.{decimals}f}"
 
 
-def severity_badge(severity: str) -> str:
-    """Return a coloured markdown badge for alert severity."""
-    colour = SEVERITY_COLORS.get(severity.lower(), "#8d99ae")
-    return f":{severity.upper()}: `{severity}`"
-
 
 # ---------------------------------------------------------------------------
 #  Model & metric display helpers
