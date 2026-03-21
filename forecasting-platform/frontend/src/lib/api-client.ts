@@ -18,6 +18,30 @@ import type {
   CommentaryRequest,
   CommentaryResponse,
   AuditResponse,
+  SeriesListResponse,
+  BreakDetectionResponse,
+  CleansingAuditResponse,
+  RegressorScreenResponse,
+  HierarchyBuildResponse,
+  HierarchyAggregateResponse,
+  HierarchyReconcileResponse,
+  SKUMappingResponse,
+  OverrideListResponse,
+  CreateOverrideRequest,
+  PipelineRunResponse,
+  ManifestListResponse,
+  CostListResponse,
+  MultiFileAnalysisResponse,
+  FVAResponse,
+  CalibrationResponse,
+  ShapResponse,
+  DecomposeResponse,
+  ForecastCompareResponse,
+  ConstrainResponse,
+  ModelCardListResponse,
+  ModelCardItem,
+  LineageResponse,
+  BIExportResponse,
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -157,6 +181,283 @@ export const api = {
     if (params?.limit) searchParams.set("limit", String(params.limit));
     const qs = searchParams.toString();
     return request<AuditResponse>(`/audit${qs ? `?${qs}` : ""}`);
+  },
+
+  // ── Series ──────────────────────────────────────────────────────────────────
+
+  listSeries: (lob: string) =>
+    request<SeriesListResponse>(`/series/${encodeURIComponent(lob)}`),
+
+  detectBreaks: (file: File, params?: { lob?: string; method?: string; penalty?: number }) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const sp = new URLSearchParams();
+    if (params?.lob) sp.set("lob", params.lob);
+    if (params?.method) sp.set("method", params.method);
+    if (params?.penalty) sp.set("penalty", String(params.penalty));
+    const qs = sp.toString();
+    return request<BreakDetectionResponse>(`/series/breaks${qs ? `?${qs}` : ""}`, {
+      method: "POST", body: formData,
+    });
+  },
+
+  detectBreaksFromLob: (lob: string, method: string = "cusum", penalty: number = 3.0) =>
+    request<BreakDetectionResponse>(
+      `/series/breaks?lob=${encodeURIComponent(lob)}&method=${encodeURIComponent(method)}&penalty=${penalty}`,
+      { method: "POST" },
+    ),
+
+  cleansingAudit: (file: File, params?: Record<string, string | number | boolean>) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const sp = new URLSearchParams();
+    if (params) Object.entries(params).forEach(([k, v]) => sp.set(k, String(v)));
+    const qs = sp.toString();
+    return request<CleansingAuditResponse>(`/series/cleansing-audit${qs ? `?${qs}` : ""}`, {
+      method: "POST", body: formData,
+    });
+  },
+
+  cleansingAuditFromLob: (lob: string) =>
+    request<CleansingAuditResponse>(
+      `/series/cleansing-audit?lob=${encodeURIComponent(lob)}`,
+      { method: "POST" },
+    ),
+
+  regressorScreen: (file: File, params?: Record<string, string | number | boolean>) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const sp = new URLSearchParams();
+    if (params) Object.entries(params).forEach(([k, v]) => sp.set(k, String(v)));
+    const qs = sp.toString();
+    return request<RegressorScreenResponse>(`/series/regressor-screen${qs ? `?${qs}` : ""}`, {
+      method: "POST", body: formData,
+    });
+  },
+
+  regressorScreenFromLob: (lob: string) =>
+    request<RegressorScreenResponse>(
+      `/series/regressor-screen?lob=${encodeURIComponent(lob)}`,
+      { method: "POST" },
+    ),
+
+  // ── Hierarchy ───────────────────────────────────────────────────────────────
+
+  buildHierarchy: (file: File, levels: string, idColumn: string = "series_id", name: string = "product") => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return request<HierarchyBuildResponse>(
+      `/hierarchy/build?levels=${encodeURIComponent(levels)}&id_column=${encodeURIComponent(idColumn)}&name=${encodeURIComponent(name)}`,
+      { method: "POST", body: formData },
+    );
+  },
+
+  aggregateHierarchy: (file: File, levels: string, targetLevel: string, params?: Record<string, string | number>) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const sp = new URLSearchParams({ levels, target_level: targetLevel });
+    if (params) Object.entries(params).forEach(([k, v]) => sp.set(k, String(v)));
+    return request<HierarchyAggregateResponse>(
+      `/hierarchy/aggregate?${sp.toString()}`,
+      { method: "POST", body: formData },
+    );
+  },
+
+  reconcileHierarchy: (file: File, levels: string, method: string = "bottom_up", params?: Record<string, string>) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const sp = new URLSearchParams({ levels, method });
+    if (params) Object.entries(params).forEach(([k, v]) => sp.set(k, v));
+    return request<HierarchyReconcileResponse>(
+      `/hierarchy/reconcile?${sp.toString()}`,
+      { method: "POST", body: formData },
+    );
+  },
+
+  // ── SKU Mapping ─────────────────────────────────────────────────────────────
+
+  skuMappingPhase1: (file: File, params?: { launch_window_days?: number; min_base_similarity?: number; min_confidence?: string }) => {
+    const formData = new FormData();
+    formData.append("product_master", file);
+    const sp = new URLSearchParams();
+    if (params?.launch_window_days) sp.set("launch_window_days", String(params.launch_window_days));
+    if (params?.min_base_similarity) sp.set("min_base_similarity", String(params.min_base_similarity));
+    if (params?.min_confidence) sp.set("min_confidence", params.min_confidence);
+    const qs = sp.toString();
+    return request<SKUMappingResponse>(`/sku-mapping/phase1${qs ? `?${qs}` : ""}`, {
+      method: "POST", body: formData,
+    });
+  },
+
+  skuMappingPhase2: (productMaster: File, salesHistory?: File, params?: Record<string, string | number>) => {
+    const formData = new FormData();
+    formData.append("product_master", productMaster);
+    if (salesHistory) formData.append("sales_history", salesHistory);
+    const sp = new URLSearchParams();
+    if (params) Object.entries(params).forEach(([k, v]) => sp.set(k, String(v)));
+    const qs = sp.toString();
+    return request<SKUMappingResponse>(`/sku-mapping/phase2${qs ? `?${qs}` : ""}`, {
+      method: "POST", body: formData,
+    });
+  },
+
+  // ── Overrides ───────────────────────────────────────────────────────────────
+
+  listOverrides: (params?: { old_sku?: string; new_sku?: string }) => {
+    const sp = new URLSearchParams();
+    if (params?.old_sku) sp.set("old_sku", params.old_sku);
+    if (params?.new_sku) sp.set("new_sku", params.new_sku);
+    const qs = sp.toString();
+    return request<OverrideListResponse>(`/overrides${qs ? `?${qs}` : ""}`);
+  },
+
+  createOverride: (body: CreateOverrideRequest) =>
+    request<{ override_id: string; status: string }>("/overrides", {
+      method: "POST", body: JSON.stringify(body),
+    }),
+
+  updateOverride: (overrideId: string, body: Partial<CreateOverrideRequest>) =>
+    request<{ override_id: string; status: string }>(
+      `/overrides/${encodeURIComponent(overrideId)}`,
+      { method: "PUT", body: JSON.stringify(body) },
+    ),
+
+  deleteOverride: (overrideId: string) =>
+    request<{ override_id: string; status: string }>(
+      `/overrides/${encodeURIComponent(overrideId)}`,
+      { method: "DELETE" },
+    ),
+
+  // ── Pipeline ────────────────────────────────────────────────────────────────
+
+  runBacktest: (file: File, lob: string = "default", configFile?: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (configFile) formData.append("config_file", configFile);
+    return request<PipelineRunResponse>(
+      `/pipeline/backtest?lob=${encodeURIComponent(lob)}`,
+      { method: "POST", body: formData },
+    );
+  },
+
+  runForecast: (file: File, lob: string = "default", params?: { model_id?: string; horizon?: number; configFile?: File }) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (params?.configFile) formData.append("config_file", params.configFile);
+    const sp = new URLSearchParams({ lob });
+    if (params?.model_id) sp.set("model_id", params.model_id);
+    if (params?.horizon) sp.set("horizon", String(params.horizon));
+    return request<PipelineRunResponse>(
+      `/pipeline/forecast?${sp.toString()}`,
+      { method: "POST", body: formData },
+    );
+  },
+
+  listManifests: (lob?: string, limit: number = 20) => {
+    const sp = new URLSearchParams();
+    if (lob) sp.set("lob", lob);
+    sp.set("limit", String(limit));
+    return request<ManifestListResponse>(`/pipeline/manifests?${sp.toString()}`);
+  },
+
+  getCosts: (lob?: string, limit: number = 20) => {
+    const sp = new URLSearchParams();
+    if (lob) sp.set("lob", lob);
+    sp.set("limit", String(limit));
+    return request<CostListResponse>(`/pipeline/costs?${sp.toString()}`);
+  },
+
+  analyzeMultiFile: (files: File[], lobName: string = "analyzed") => {
+    const formData = new FormData();
+    files.forEach((f) => formData.append("files", f));
+    return request<MultiFileAnalysisResponse>(
+      `/pipeline/analyze-multi-file?lob_name=${encodeURIComponent(lobName)}`,
+      { method: "POST", body: formData },
+    );
+  },
+
+  // ── Analytics ───────────────────────────────────────────────────────────────
+
+  getFVA: (lob: string, runType: string = "backtest") =>
+    request<FVAResponse>(
+      `/metrics/${encodeURIComponent(lob)}/fva?run_type=${encodeURIComponent(runType)}`,
+    ),
+
+  getCalibration: (lob: string, runType: string = "backtest") =>
+    request<CalibrationResponse>(
+      `/metrics/${encodeURIComponent(lob)}/calibration?run_type=${encodeURIComponent(runType)}`,
+    ),
+
+  getShap: (lob: string, params?: { model_name?: string; season_length?: number; top_k?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.model_name) sp.set("model_name", params.model_name);
+    if (params?.season_length) sp.set("season_length", String(params.season_length));
+    if (params?.top_k) sp.set("top_k", String(params.top_k));
+    const qs = sp.toString();
+    return request<ShapResponse>(
+      `/metrics/${encodeURIComponent(lob)}/shap${qs ? `?${qs}` : ""}`,
+      { method: "POST" },
+    );
+  },
+
+  decomposeForecast: (historyFile: File, forecastFile: File, params?: Record<string, string | number>) => {
+    const formData = new FormData();
+    formData.append("history_file", historyFile);
+    formData.append("forecast_file", forecastFile);
+    const sp = new URLSearchParams();
+    if (params) Object.entries(params).forEach(([k, v]) => sp.set(k, String(v)));
+    const qs = sp.toString();
+    return request<DecomposeResponse>(`/forecast/decompose${qs ? `?${qs}` : ""}`, {
+      method: "POST", body: formData,
+    });
+  },
+
+  compareForecasts: (modelFile: File, externalFile: File, externalName: string = "external") => {
+    const formData = new FormData();
+    formData.append("model_file", modelFile);
+    formData.append("external_file", externalFile);
+    return request<ForecastCompareResponse>(
+      `/forecast/compare?external_name=${encodeURIComponent(externalName)}`,
+      { method: "POST", body: formData },
+    );
+  },
+
+  constrainForecast: (file: File, params?: { min_demand?: number; max_capacity?: number; aggregate_max?: number; proportional?: boolean }) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const sp = new URLSearchParams();
+    if (params?.min_demand !== undefined) sp.set("min_demand", String(params.min_demand));
+    if (params?.max_capacity !== undefined) sp.set("max_capacity", String(params.max_capacity));
+    if (params?.aggregate_max !== undefined) sp.set("aggregate_max", String(params.aggregate_max));
+    if (params?.proportional !== undefined) sp.set("proportional", String(params.proportional));
+    const qs = sp.toString();
+    return request<ConstrainResponse>(`/forecast/constrain${qs ? `?${qs}` : ""}`, {
+      method: "POST", body: formData,
+    });
+  },
+
+  // ── Governance ──────────────────────────────────────────────────────────────
+
+  listModelCards: () => request<ModelCardListResponse>("/governance/model-cards"),
+
+  getModelCard: (modelName: string) =>
+    request<ModelCardItem>(`/governance/model-cards/${encodeURIComponent(modelName)}`),
+
+  getLineage: (lob?: string, modelId?: string) => {
+    const sp = new URLSearchParams();
+    if (lob) sp.set("lob", lob);
+    if (modelId) sp.set("model_id", modelId);
+    const qs = sp.toString();
+    return request<LineageResponse>(`/governance/lineage${qs ? `?${qs}` : ""}`);
+  },
+
+  biExport: (reportType: string, lob: string, runType: string = "backtest", modelId?: string) => {
+    const sp = new URLSearchParams({ lob, run_type: runType });
+    if (modelId) sp.set("model_id", modelId);
+    return request<BIExportResponse>(
+      `/governance/export/${encodeURIComponent(reportType)}?${sp.toString()}`,
+      { method: "POST" },
+    );
   },
 };
 

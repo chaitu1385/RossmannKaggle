@@ -1,16 +1,147 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DriftHistogram } from "@/components/charts/drift-histogram";
 import { TriagePanel } from "@/components/ai/triage-panel";
 import { DataTable } from "@/components/data/data-table";
-import { ComingSoon } from "@/components/shared/coming-soon";
 import { MetricCard } from "@/components/shared/metric-card";
 import { ErrorDisplay } from "@/components/shared/error-boundary";
 import { ChartSkeleton } from "@/components/shared/loading-skeleton";
 import { useDrift } from "@/hooks/use-drift";
 import { useAudit } from "@/hooks/use-audit";
+import { api } from "@/lib/api-client";
 import { SEVERITY_COLORS } from "@/lib/constants";
+import type { ManifestListResponse, CostListResponse } from "@/lib/types";
+
+function ManifestsTabContent({ lob }: { lob: string }) {
+  const [manifests, setManifests] = useState<ManifestListResponse | null>(null);
+  const [manifestsLoading, setManifestsLoading] = useState(false);
+  const [manifestsError, setManifestsError] = useState<string | null>(null);
+
+  const [costs, setCosts] = useState<CostListResponse | null>(null);
+  const [costsLoading, setCostsLoading] = useState(false);
+  const [costsError, setCostsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setManifestsLoading(true);
+    setManifestsError(null);
+    api.listManifests(lob)
+      .then(setManifests)
+      .catch((err) => setManifestsError(err instanceof Error ? err.message : "Failed to load manifests"))
+      .finally(() => setManifestsLoading(false));
+
+    setCostsLoading(true);
+    setCostsError(null);
+    api.getCosts(lob)
+      .then(setCosts)
+      .catch((err) => setCostsError(err instanceof Error ? err.message : "Failed to load costs"))
+      .finally(() => setCostsLoading(false));
+  }, [lob]);
+
+  return (
+    <div className="space-y-6">
+      {/* Pipeline Manifests */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Pipeline Manifests</h2>
+        {manifestsLoading && <ChartSkeleton />}
+        {manifestsError && (
+          <ErrorDisplay
+            message={manifestsError}
+            onRetry={() => {
+              setManifestsLoading(true);
+              setManifestsError(null);
+              api.listManifests(lob)
+                .then(setManifests)
+                .catch((err) => setManifestsError(err instanceof Error ? err.message : "Failed"))
+                .finally(() => setManifestsLoading(false));
+            }}
+          />
+        )}
+        {manifests && (
+          <>
+            <MetricCard label="Total Manifests" value={manifests.count} className="w-fit" />
+            {manifests.manifests.length > 0 ? (
+              <DataTable
+                columns={[
+                  { key: "run_id", label: "Run ID", sortable: true },
+                  { key: "timestamp", label: "Timestamp", sortable: true },
+                  { key: "lob", label: "LOB", sortable: true },
+                  { key: "series_count", label: "Series", sortable: true },
+                  { key: "champion_model", label: "Champion", sortable: true },
+                  { key: "backtest_wmape", label: "WMAPE", sortable: true,
+                    render: (v) => v != null ? `${((v as number) * 100).toFixed(1)}%` : "N/A",
+                  },
+                  { key: "forecast_horizon", label: "Horizon", sortable: true },
+                  { key: "forecast_rows", label: "Rows", sortable: true },
+                  { key: "validation_passed", label: "Valid", sortable: true,
+                    render: (v) => (
+                      <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${
+                        v ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                          : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+                      }`}>
+                        {v ? "Yes" : "No"}
+                      </span>
+                    ),
+                  },
+                  { key: "validation_warnings", label: "Warnings", sortable: true },
+                ]}
+                data={manifests.manifests as unknown as Record<string, unknown>[]}
+                pageSize={10}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">No manifests found for this LOB.</p>
+            )}
+          </>
+        )}
+      </section>
+
+      {/* Cost Tracking */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Cost Tracking</h2>
+        {costsLoading && <ChartSkeleton />}
+        {costsError && (
+          <ErrorDisplay
+            message={costsError}
+            onRetry={() => {
+              setCostsLoading(true);
+              setCostsError(null);
+              api.getCosts(lob)
+                .then(setCosts)
+                .catch((err) => setCostsError(err instanceof Error ? err.message : "Failed"))
+                .finally(() => setCostsLoading(false));
+            }}
+          />
+        )}
+        {costs && (
+          <>
+            <MetricCard label="Cost Records" value={costs.count} className="w-fit" />
+            {costs.costs.length > 0 ? (
+              <DataTable
+                columns={[
+                  { key: "run_id", label: "Run ID", sortable: true },
+                  { key: "timestamp", label: "Timestamp", sortable: true },
+                  { key: "lob", label: "LOB", sortable: true },
+                  { key: "series_count", label: "Series", sortable: true },
+                  { key: "champion_model", label: "Model", sortable: true },
+                  { key: "total_seconds", label: "Total (s)", sortable: true,
+                    render: (v) => typeof v === "number" ? v.toFixed(1) : String(v),
+                  },
+                  { key: "seconds_per_series", label: "Per Series (s)", sortable: true,
+                    render: (v) => v != null ? (v as number).toFixed(3) : "N/A",
+                  },
+                ]}
+                data={costs.costs as unknown as Record<string, unknown>[]}
+                pageSize={10}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">No cost data found for this LOB.</p>
+            )}
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
 
 export default function HealthPage() {
   const [lob, setLob] = useState("retail");
@@ -214,16 +345,7 @@ export default function HealthPage() {
 
       {/* Manifests Tab */}
       {activeTab === "manifests" && (
-        <div className="space-y-4">
-          <ComingSoon
-            feature="Pipeline Manifests"
-            description="View recent pipeline manifests with run ID, timestamp, LOB, series count, champion model, WMAPE, and validation status"
-          />
-          <ComingSoon
-            feature="Cost Tracking"
-            description="Per-model compute time, cost-per-series metrics, and cost trend visualization"
-          />
-        </div>
+        <ManifestsTabContent lob={lob} />
       )}
     </div>
   );

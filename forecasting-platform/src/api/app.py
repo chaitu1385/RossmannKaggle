@@ -2,16 +2,33 @@
 Forecasting Platform REST API
 (Design document §13 / Phase 2)
 
-Exposes forecast results, model leaderboards, and drift alerts over HTTP.
-Built with FastAPI — auto-generates OpenAPI (Swagger) docs at /docs.
+Exposes forecast results, model leaderboards, drift alerts, series analysis,
+hierarchy management, SKU mapping, pipeline operations, analytics, and
+governance over HTTP. Built with FastAPI — auto-generates OpenAPI docs at /docs.
 
-Endpoints
----------
+Core Endpoints
+--------------
 GET  /health                         Liveness probe.
 GET  /forecast/{lob}                 Latest forecasts for a LOB.
 GET  /forecast/{lob}/{series_id}     Latest forecast for a specific series.
 GET  /metrics/leaderboard/{lob}      Model leaderboard from metric store.
 GET  /metrics/drift/{lob}            Drift alerts for a LOB.
+POST /analyze                        Upload CSV → schema + forecastability.
+
+Router Endpoints (see src/api/routers/)
+---------------------------------------
+/series/*           Series listing, SBC classification, breaks, cleansing, regressors.
+/hierarchy/*        Build tree, aggregate, reconcile.
+/sku-mapping/*      Phase 1/2 SKU mapping.
+/overrides/*        Planner override CRUD.
+/pipeline/*         Run backtest/forecast, manifests, costs, multi-file analysis.
+/metrics/*/fva      FVA cascade.
+/metrics/*/calibration  Prediction interval calibration.
+/metrics/*/shap     SHAP feature attribution.
+/forecast/decompose Seasonal decomposition.
+/forecast/compare   Cross-forecast comparison.
+/forecast/constrain Apply capacity/budget constraints.
+/governance/*       Model cards, lineage, BI export.
 
 Usage
 -----
@@ -64,6 +81,22 @@ logger = logging.getLogger(__name__)
 _API_VERSION = os.environ.get("API_VERSION", "1.0.0")
 
 
+def _register_routers(app: FastAPI) -> None:
+    """Include all domain routers."""
+    from .routers import analytics, governance, hierarchy, overrides, pipeline, series, sku_mapping
+
+    for r in (
+        series.router,
+        hierarchy.router,
+        sku_mapping.router,
+        overrides.router,
+        pipeline.router,
+        analytics.router,
+        governance.router,
+    ):
+        app.include_router(r)
+
+
 def create_app(
     data_dir: str = "data/",
     metrics_dir: str = "data/metrics/",
@@ -107,6 +140,9 @@ def create_app(
 
     from ..auth.models import Permission, User
     from ..auth.rbac import get_current_user, require_permission
+
+    # ── Router registration ────────────────────────────────────────────────
+    _register_routers(app)
 
     # ── Routes ─────────────────────────────────────────────────────────────
 

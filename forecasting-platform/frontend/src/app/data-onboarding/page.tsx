@@ -5,13 +5,228 @@ import { FileUpload } from "@/components/data/file-upload";
 import { ConfigViewer } from "@/components/data/config-viewer";
 import { ForecastabilityGauge } from "@/components/charts/forecastability-gauge";
 import { DemandClassDonut } from "@/components/charts/demand-class-donut";
+import { DataTable } from "@/components/data/data-table";
 import { MetricCard } from "@/components/shared/metric-card";
-import { ComingSoon } from "@/components/shared/coming-soon";
 import { ErrorDisplay } from "@/components/shared/error-boundary";
 import { ChartSkeleton } from "@/components/shared/loading-skeleton";
 import { useAnalyze } from "@/hooks/use-analyze";
+import { api } from "@/lib/api-client";
 import { formatNumber } from "@/lib/utils";
-import type { AnalysisResponse } from "@/lib/types";
+import type { AnalysisResponse, MultiFileAnalysisResponse, PipelineRunResponse } from "@/lib/types";
+
+function MultiFilePanel({ lobName }: { lobName: string }) {
+  const [files, setFiles] = useState<File[]>([]);
+  const [result, setResult] = useState<MultiFileAnalysisResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setFiles(Array.from(e.target.files));
+    }
+  };
+
+  const handleAnalyze = async () => {
+    if (files.length === 0) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await api.analyzeMultiFile(files, lobName);
+      setResult(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Multi-file analysis failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <section className="space-y-4 rounded-lg border p-6">
+      <h2 className="text-lg font-semibold">Multi-File Classification &amp; Merge</h2>
+      <p className="text-sm text-muted-foreground">
+        Upload multiple files for auto-detection of roles (time_series, dimension, regressor) and merge preview.
+      </p>
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="space-y-1">
+          <label className="text-xs font-medium">Select Files</label>
+          <input
+            type="file"
+            accept=".csv,.parquet"
+            multiple
+            onChange={handleFilesChange}
+            className="rounded-md border bg-background px-3 py-1.5 text-sm"
+          />
+        </div>
+        <button
+          onClick={handleAnalyze}
+          disabled={files.length === 0 || loading}
+          className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+        >
+          {loading ? "Analyzing..." : "Analyze Files"}
+        </button>
+      </div>
+      {files.length > 0 && (
+        <p className="text-xs text-muted-foreground">{files.length} file(s) selected: {files.map(f => f.name).join(", ")}</p>
+      )}
+      {loading && <ChartSkeleton height="h-32" />}
+      {error && <ErrorDisplay message={error} onRetry={() => setError(null)} />}
+      {result && (
+        <div className="space-y-4">
+          <h3 className="text-sm font-medium">File Profiles</h3>
+          <DataTable
+            columns={[
+              { key: "filename", label: "File", sortable: true },
+              { key: "role", label: "Role", sortable: true },
+              { key: "confidence", label: "Confidence", sortable: true, render: (v) => `${((v as number) * 100).toFixed(0)}%` },
+              { key: "n_rows", label: "Rows", sortable: true },
+              { key: "n_columns", label: "Columns", sortable: true },
+              { key: "time_column", label: "Time Col" },
+            ]}
+            data={result.profiles as unknown as Record<string, unknown>[]}
+            pageSize={10}
+          />
+          {result.primary_file && (
+            <p className="text-sm">Primary file: <span className="font-mono font-medium">{result.primary_file}</span></p>
+          )}
+          {result.warnings.length > 0 && (
+            <div className="rounded-md bg-yellow-50 dark:bg-yellow-950 p-3">
+              <h4 className="text-xs font-medium text-yellow-800 dark:text-yellow-200">Warnings</h4>
+              <ul className="mt-1 text-xs text-yellow-700 dark:text-yellow-300 space-y-0.5">
+                {result.warnings.map((w, i) => <li key={i}>&bull; {w}</li>)}
+              </ul>
+            </div>
+          )}
+          {result.merge_preview && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium">Merge Preview</h3>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <MetricCard label="Total Rows" value={formatNumber(result.merge_preview.total_rows)} />
+                <MetricCard label="Total Columns" value={result.merge_preview.total_columns} />
+                <MetricCard label="Matched Rows" value={formatNumber(result.merge_preview.matched_rows)} />
+                <MetricCard label="Unmatched Keys" value={result.merge_preview.unmatched_primary_keys} />
+              </div>
+              {result.merge_preview.sample_rows.length > 0 && (
+                <DataTable
+                  columns={Object.keys(result.merge_preview.sample_rows[0]).map(k => ({ key: k, label: k, sortable: true }))}
+                  data={result.merge_preview.sample_rows}
+                  pageSize={5}
+                />
+              )}
+            </div>
+          )}
+          {result.merge_error && (
+            <ErrorDisplay message={result.merge_error} />
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PipelineExecutionPanel({ lobName }: { lobName: string }) {
+  const [pipelineFile, setPipelineFile] = useState<File | null>(null);
+  const [backtestResult, setBacktestResult] = useState<PipelineRunResponse | null>(null);
+  const [forecastResult, setForecastResult] = useState<PipelineRunResponse | null>(null);
+  const [backtestLoading, setBacktestLoading] = useState(false);
+  const [forecastLoading, setForecastLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleRunBacktest = async () => {
+    if (!pipelineFile) return;
+    setBacktestLoading(true);
+    setError(null);
+    try {
+      const data = await api.runBacktest(pipelineFile, lobName);
+      setBacktestResult(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Backtest failed");
+    } finally {
+      setBacktestLoading(false);
+    }
+  };
+
+  const handleRunForecast = async () => {
+    if (!pipelineFile) return;
+    setForecastLoading(true);
+    setError(null);
+    try {
+      const data = await api.runForecast(pipelineFile, lobName);
+      setForecastResult(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Forecast failed");
+    } finally {
+      setForecastLoading(false);
+    }
+  };
+
+  return (
+    <section className="space-y-4 rounded-lg border p-6">
+      <h2 className="text-lg font-semibold">Pipeline Execution</h2>
+      <p className="text-sm text-muted-foreground">
+        Run Backtest and Forecast pipelines directly from the UI.
+      </p>
+      <FileUpload
+        accept=".csv"
+        onFileSelect={(file) => setPipelineFile(file)}
+        label="Pipeline Data File"
+      />
+      <div className="flex flex-wrap gap-3">
+        <button
+          onClick={handleRunBacktest}
+          disabled={!pipelineFile || backtestLoading}
+          className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+        >
+          {backtestLoading ? "Running Backtest..." : "Run Backtest"}
+        </button>
+        <button
+          onClick={handleRunForecast}
+          disabled={!pipelineFile || forecastLoading}
+          className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+        >
+          {forecastLoading ? "Running Forecast..." : "Run Forecast"}
+        </button>
+      </div>
+      {(backtestLoading || forecastLoading) && <ChartSkeleton height="h-24" />}
+      {error && <ErrorDisplay message={error} onRetry={() => setError(null)} />}
+      {backtestResult && (
+        <div className="space-y-2 rounded-md bg-green-50 dark:bg-green-950 p-4">
+          <h3 className="text-sm font-medium">Backtest Result</h3>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <MetricCard label="Status" value={backtestResult.status} />
+            <MetricCard label="Champion" value={backtestResult.champion_model || "N/A"} />
+            <MetricCard label="Best WMAPE" value={backtestResult.best_wmape != null ? `${(backtestResult.best_wmape * 100).toFixed(1)}%` : "N/A"} />
+            <MetricCard label="Series" value={backtestResult.series_count ?? "N/A"} />
+          </div>
+          {backtestResult.leaderboard && backtestResult.leaderboard.length > 0 && (
+            <DataTable
+              columns={Object.keys(backtestResult.leaderboard[0]).map(k => ({ key: k, label: k, sortable: true }))}
+              data={backtestResult.leaderboard}
+              pageSize={10}
+            />
+          )}
+        </div>
+      )}
+      {forecastResult && (
+        <div className="space-y-2 rounded-md bg-blue-50 dark:bg-blue-950 p-4">
+          <h3 className="text-sm font-medium">Forecast Result</h3>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <MetricCard label="Status" value={forecastResult.status} />
+            <MetricCard label="Rows" value={forecastResult.forecast_rows ?? "N/A"} />
+            <MetricCard label="Series" value={forecastResult.series_count ?? "N/A"} />
+            <MetricCard label="LOB" value={forecastResult.lob} />
+          </div>
+          {forecastResult.forecast_preview && forecastResult.forecast_preview.length > 0 && (
+            <DataTable
+              columns={Object.keys(forecastResult.forecast_preview[0]).map(k => ({ key: k, label: k, sortable: true }))}
+              data={forecastResult.forecast_preview}
+              pageSize={10}
+            />
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
 
 export default function DataOnboardingPage() {
   const [lobName, setLobName] = useState("retail");
@@ -187,11 +402,11 @@ export default function DataOnboardingPage() {
             <ConfigViewer yaml={result.recommended_config_yaml} />
           </section>
 
-          {/* Placeholder sections */}
-          <section className="grid gap-4 sm:grid-cols-2">
-            <ComingSoon feature="Multi-File Classification & Merge" description="Upload multiple files with auto-detection of roles (time_series, dimension, regressor)" />
-            <ComingSoon feature="Pipeline Execution" description="Run Backtest and Forecast pipelines directly from the UI" />
-          </section>
+          {/* Multi-File Classification & Merge */}
+          <MultiFilePanel lobName={lobName} />
+
+          {/* Pipeline Execution */}
+          <PipelineExecutionPanel lobName={lobName} />
         </>
       )}
     </div>

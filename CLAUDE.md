@@ -55,6 +55,17 @@ forecasting-platform/
 │   │   ├── config_tuner.py # ConfigTunerEngine — POST /ai/recommend-config
 │   │   └── commentary.py   # CommentaryEngine — POST /ai/commentary
 │   ├── api/                # FastAPI REST endpoints (auth-protected)
+│   │   ├── app.py          # create_app() factory, core endpoints, router registration
+│   │   ├── schemas.py      # Pydantic request/response models
+│   │   ├── deps.py         # Shared dependencies (get_app_state)
+│   │   └── routers/        # Domain-specific API routers
+│   │       ├── series.py       # GET /series/{lob}, POST /series/breaks, cleansing-audit, regressor-screen
+│   │       ├── hierarchy.py    # POST /hierarchy/build, aggregate, reconcile
+│   │       ├── sku_mapping.py  # POST /sku-mapping/phase1, phase2
+│   │       ├── overrides.py    # CRUD /overrides
+│   │       ├── pipeline.py     # POST /pipeline/backtest, forecast; GET manifests, costs; POST analyze-multi-file
+│   │       ├── analytics.py    # GET /metrics/{lob}/fva, calibration; POST shap, decompose, compare, constrain
+│   │       └── governance.py   # GET /governance/model-cards, lineage; POST export
 │   ├── audit/              # Append-only Parquet audit logging
 │   ├── auth/               # RBAC (5 roles, 11 permissions), JWT tokens
 │   ├── backtesting/        # Walk-forward validation, champion selection
@@ -114,7 +125,7 @@ forecasting-platform/
 │   ├── src/components/     # Reusable components (charts, AI panels, layout, shared)
 │   ├── src/hooks/          # React Query hooks for each API endpoint
 │   └── src/lib/            # API client, auth, types, constants
-├── tests/                  # 1030+ tests (pytest)
+├── tests/                  # 1060+ tests (pytest)
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
 └── notebooks/              # Jupyter notebooks for exploration
@@ -164,7 +175,7 @@ Helper functions: `get_frequency_profile(freq)` returns the profile dict; `freq_
 - Test files mirror source structure with `test_` prefix
 - Helper fixtures use `_make_*` factory functions (e.g., `_make_weekly_actuals`)
 - Skip `test_metrics.py` and `test_feature_engineering.py` (legacy/slow)
-- 1030+ tests across 48 test files
+- 1060+ tests across 49 test files
 - Key test modules: `test_platform.py` (85 tests), `test_sku_mapping.py` (81), `test_ai_*.py` (73), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55), `test_observability.py` (41), `test_file_classifier.py` (26), `test_file_merger.py` (20)
 
 ## Key Dependencies

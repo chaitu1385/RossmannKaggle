@@ -23,7 +23,8 @@ A production-grade, modular multi-frequency sales forecasting platform (daily, w
 ┌─────────────────────────────────────────────────────────────┐
 │  REST API  (FastAPI, JWT-protected)   src/api/              │
 │  POST /auth/token                                           │
-│  GET /health  /forecast/{lob}  /metrics/leaderboard/{lob}  │
+│  40 endpoints: /health /forecast /metrics /series /hierarchy│
+│  /sku-mapping /overrides /pipeline /governance /ai/*       │
 │  GET /forecast/{lob}/{series_id}  /metrics/drift/{lob}     │
 │  GET /audit                                                 │
 │  POST /ai/explain  /ai/triage  /ai/recommend-config        │
@@ -539,6 +540,31 @@ Built with FastAPI. Auto-generated Swagger docs at `/docs`. All data endpoints r
 | `/metrics/leaderboard/{lob}` | GET | Model leaderboard ranked by WMAPE | Yes |
 | `/metrics/drift/{lob}` | GET | Drift alerts (`baseline_weeks`, `recent_weeks` params) | Yes |
 | `/audit` | GET | Query audit log (`action`, `resource_type`, `limit` params) | Yes (`VIEW_AUDIT_LOG`) |
+| `/series/{lob}` | GET | List series with SBC classification (ADI, CV², demand class) | Yes |
+| `/series/breaks` | POST | Structural break detection (CUSUM/PELT) | Yes |
+| `/series/cleansing-audit` | POST | Demand cleansing before/after audit | Yes |
+| `/series/regressor-screen` | POST | Regressor screening (variance, correlation, MI) | Yes |
+| `/hierarchy/build` | POST | Build hierarchy tree, return structure stats | Yes |
+| `/hierarchy/aggregate` | POST | Aggregate data to target hierarchy level | Yes |
+| `/hierarchy/reconcile` | POST | Run hierarchical reconciliation (OLS/WLS/MinT) | Yes (`RUN_PIPELINE`) |
+| `/sku-mapping/phase1` | POST | Phase 1 SKU mapping (attribute + naming) | Yes (`RUN_PIPELINE`) |
+| `/sku-mapping/phase2` | POST | Phase 2 SKU mapping (+ curve fitting) | Yes (`RUN_PIPELINE`) |
+| `/overrides` | GET/POST | List / create planner overrides | Yes |
+| `/overrides/{id}` | PUT/DELETE | Update / delete override | Yes |
+| `/pipeline/backtest` | POST | Run backtest pipeline | Yes (`RUN_BACKTEST`) |
+| `/pipeline/forecast` | POST | Run forecast pipeline | Yes (`RUN_PIPELINE`) |
+| `/pipeline/manifests` | GET | List recent pipeline run manifests | Yes |
+| `/pipeline/costs` | GET | Cost tracking from manifests | Yes |
+| `/pipeline/analyze-multi-file` | POST | Multi-file classification and merge | Yes (`RUN_PIPELINE`) |
+| `/metrics/{lob}/fva` | GET | FVA cascade analysis | Yes |
+| `/metrics/{lob}/calibration` | GET | Prediction interval calibration | Yes |
+| `/metrics/{lob}/shap` | POST | SHAP feature attribution | Yes |
+| `/forecast/decompose` | POST | STL seasonal decomposition | Yes |
+| `/forecast/compare` | POST | Cross-forecast comparison | Yes |
+| `/forecast/constrain` | POST | Apply capacity/budget constraints | Yes (`RUN_PIPELINE`) |
+| `/governance/model-cards` | GET | List model cards | Yes |
+| `/governance/lineage` | GET | Forecast lineage history | Yes |
+| `/governance/export/{type}` | POST | BI export (forecast-actual, leaderboard, bias) | Yes |
 
 ### `src/fabric/` — Microsoft Fabric / Delta Lake
 
@@ -869,7 +895,7 @@ A production-grade alternative UI built with Next.js 15 (App Router), TypeScript
 
 **Live features** (connected to existing API): file upload/analysis, model leaderboard, drift alerts, audit log, AI explain/triage/config-tuner/commentary.
 
-**Placeholder features** (marked "Coming Soon" until new API endpoints): multi-file classification, pipeline execution, SHAP, hierarchy ops, SKU mapping, BI export.
+All frontend features are now backed by live API endpoints — no placeholder "Coming Soon" components remain.
 
 **Run locally:**
 ```bash
