@@ -217,9 +217,9 @@ A forecasting product that only data scientists can operate is incomplete — de
 
 ### Next.js Frontend
 
-The Streamlit dashboard is ideal for rapid prototyping and direct Python class access, but production teams often need a richer client experience — role-based routing, dark mode, responsive layouts, and offline-capable caching. The Next.js frontend mirrors the same 8-page workflow but communicates with the FastAPI backend over REST, using TypeScript, Tailwind CSS, and React Query. Features that require direct Python class access (e.g., hierarchy reconciliation, SKU mapping) show "Coming Soon" placeholders until corresponding API endpoints are added.
+The Streamlit dashboard is ideal for rapid prototyping and direct Python class access, but production teams often need a richer client experience — role-based routing, dark mode, responsive layouts, and offline-capable caching. The Next.js frontend mirrors the same 8-page workflow but communicates with the FastAPI backend over REST, using TypeScript, Tailwind CSS, and React Query. All features are backed by live API endpoints — no placeholder components remain.
 
-*Implementation: `frontend/` — Next.js 15 App Router, `src/app/` (pages), `src/components/` (charts, AI panels, layout), `src/hooks/` (React Query), `src/lib/` (API client, auth, types)*
+*Implementation: `frontend/` — Next.js 15 App Router, `src/app/` (pages), `src/components/` (charts, AI panels, layout, domain panels for forecast/governance/pipeline/sku), `src/hooks/` (React Query + useAsyncOperation), `src/lib/` (API client, auth, types)*
 
 ### Multi-File Upload Classification
 

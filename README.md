@@ -142,7 +142,11 @@ forecasting-product/
 ├── frontend/               # Next.js 15 frontend (TypeScript, Tailwind, Recharts)
 │   ├── src/app/            # App Router pages (login + 8 workflow pages)
 │   ├── src/components/     # Reusable components (charts, AI panels, layout, shared)
-│   ├── src/hooks/          # React Query hooks for each API endpoint
+│   │   ├── forecast/       # Decomposition, comparison, constrained forecast panels
+│   │   ├── governance/     # Model cards, lineage, BI export panels
+│   │   ├── pipeline/       # Multi-file analysis, pipeline execution panels
+│   │   └── sku/            # SKU mapping, override management panels
+│   ├── src/hooks/          # React Query hooks + useAsyncOperation utility
 │   └── src/lib/            # API client, auth, types, constants
 ├── tests/                  # 1030+ unit + integration tests
 ├── configs/                # YAML configuration files

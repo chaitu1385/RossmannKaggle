@@ -9,7 +9,6 @@ from typing import Optional
 import polars as pl
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
-from ..deps import get_app_state
 from ...auth.models import Permission, User
 from ...auth.rbac import require_permission
 

@@ -5,10 +5,9 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from ..deps import get_app_state
 from ...auth.models import Permission, User
 from ...auth.rbac import require_permission
 
@@ -39,13 +38,13 @@ class UpdateOverrideRequest(BaseModel):
 def list_overrides(
     old_sku: Optional[str] = Query(None),
     new_sku: Optional[str] = Query(None),
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(require_permission(Permission.VIEW_FORECASTS)),
 ):
     """List all planner overrides, optionally filtered by SKU."""
     from ...overrides.store import get_override_store
 
-    store_path = str(app_state.data_dir / "overrides")
+    store_path = str(request.app.state.data_dir / "overrides")
     store = get_override_store(path=store_path)
 
     try:
@@ -67,13 +66,13 @@ def list_overrides(
 @router.post("")
 def create_override(
     request: CreateOverrideRequest,
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(require_permission(Permission.CREATE_OVERRIDE)),
 ):
     """Create a new planner override."""
     from ...overrides.store import get_override_store
 
-    store_path = str(app_state.data_dir / "overrides")
+    store_path = str(request.app.state.data_dir / "overrides")
     store = get_override_store(path=store_path)
 
     try:
@@ -99,13 +98,13 @@ def create_override(
 def update_override(
     override_id: str,
     request: UpdateOverrideRequest,
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(require_permission(Permission.CREATE_OVERRIDE)),
 ):
     """Update an existing planner override."""
     from ...overrides.store import get_override_store
 
-    store_path = str(app_state.data_dir / "overrides")
+    store_path = str(request.app.state.data_dir / "overrides")
     store = get_override_store(path=store_path)
 
     try:
@@ -144,13 +143,13 @@ def update_override(
 @router.delete("/{override_id}")
 def delete_override(
     override_id: str,
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(require_permission(Permission.DELETE_OVERRIDE)),
 ):
     """Delete a planner override."""
     from ...overrides.store import get_override_store
 
-    store_path = str(app_state.data_dir / "overrides")
+    store_path = str(request.app.state.data_dir / "overrides")
     store = get_override_store(path=store_path)
 
     try:

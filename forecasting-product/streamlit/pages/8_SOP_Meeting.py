@@ -298,67 +298,43 @@ st.caption("Export data in Hive-partitioned Parquet format for Power BI / Tablea
 
 export_lob = st.text_input("Line of Business", value="retail", key="export_lob")
 
-col_e1, col_e2, col_e3 = st.columns(3)
+_EXPORT_CONFIGS = [
+    {"label": "Export Forecast vs Actual", "key": "export_fva", "method": "export_forecast_vs_actual"},
+    {"label": "Export Leaderboard", "key": "export_lb", "method": "export_leaderboard"},
+    {"label": "Export Bias Report", "key": "export_bias", "method": "export_bias_report"},
+]
 
-with col_e1:
-    if st.button("Export Forecast vs Actual", key="export_fva"):
-        try:
-            from src.analytics.bi_export import BIExporter
+export_cols = st.columns(len(_EXPORT_CONFIGS))
 
-            forecast_df = st.session_state.get("forecast_df")
-            actuals_df = st.session_state.get("actuals_df")
+for col, cfg in zip(export_cols, _EXPORT_CONFIGS):
+    with col:
+        if st.button(cfg["label"], key=cfg["key"]):
+            try:
+                from src.analytics.bi_export import BIExporter
 
-            if forecast_df is None or actuals_df is None:
-                st.warning(
-                    "Both forecast and actuals data are required. "
-                    "Run a forecast on the Data Onboarding page first."
-                )
-            else:
                 exporter = BIExporter(base_path=str(DATA_DIR / "bi_exports"))
-                with st.spinner("Exporting forecast vs actual..."):
-                    out_path = exporter.export_forecast_vs_actual(
-                        forecasts=forecast_df,
-                        actuals=actuals_df,
-                        lob=export_lob,
-                    )
+
+                if cfg["method"] == "export_forecast_vs_actual":
+                    forecast_df = st.session_state.get("forecast_df")
+                    actuals_df = st.session_state.get("actuals_df")
+                    if forecast_df is None or actuals_df is None:
+                        st.warning(
+                            "Both forecast and actuals data are required. "
+                            "Run a forecast on the Data Onboarding page first."
+                        )
+                        continue
+                    with st.spinner(f"Running {cfg['label']}..."):
+                        out_path = exporter.export_forecast_vs_actual(
+                            forecasts=forecast_df, actuals=actuals_df, lob=export_lob,
+                        )
+                else:
+                    store = MetricStore(base_path=metrics_dir)
+                    export_fn = getattr(exporter, cfg["method"])
+                    with st.spinner(f"Running {cfg['label']}..."):
+                        out_path = export_fn(metric_store=store, lob=export_lob)
+
                 st.success(f"Exported to: `{out_path}`")
-        except ImportError:
-            st.warning("BIExporter module not available.")
-        except Exception as exc:
-            st.error(f"Export failed: {exc}")
-
-with col_e2:
-    if st.button("Export Leaderboard", key="export_lb"):
-        try:
-            from src.analytics.bi_export import BIExporter
-
-            exporter = BIExporter(base_path=str(DATA_DIR / "bi_exports"))
-            store = MetricStore(base_path=metrics_dir)
-            with st.spinner("Exporting leaderboard..."):
-                out_path = exporter.export_leaderboard(
-                    metric_store=store,
-                    lob=export_lob,
-                )
-            st.success(f"Exported to: `{out_path}`")
-        except ImportError:
-            st.warning("BIExporter module not available.")
-        except Exception as exc:
-            st.error(f"Export failed: {exc}")
-
-with col_e3:
-    if st.button("Export Bias Report", key="export_bias"):
-        try:
-            from src.analytics.bi_export import BIExporter
-
-            exporter = BIExporter(base_path=str(DATA_DIR / "bi_exports"))
-            store = MetricStore(base_path=metrics_dir)
-            with st.spinner("Exporting bias report..."):
-                out_path = exporter.export_bias_report(
-                    metric_store=store,
-                    lob=export_lob,
-                )
-            st.success(f"Exported to: `{out_path}`")
-        except ImportError:
-            st.warning("BIExporter module not available.")
-        except Exception as exc:
-            st.error(f"Export failed: {exc}")
+            except ImportError:
+                st.warning("BIExporter module not available.")
+            except Exception as exc:
+                st.error(f"Export failed: {exc}")

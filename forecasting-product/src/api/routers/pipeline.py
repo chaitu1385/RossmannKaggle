@@ -9,9 +9,8 @@ from pathlib import Path
 from typing import Optional
 
 import polars as pl
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 
-from ..deps import get_app_state
 from ...auth.models import Permission, User
 from ...auth.rbac import require_permission
 
@@ -25,7 +24,7 @@ async def run_backtest(
     file: UploadFile = File(..., description="Actuals CSV/Parquet"),
     config_file: Optional[UploadFile] = File(None, description="YAML config file"),
     lob: str = Query("default", description="LOB name"),
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(require_permission(Permission.RUN_BACKTEST)),
 ):
     """Run the backtest pipeline on uploaded data."""
@@ -57,7 +56,7 @@ async def run_backtest(
         config = PlatformConfig(lob=lob)
 
     try:
-        pipeline = BacktestPipeline(config=config, data_dir=str(app_state.data_dir))
+        pipeline = BacktestPipeline(config=config, data_dir=str(request.app.state.data_dir))
         results = pipeline.run(actuals=df)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Backtest failed: {exc}")
@@ -84,7 +83,7 @@ async def run_forecast(
     lob: str = Query("default", description="LOB name"),
     model_id: Optional[str] = Query(None, description="Specific model to use"),
     horizon: int = Query(12, description="Forecast horizon in periods"),
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(require_permission(Permission.RUN_PIPELINE)),
 ):
     """Run the forecast pipeline on uploaded data."""
@@ -115,7 +114,7 @@ async def run_forecast(
         config = PlatformConfig(lob=lob)
 
     try:
-        pipeline = ForecastPipeline(config=config, data_dir=str(app_state.data_dir))
+        pipeline = ForecastPipeline(config=config, data_dir=str(request.app.state.data_dir))
         result = pipeline.run(
             actuals=df,
             model_id=model_id,
@@ -142,13 +141,13 @@ async def run_forecast(
 def list_manifests(
     lob: Optional[str] = Query(None, description="Filter by LOB"),
     limit: int = Query(20, ge=1, le=100),
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(require_permission(Permission.VIEW_METRICS)),
 ):
     """List recent pipeline run manifests."""
     from ...pipeline.manifest import PipelineManifest, read_manifest
 
-    manifests_dir = app_state.data_dir / "forecasts"
+    manifests_dir = request.app.state.data_dir / "forecasts"
     if not manifests_dir.exists():
         return {"count": 0, "manifests": []}
 
@@ -189,13 +188,13 @@ def list_manifests(
 def get_costs(
     lob: Optional[str] = Query(None),
     limit: int = Query(20, ge=1, le=100),
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(require_permission(Permission.VIEW_METRICS)),
 ):
     """Get cost tracking data from pipeline manifests."""
     from ...pipeline.manifest import read_manifest
 
-    manifests_dir = app_state.data_dir / "forecasts"
+    manifests_dir = request.app.state.data_dir / "forecasts"
     if not manifests_dir.exists():
         return {"count": 0, "costs": []}
 

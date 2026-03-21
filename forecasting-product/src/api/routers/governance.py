@@ -5,9 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from ..deps import get_app_state
 from ...auth.models import Permission, User
 from ...auth.rbac import get_current_user, require_permission
 
@@ -18,13 +17,13 @@ router = APIRouter(prefix="/governance", tags=["governance"])
 
 @router.get("/model-cards")
 def list_model_cards(
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(get_current_user),
 ):
     """List all registered model cards."""
     from ...analytics.governance import ModelCardRegistry
 
-    base_path = str(app_state.data_dir / "model_cards")
+    base_path = str(request.app.state.data_dir / "model_cards")
     registry = ModelCardRegistry(base_path=base_path)
 
     try:
@@ -44,13 +43,13 @@ def list_model_cards(
 @router.get("/model-cards/{model_name}")
 def get_model_card(
     model_name: str,
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(get_current_user),
 ):
     """Get a specific model card by name."""
     from ...analytics.governance import ModelCardRegistry
 
-    base_path = str(app_state.data_dir / "model_cards")
+    base_path = str(request.app.state.data_dir / "model_cards")
     registry = ModelCardRegistry(base_path=base_path)
 
     card = registry.get(model_name)
@@ -64,13 +63,13 @@ def get_model_card(
 def get_lineage(
     lob: Optional[str] = Query(None),
     model_id: Optional[str] = Query(None),
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(get_current_user),
 ):
     """Get forecast lineage history."""
     from ...analytics.governance import ForecastLineage
 
-    base_path = str(app_state.data_dir / "lineage")
+    base_path = str(request.app.state.data_dir / "lineage")
     lineage = ForecastLineage(base_path=base_path)
 
     try:
@@ -93,7 +92,7 @@ def bi_export(
     lob: str = Query(..., description="LOB name"),
     run_type: str = Query("backtest"),
     model_id: Optional[str] = Query(None),
-    app_state=Depends(get_app_state),
+    request: Request,
     user: User = Depends(require_permission(Permission.VIEW_METRICS)),
 ):
     """Export BI report (forecast-actual, leaderboard, or bias-report)."""
@@ -107,11 +106,11 @@ def bi_export(
             detail=f"Invalid report type '{report_type}'. Must be one of: {valid_types}",
         )
 
-    base_path = str(app_state.data_dir / "bi_exports")
+    base_path = str(request.app.state.data_dir / "bi_exports")
     exporter = BIExporter(base_path=base_path)
 
     if report_type == "leaderboard":
-        store = MetricStore(str(app_state.metrics_dir))
+        store = MetricStore(str(request.app.state.metrics_dir))
         try:
             path = exporter.export_leaderboard(
                 metric_store=store, lob=lob, run_type=run_type,
@@ -121,7 +120,7 @@ def bi_export(
         return {"report_type": report_type, "export_path": str(path), "status": "exported"}
 
     elif report_type == "bias-report":
-        store = MetricStore(str(app_state.metrics_dir))
+        store = MetricStore(str(request.app.state.metrics_dir))
         try:
             path = exporter.export_bias_report(
                 metric_store=store, lob=lob, model_id=model_id, run_type=run_type,
@@ -134,7 +133,7 @@ def bi_export(
         import polars as pl
 
         # Load forecast and actuals
-        forecast_dir = app_state.data_dir / "forecasts" / lob
+        forecast_dir = request.app.state.data_dir / "forecasts" / lob
         if not forecast_dir.exists():
             raise HTTPException(status_code=404, detail=f"No forecast data for LOB '{lob}'.")
 
@@ -147,7 +146,7 @@ def bi_export(
         # Load actuals
         actuals = pl.DataFrame()
         for subdir in ("history", "actuals"):
-            d = app_state.data_dir / subdir / lob
+            d = request.app.state.data_dir / subdir / lob
             if d.exists():
                 afiles = sorted(d.glob("*.parquet"))
                 if afiles:
