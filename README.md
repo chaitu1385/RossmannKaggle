@@ -1,6 +1,6 @@
-# Forecasting Platform
+# Forecasting Product
 
-A production-grade, modular multi-frequency sales forecasting platform (daily, weekly, monthly, quarterly). Covers the full lifecycle from raw data ingestion to hierarchically reconciled, explained, and governed forecasts — with a REST API, Microsoft Fabric/Delta Lake deployment layer, Spark distributed execution, and S&OP exception management.
+A production-grade, modular multi-frequency sales forecasting product (daily, weekly, monthly, quarterly). Covers the full lifecycle from raw data ingestion to hierarchically reconciled, explained, and governed forecasts — with a REST API, Microsoft Fabric/Delta Lake deployment layer, Spark distributed execution, and S&OP exception management.
 
 **See also:** [QUICKSTART.md](QUICKSTART.md) — get running in 2 minutes | [ARCHITECTURE.md](ARCHITECTURE.md) — visual diagrams of system architecture and data flow | [CONCEPTS.md](CONCEPTS.md) — why each component exists | [EDGE_CASES.md](EDGE_CASES.md) — failure modes and how the platform handles them
 
@@ -23,7 +23,8 @@ A production-grade, modular multi-frequency sales forecasting platform (daily, w
 ┌─────────────────────────────────────────────────────────────┐
 │  REST API  (FastAPI, JWT-protected)   src/api/              │
 │  POST /auth/token                                           │
-│  GET /health  /forecast/{lob}  /metrics/leaderboard/{lob}  │
+│  40 endpoints: /health /forecast /metrics /series /hierarchy│
+│  /sku-mapping /overrides /pipeline /governance /ai/*       │
 │  GET /forecast/{lob}/{series_id}  /metrics/drift/{lob}     │
 │  GET /audit                                                 │
 │  POST /ai/explain  /ai/triage  /ai/recommend-config        │
@@ -104,7 +105,7 @@ A production-grade, modular multi-frequency sales forecasting platform (daily, w
 ## Directory Structure
 
 ```
-forecasting-platform/
+forecasting-product/
 ├── src/
 │   ├── analytics/          # Data profiling, forecastability, causal analysis, LLM interpretation, BI export, explainability, governance, FVA
 │   ├── api/                # FastAPI REST serving layer (auth-protected)
@@ -126,14 +127,18 @@ forecasting-platform/
 │   ├── sku_mapping/        # New/discontinued SKU mapping (4 methods + Bayesian fusion)
 │   ├── spark/              # PySpark distributed execution layer
 │   └── utils/              # Logger, config utilities
-├── streamlit/              # Streamlit dashboard (4 pages)
+├── streamlit/              # Streamlit dashboard (8 pages)
 │   ├── app.py              # Landing page
 │   ├── utils.py            # Shared helpers, colours, data loaders
 │   └── pages/              # Multi-page layout
 │       ├── 1_Data_Onboarding.py    # CSV → DataAnalyzer → config recommendation
-│       ├── 2_Backtest_Results.py   # Leaderboard, FVA cascade, champion map
-│       ├── 3_Forecast_Viewer.py    # Fan chart + decomposition + narrative
-│       └── 4_Platform_Health.py    # Manifests, drift alerts, data quality, cost
+│       ├── 2_Series_Explorer.py    # SBC classification, breaks, quality, cleansing audit, AI Q&A
+│       ├── 3_SKU_Transitions.py    # SKU mapping pipeline, planner overrides, transition viz
+│       ├── 4_Hierarchy_Manager.py  # Hierarchy tree, aggregation, reconciliation (MinT/OLS/WLS)
+│       ├── 5_Backtest_Results.py   # Leaderboard, FVA cascade, champion map
+│       ├── 6_Forecast_Viewer.py    # Fan chart + decomposition + narrative
+│       ├── 7_Platform_Health.py    # Manifests, drift alerts, data quality, cost
+│       └── 8_SOP_Meeting.py        # AI commentary, cross-run comparison, governance, BI export
 ├── tests/                  # 1030+ unit + integration tests
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
@@ -539,6 +544,31 @@ Built with FastAPI. Auto-generated Swagger docs at `/docs`. All data endpoints r
 | `/metrics/leaderboard/{lob}` | GET | Model leaderboard ranked by WMAPE | Yes |
 | `/metrics/drift/{lob}` | GET | Drift alerts (`baseline_weeks`, `recent_weeks` params) | Yes |
 | `/audit` | GET | Query audit log (`action`, `resource_type`, `limit` params) | Yes (`VIEW_AUDIT_LOG`) |
+| `/series/{lob}` | GET | List series with SBC classification (ADI, CV², demand class) | Yes |
+| `/series/breaks` | POST | Structural break detection (CUSUM/PELT) | Yes |
+| `/series/cleansing-audit` | POST | Demand cleansing before/after audit | Yes |
+| `/series/regressor-screen` | POST | Regressor screening (variance, correlation, MI) | Yes |
+| `/hierarchy/build` | POST | Build hierarchy tree, return structure stats | Yes |
+| `/hierarchy/aggregate` | POST | Aggregate data to target hierarchy level | Yes |
+| `/hierarchy/reconcile` | POST | Run hierarchical reconciliation (OLS/WLS/MinT) | Yes (`RUN_PIPELINE`) |
+| `/sku-mapping/phase1` | POST | Phase 1 SKU mapping (attribute + naming) | Yes (`RUN_PIPELINE`) |
+| `/sku-mapping/phase2` | POST | Phase 2 SKU mapping (+ curve fitting) | Yes (`RUN_PIPELINE`) |
+| `/overrides` | GET/POST | List / create planner overrides | Yes |
+| `/overrides/{id}` | PUT/DELETE | Update / delete override | Yes |
+| `/pipeline/backtest` | POST | Run backtest pipeline | Yes (`RUN_BACKTEST`) |
+| `/pipeline/forecast` | POST | Run forecast pipeline | Yes (`RUN_PIPELINE`) |
+| `/pipeline/manifests` | GET | List recent pipeline run manifests | Yes |
+| `/pipeline/costs` | GET | Cost tracking from manifests | Yes |
+| `/pipeline/analyze-multi-file` | POST | Multi-file classification and merge | Yes (`RUN_PIPELINE`) |
+| `/metrics/{lob}/fva` | GET | FVA cascade analysis | Yes |
+| `/metrics/{lob}/calibration` | GET | Prediction interval calibration | Yes |
+| `/metrics/{lob}/shap` | POST | SHAP feature attribution | Yes |
+| `/forecast/decompose` | POST | STL seasonal decomposition | Yes |
+| `/forecast/compare` | POST | Cross-forecast comparison | Yes |
+| `/forecast/constrain` | POST | Apply capacity/budget constraints | Yes (`RUN_PIPELINE`) |
+| `/governance/model-cards` | GET | List model cards | Yes |
+| `/governance/lineage` | GET | Forecast lineage history | Yes |
+| `/governance/export/{type}` | POST | BI export (forecast-actual, leaderboard, bias) | Yes |
 
 ### `src/fabric/` — Microsoft Fabric / Delta Lake
 
@@ -771,10 +801,10 @@ observability:
 ## Testing
 
 ```bash
-pip install -r forecasting-platform/requirements.txt
-python -m pytest forecasting-platform/tests/ \
-  --ignore=forecasting-platform/tests/test_metrics.py \
-  --ignore=forecasting-platform/tests/test_feature_engineering.py -v
+pip install -r forecasting-product/requirements.txt
+python -m pytest forecasting-product/tests/ \
+  --ignore=forecasting-product/tests/test_metrics.py \
+  --ignore=forecasting-product/tests/test_feature_engineering.py -v
 # 1030+ tests collected across 48 test files
 ```
 
@@ -840,7 +870,7 @@ An 8-page interactive dashboard that puts the platform in a browser for data sci
 
 **Run locally:**
 ```bash
-streamlit run forecasting-platform/streamlit/app.py
+streamlit run forecasting-product/streamlit/app.py
 ```
 
 **Docker quick-start** (API on port 8000, dashboard on port 8501):
@@ -869,11 +899,11 @@ A production-grade alternative UI built with Next.js 15 (App Router), TypeScript
 
 **Live features** (connected to existing API): file upload/analysis, model leaderboard, drift alerts, audit log, AI explain/triage/config-tuner/commentary.
 
-**Placeholder features** (marked "Coming Soon" until new API endpoints): multi-file classification, pipeline execution, SHAP, hierarchy ops, SKU mapping, BI export.
+All frontend features are now backed by live API endpoints — no placeholder "Coming Soon" components remain.
 
 **Run locally:**
 ```bash
-cd forecasting-platform/frontend
+cd forecasting-product/frontend
 npm install
 npm run dev
 # → Open http://localhost:3000

@@ -250,3 +250,33 @@ A catalog of the failure modes that break forecasting platforms — what goes wr
 
 **What to watch for:** Broadcast features can introduce multicollinearity if the same value appears across many series. The `RegressorScreen` (run during model fitting) catches near-constant columns via variance threshold, but it's worth reviewing the merge preview to ensure the join makes business sense.
 **What to watch for:** A low forecastability score doesn't always mean "don't forecast" — it means the signal-to-noise ratio is poor with available methods. Foundation models (Chronos, TimeGPT) may still produce useful forecasts on low-forecastability series since they bring pre-trained knowledge. Also, forecastability is assessed on historical data; a series that became forecastable after a structural break may score low due to the pre-break noise. Consider running forecastability assessment on post-break data only if structural breaks are detected.
+
+---
+
+## 24. Frontend: API Timeout on Large Datasets
+
+**What happens:** The Next.js frontend sends a request (e.g., backtest or forecast) that takes longer than the browser's default fetch timeout. The user sees a "Network Error" or the request silently fails, even though the backend is still processing.
+
+**How the product handles it:** The API client (`frontend/src/lib/api-client.ts`) uses React Query with configurable `staleTime` and retry logic. Long-running endpoints like `/pipeline/backtest` and `/pipeline/forecast` return immediately with a run ID; the frontend polls for completion. For synchronous endpoints handling large data, the FastAPI backend streams results where possible.
+
+**What to watch for:** If a user uploads a very large file or runs a backtest with many models and series, the initial POST may itself be slow. Consider increasing the proxy timeout if running behind nginx/Caddy. The frontend shows a loading spinner but has no progress bar for synchronous operations.
+
+---
+
+## 25. Frontend: Stale React Query Cache After Config Change
+
+**What happens:** A user changes the backend configuration (e.g., switches frequency from weekly to monthly) but the frontend still shows cached data from the previous configuration — stale leaderboard results, wrong horizon in forecast charts, or outdated series counts.
+
+**How the product handles it:** React Query caches are keyed by endpoint URL and query parameters. When the configuration changes, the API returns different data for the same endpoints, but previously cached responses may persist until `staleTime` expires (default 5 minutes). Critical pages like Backtest Results and Forecast Viewer include the `lob` and config hash in their query keys to differentiate cache entries.
+
+**What to watch for:** If you change config and immediately navigate to a results page, you may see old data. A hard refresh (`Ctrl+Shift+R`) clears the React Query cache. In production, consider reducing `staleTime` for config-sensitive endpoints or adding a "Refresh Data" button that calls `queryClient.invalidateQueries()`.
+
+---
+
+## 26. Frontend: Large Dataset Rendering in Recharts
+
+**What happens:** A forecast chart with thousands of data points (e.g., daily data over 3 years for 50+ series) causes the browser to lag or freeze. Recharts renders SVG elements for each data point, and SVG performance degrades beyond ~5,000 elements.
+
+**How the product handles it:** The Forecast Viewer page downsamples data for chart rendering when the point count exceeds a threshold. The API's `/forecast/compare` endpoint supports a `max_points` parameter that returns pre-aggregated data. Individual series charts are paginated — only the selected series renders at full resolution.
+
+**What to watch for:** Comparison views overlaying multiple series are the worst case for rendering performance. If the browser becomes unresponsive, reduce the number of series shown simultaneously. Consider switching to the Streamlit dashboard for ad-hoc exploration of very large datasets, as Plotly handles large point counts more efficiently than SVG-based Recharts.

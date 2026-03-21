@@ -2,51 +2,51 @@
 
 ## Project Overview
 
-Multi-frequency (daily/weekly/monthly/quarterly) sales forecasting platform for retail S&OP. Python 3.8+, built on FastAPI (REST API), PySpark (distributed execution), and Polars (data processing). Combines statistical, ML, neural, and foundation model forecasting with hierarchical reconciliation.
+Multi-frequency (daily/weekly/monthly/quarterly) sales forecasting product for retail S&OP. Python 3.8+, built on FastAPI (REST API), PySpark (distributed execution), and Polars (data processing). Combines statistical, ML, neural, and foundation model forecasting with hierarchical reconciliation.
 
-Main code lives in `forecasting-platform/`.
+Main code lives in `forecasting-product/`.
 
 ## Common Commands
 
 ```bash
 # Install dependencies (full)
-pip install -r forecasting-platform/requirements.txt
+pip install -r forecasting-product/requirements.txt
 
 # Install dependencies (Fabric-compatible subset — no DuckDB, PySpark, neuralforecast)
-pip install -r forecasting-platform/requirements-fabric.txt
+pip install -r forecasting-product/requirements-fabric.txt
 
 # Run all tests
-python -m pytest forecasting-platform/tests/ --ignore=forecasting-platform/tests/test_metrics.py --ignore=forecasting-platform/tests/test_feature_engineering.py -v
+python -m pytest forecasting-product/tests/ --ignore=forecasting-product/tests/test_metrics.py --ignore=forecasting-product/tests/test_feature_engineering.py -v
 
 # Run a specific test file
-python -m pytest forecasting-platform/tests/test_platform.py -v
+python -m pytest forecasting-product/tests/test_platform.py -v
 
 # Start the REST API server
-python forecasting-platform/scripts/serve.py --port 8000 --data-dir data/
+python forecasting-product/scripts/serve.py --port 8000 --data-dir data/
 
 # Start Streamlit dashboard
-streamlit run forecasting-platform/streamlit/app.py
+streamlit run forecasting-product/streamlit/app.py
 
 # Start Next.js frontend (alternative UI)
-cd forecasting-platform/frontend && npm install && npm run dev
+cd forecasting-product/frontend && npm install && npm run dev
 
 # Docker quick-start (API + Streamlit)
 docker compose up
 
 # Run forecast pipeline
-python forecasting-platform/scripts/run_forecast.py --config forecasting-platform/configs/platform_config.yaml --lob retail
+python forecasting-product/scripts/run_forecast.py --config forecasting-product/configs/platform_config.yaml --lob retail
 
 # Run backtest pipeline
-python forecasting-platform/scripts/run_backtest.py --config forecasting-platform/configs/platform_config.yaml --lob retail
+python forecasting-product/scripts/run_backtest.py --config forecasting-product/configs/platform_config.yaml --lob retail
 
 # Build package
-python forecasting-platform/setup.py sdist bdist_wheel
+python forecasting-product/setup.py sdist bdist_wheel
 ```
 
 ## Architecture
 
 ```
-forecasting-platform/
+forecasting-product/
 ├── src/                    # Source modules (~20+ modules)
 │   ├── ai/                 # AI-native features (Claude-powered)
 │   │   ├── base.py         # AIFeatureBase — shared client wrapper
@@ -55,6 +55,17 @@ forecasting-platform/
 │   │   ├── config_tuner.py # ConfigTunerEngine — POST /ai/recommend-config
 │   │   └── commentary.py   # CommentaryEngine — POST /ai/commentary
 │   ├── api/                # FastAPI REST endpoints (auth-protected)
+│   │   ├── app.py          # create_app() factory, core endpoints, router registration
+│   │   ├── schemas.py      # Pydantic request/response models
+│   │   ├── deps.py         # Shared dependencies (get_app_state)
+│   │   └── routers/        # Domain-specific API routers
+│   │       ├── series.py       # GET /series/{lob}, POST /series/breaks, cleansing-audit, regressor-screen
+│   │       ├── hierarchy.py    # POST /hierarchy/build, aggregate, reconcile
+│   │       ├── sku_mapping.py  # POST /sku-mapping/phase1, phase2
+│   │       ├── overrides.py    # CRUD /overrides
+│   │       ├── pipeline.py     # POST /pipeline/backtest, forecast; GET manifests, costs; POST analyze-multi-file
+│   │       ├── analytics.py    # GET /metrics/{lob}/fva, calibration; POST shap, decompose, compare, constrain
+│   │       └── governance.py   # GET /governance/model-cards, lineage; POST export
 │   ├── audit/              # Append-only Parquet audit logging
 │   ├── auth/               # RBAC (5 roles, 11 permissions), JWT tokens
 │   ├── backtesting/        # Walk-forward validation, champion selection
@@ -114,7 +125,7 @@ forecasting-platform/
 │   ├── src/components/     # Reusable components (charts, AI panels, layout, shared)
 │   ├── src/hooks/          # React Query hooks for each API endpoint
 │   └── src/lib/            # API client, auth, types, constants
-├── tests/                  # 1030+ tests (pytest)
+├── tests/                  # 1060+ tests (pytest)
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
 └── notebooks/              # Jupyter notebooks for exploration
@@ -164,7 +175,7 @@ Helper functions: `get_frequency_profile(freq)` returns the profile dict; `freq_
 - Test files mirror source structure with `test_` prefix
 - Helper fixtures use `_make_*` factory functions (e.g., `_make_weekly_actuals`)
 - Skip `test_metrics.py` and `test_feature_engineering.py` (legacy/slow)
-- 1030+ tests across 48 test files
+- 1060+ tests across 49 test files
 - Key test modules: `test_platform.py` (85 tests), `test_sku_mapping.py` (81), `test_ai_*.py` (73), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55), `test_observability.py` (41), `test_file_classifier.py` (26), `test_file_merger.py` (20)
 
 ## Key Dependencies

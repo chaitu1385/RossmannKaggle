@@ -70,7 +70,7 @@ HTTPException 404: "No forecast data found for LOB 'retail'. Expected directory:
 
 **Fix:** Run the forecast pipeline first:
 ```bash
-python forecasting-platform/scripts/run_forecast.py \
+python forecasting-product/scripts/run_forecast.py \
   --config configs/platform_config.yaml --lob retail
 ```
 
@@ -348,7 +348,7 @@ if len(failures) > 0:
 **Fix:** Both services must share the same data volume:
 ```yaml
 volumes:
-  - ./forecasting-platform/data:/app/forecasting-platform/data
+  - ./forecasting-product/data:/app/forecasting-product/data
 ```
 
 ### Import errors for optional dependencies
@@ -375,7 +375,7 @@ pip install anthropic         # for AI features
 **Issue:** Pages show "Network Error" or data doesn't load.
 
 **Fix:**
-1. Ensure the FastAPI backend is running (`python forecasting-platform/scripts/serve.py --port 8000`)
+1. Ensure the FastAPI backend is running (`python forecasting-product/scripts/serve.py --port 8000`)
 2. Check `.env.local` has `NEXT_PUBLIC_API_URL=http://localhost:8000`
 3. If running on different hosts/ports, check for CORS — the API must allow the frontend's origin
 
@@ -397,3 +397,22 @@ npm install
 1. Ensure the API is running and `POST /auth/token` returns a response
 2. Check that `NEXTAUTH_SECRET` is set in `.env.local` for production
 3. In development, NextAuth uses a default secret — verify the API returns valid JWT tokens
+
+### `npm run build` fails
+
+**Issue:** TypeScript or build errors when running `npm run build`.
+
+**Fix:**
+1. Ensure all dependencies are installed: `npm install`
+2. Check for TypeScript errors: `npx tsc --noEmit`
+3. Clear the Next.js cache: `rm -rf .next` and rebuild
+4. Verify Node.js 18+ is installed
+
+### API returns 401 Unauthorized
+
+**Issue:** Pages load but show "Unauthorized" errors when fetching data.
+
+**Fix:**
+1. JWT tokens expire after the configured TTL (default 24 hours). Log out and log back in
+2. Check that the API server's `JWT_SECRET` matches what was used to issue the token
+3. If the API was restarted with a new secret, all existing tokens are invalidated — users must re-authenticate

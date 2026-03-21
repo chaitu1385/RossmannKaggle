@@ -1,6 +1,6 @@
 # Deployment Guide
 
-How to run the Forecasting Platform — from local development to production deployment.
+How to run the Forecasting Product — from local development to production deployment.
 
 ---
 
@@ -21,14 +21,14 @@ This starts two services:
 | REST API (FastAPI) | 8000 | http://localhost:8000/docs (Swagger UI) |
 | Dashboard (Streamlit) | 8501 | http://localhost:8501 |
 
-Both services share a data volume at `./forecasting-platform/data`.
+Both services share a data volume at `./forecasting-product/data`.
 
 ### Docker Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `API_DATA_DIR` | `forecasting-platform/data/` | Root data directory for the API |
-| `API_METRICS_DIR` | `forecasting-platform/data/metrics/` | Metric store location |
+| `API_DATA_DIR` | `forecasting-product/data/` | Root data directory for the API |
+| `API_METRICS_DIR` | `forecasting-product/data/metrics/` | Metric store location |
 | `ANTHROPIC_API_KEY` | (empty) | Claude API key for AI features (optional) |
 
 Set AI features:
@@ -53,16 +53,16 @@ The API service has a built-in health check hitting `GET /health` every 30 secon
 
 ```bash
 # Full install (all features)
-pip install -r forecasting-platform/requirements.txt
+pip install -r forecasting-product/requirements.txt
 
 # Fabric-compatible subset (no DuckDB, PySpark, neuralforecast)
-pip install -r forecasting-platform/requirements-fabric.txt
+pip install -r forecasting-product/requirements-fabric.txt
 ```
 
 ### Start the API Server
 
 ```bash
-python forecasting-platform/scripts/serve.py --port 8000 --data-dir data/
+python forecasting-product/scripts/serve.py --port 8000 --data-dir data/
 ```
 
 CLI arguments:
@@ -81,7 +81,7 @@ Environment variables `API_DATA_DIR` and `API_METRICS_DIR` override their CLI co
 ### Start the Dashboard
 
 ```bash
-streamlit run forecasting-platform/streamlit/app.py
+streamlit run forecasting-product/streamlit/app.py
 ```
 
 Opens at http://localhost:8501.
@@ -91,7 +91,7 @@ Opens at http://localhost:8501.
 Requires Node.js 18+. The frontend connects to the FastAPI backend over REST.
 
 ```bash
-cd forecasting-platform/frontend
+cd forecasting-product/frontend
 npm install
 npm run dev
 ```
@@ -122,8 +122,8 @@ npm start          # starts production server on port 3000
 Evaluates all configured models via walk-forward cross-validation and selects a champion:
 
 ```bash
-python forecasting-platform/scripts/run_backtest.py \
-  --config forecasting-platform/configs/platform_config.yaml \
+python forecasting-product/scripts/run_backtest.py \
+  --config forecasting-product/configs/platform_config.yaml \
   --lob retail
 ```
 
@@ -140,8 +140,8 @@ python forecasting-platform/scripts/run_backtest.py \
 Generates forecasts using the champion model:
 
 ```bash
-python forecasting-platform/scripts/run_forecast.py \
-  --config forecasting-platform/configs/platform_config.yaml \
+python forecasting-product/scripts/run_forecast.py \
+  --config forecasting-product/configs/platform_config.yaml \
   --lob retail
 ```
 
@@ -308,8 +308,8 @@ parallelism:
 For large-scale runs on Databricks or Fabric:
 
 ```bash
-python forecasting-platform/scripts/spark_forecast.py \
-  --config forecasting-platform/configs/platform_config.yaml
+python forecasting-product/scripts/spark_forecast.py \
+  --config forecasting-product/configs/platform_config.yaml
 ```
 
 Uses `SparkForecastPipeline` for distributed series processing. Configure via:

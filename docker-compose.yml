@@ -8,10 +8,10 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - API_DATA_DIR=forecasting-platform/data/
-      - API_METRICS_DIR=forecasting-platform/data/metrics/
+      - API_DATA_DIR=forecasting-product/data/
+      - API_METRICS_DIR=forecasting-product/data/metrics/
     volumes:
-      - ./forecasting-platform/data:/app/forecasting-platform/data
+      - ./forecasting-product/data:/app/forecasting-product/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
@@ -27,6 +27,6 @@ services:
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     volumes:
-      - ./forecasting-platform/data:/app/forecasting-platform/data
+      - ./forecasting-product/data:/app/forecasting-product/data
     depends_on:
       - api

@@ -42,4 +42,4 @@ lightning_logs/
 
 # Data artifacts (metric store, forecasts)
 data/
-forecasting-platform/data/
+forecasting-product/data/

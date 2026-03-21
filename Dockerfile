@@ -7,25 +7,25 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends libgomp1 && \
     rm -rf /var/lib/apt/lists/*
 
-COPY forecasting-platform/requirements.txt requirements.txt
+COPY forecasting-product/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY forecasting-platform/ forecasting-platform/
+COPY forecasting-product/ forecasting-product/
 
 # ---------------------------------------------------------------------------
 #  FastAPI target
 # ---------------------------------------------------------------------------
 FROM base AS api
 EXPOSE 8000
-CMD ["python", "forecasting-platform/scripts/serve.py", \
+CMD ["python", "forecasting-product/scripts/serve.py", \
      "--host", "0.0.0.0", "--port", "8000", \
-     "--data-dir", "forecasting-platform/data/"]
+     "--data-dir", "forecasting-product/data/"]
 
 # ---------------------------------------------------------------------------
 #  Streamlit target
 # ---------------------------------------------------------------------------
 FROM base AS streamlit
 EXPOSE 8501
-CMD ["streamlit", "run", "forecasting-platform/streamlit/app.py", \
+CMD ["streamlit", "run", "forecasting-product/streamlit/app.py", \
      "--server.port=8501", "--server.address=0.0.0.0", \
      "--server.headless=true", "--browser.gatherUsageStats=false"]

@@ -1,6 +1,6 @@
 # User Guide
 
-An end-to-end guide for using the Forecasting Platform — from choosing models to interpreting results.
+An end-to-end guide for using the Forecasting Product — from choosing models to interpreting results.
 
 ---
 
@@ -84,7 +84,7 @@ backtest:
 ### Run
 
 ```bash
-python forecasting-platform/scripts/run_backtest.py \
+python forecasting-product/scripts/run_backtest.py \
   --config configs/platform_config.yaml --lob retail
 ```
 
@@ -160,7 +160,7 @@ FVA measures how much accuracy each model layer contributes compared to the naiv
 After backtesting, generate production forecasts:
 
 ```bash
-python forecasting-platform/scripts/run_forecast.py \
+python forecasting-product/scripts/run_forecast.py \
   --config configs/platform_config.yaml \
   --lob retail \
   --champion lgbm_direct
@@ -410,6 +410,49 @@ Prepare materials for S&OP review meetings.
 
 ---
 
-### Next.js Frontend (Alternative)
+## Next.js Frontend
 
-The same 8-page workflow is also available as a Next.js frontend at `forecasting-platform/frontend/`. It connects to the FastAPI backend over REST and provides dark mode, responsive layout, and role-based navigation. See [DEPLOYMENT.md](DEPLOYMENT.md) for setup instructions.
+The same 8-page workflow is also available as a Next.js frontend at `forecasting-product/frontend/`. It connects to the FastAPI backend over REST and provides dark mode, responsive layout, and role-based navigation.
+
+### Getting Started
+
+```bash
+# Start the FastAPI backend first
+python forecasting-product/scripts/serve.py --port 8000
+
+# In a separate terminal, start the frontend
+cd forecasting-product/frontend
+npm install
+npm run dev
+```
+
+The frontend runs at `http://localhost:3000` by default. Set `NEXT_PUBLIC_API_URL` in `.env.local` to point to your API server (defaults to `http://localhost:8000`).
+
+### Pages
+
+| Page | Route | Description |
+|------|-------|-------------|
+| **Data Onboarding** | `/data-onboarding` | Upload CSV files, auto-classify columns, preview cleansing, generate config |
+| **Series Explorer** | `/series-explorer` | SBC classification, structural break detection, cleansing audit, AI Q&A |
+| **SKU Transitions** | `/sku-transitions` | New/discontinued SKU mapping, planner overrides, transition visualization |
+| **Hierarchy Manager** | `/hierarchy` | Build hierarchy trees, aggregate, reconcile (MinT/OLS/WLS) |
+| **Backtest Results** | `/backtest` | Model leaderboard, FVA cascade, champion map, calibration, SHAP |
+| **Forecast Viewer** | `/forecast` | Fan charts, decomposition, AI natural language query, comparison, constraints |
+| **Platform Health** | `/health` | Pipeline manifests, drift alerts, AI anomaly triage, audit log, cost tracking |
+| **S&OP Meeting** | `/sop` | AI commentary, cross-run comparison, model governance, BI export |
+
+### Authentication
+
+The login page (`/login`) collects username and password, which are sent to `POST /auth/token` on the FastAPI backend. The API returns a JWT token stored in the browser session via NextAuth. All subsequent API calls include this token in the `Authorization` header. Role-based access controls which pages and actions are visible.
+
+### Configuration
+
+Key environment variables for `.env.local`:
+
+```
+NEXT_PUBLIC_API_URL=http://localhost:8000    # Backend API URL
+NEXTAUTH_SECRET=your-secret-here             # Required for production
+NEXTAUTH_URL=http://localhost:3000           # Frontend URL
+```
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for production deployment instructions.
