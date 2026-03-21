@@ -1,6 +1,6 @@
-# Forecasting Platform
+# Forecasting Product
 
-A production-grade, modular multi-frequency sales forecasting platform (daily, weekly, monthly, quarterly). Covers the full lifecycle from raw data ingestion to hierarchically reconciled, explained, and governed forecasts — with a REST API, Microsoft Fabric/Delta Lake deployment layer, Spark distributed execution, and S&OP exception management.
+A production-grade, modular multi-frequency sales forecasting product (daily, weekly, monthly, quarterly). Covers the full lifecycle from raw data ingestion to hierarchically reconciled, explained, and governed forecasts — with a REST API, Microsoft Fabric/Delta Lake deployment layer, Spark distributed execution, and S&OP exception management.
 
 **See also:** [QUICKSTART.md](QUICKSTART.md) — get running in 2 minutes | [ARCHITECTURE.md](ARCHITECTURE.md) — visual diagrams of system architecture and data flow | [CONCEPTS.md](CONCEPTS.md) — why each component exists | [EDGE_CASES.md](EDGE_CASES.md) — failure modes and how the platform handles them
 
@@ -105,7 +105,7 @@ A production-grade, modular multi-frequency sales forecasting platform (daily, w
 ## Directory Structure
 
 ```
-forecasting-platform/
+forecasting-product/
 ├── src/
 │   ├── analytics/          # Data profiling, forecastability, causal analysis, LLM interpretation, BI export, explainability, governance, FVA
 │   ├── api/                # FastAPI REST serving layer (auth-protected)
@@ -127,14 +127,18 @@ forecasting-platform/
 │   ├── sku_mapping/        # New/discontinued SKU mapping (4 methods + Bayesian fusion)
 │   ├── spark/              # PySpark distributed execution layer
 │   └── utils/              # Logger, config utilities
-├── streamlit/              # Streamlit dashboard (4 pages)
+├── streamlit/              # Streamlit dashboard (8 pages)
 │   ├── app.py              # Landing page
 │   ├── utils.py            # Shared helpers, colours, data loaders
 │   └── pages/              # Multi-page layout
 │       ├── 1_Data_Onboarding.py    # CSV → DataAnalyzer → config recommendation
-│       ├── 2_Backtest_Results.py   # Leaderboard, FVA cascade, champion map
-│       ├── 3_Forecast_Viewer.py    # Fan chart + decomposition + narrative
-│       └── 4_Platform_Health.py    # Manifests, drift alerts, data quality, cost
+│       ├── 2_Series_Explorer.py    # SBC classification, breaks, quality, cleansing audit, AI Q&A
+│       ├── 3_SKU_Transitions.py    # SKU mapping pipeline, planner overrides, transition viz
+│       ├── 4_Hierarchy_Manager.py  # Hierarchy tree, aggregation, reconciliation (MinT/OLS/WLS)
+│       ├── 5_Backtest_Results.py   # Leaderboard, FVA cascade, champion map
+│       ├── 6_Forecast_Viewer.py    # Fan chart + decomposition + narrative
+│       ├── 7_Platform_Health.py    # Manifests, drift alerts, data quality, cost
+│       └── 8_SOP_Meeting.py        # AI commentary, cross-run comparison, governance, BI export
 ├── tests/                  # 1030+ unit + integration tests
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
@@ -797,10 +801,10 @@ observability:
 ## Testing
 
 ```bash
-pip install -r forecasting-platform/requirements.txt
-python -m pytest forecasting-platform/tests/ \
-  --ignore=forecasting-platform/tests/test_metrics.py \
-  --ignore=forecasting-platform/tests/test_feature_engineering.py -v
+pip install -r forecasting-product/requirements.txt
+python -m pytest forecasting-product/tests/ \
+  --ignore=forecasting-product/tests/test_metrics.py \
+  --ignore=forecasting-product/tests/test_feature_engineering.py -v
 # 1030+ tests collected across 48 test files
 ```
 
@@ -866,7 +870,7 @@ An 8-page interactive dashboard that puts the platform in a browser for data sci
 
 **Run locally:**
 ```bash
-streamlit run forecasting-platform/streamlit/app.py
+streamlit run forecasting-product/streamlit/app.py
 ```
 
 **Docker quick-start** (API on port 8000, dashboard on port 8501):
@@ -899,7 +903,7 @@ All frontend features are now backed by live API endpoints — no placeholder "C
 
 **Run locally:**
 ```bash
-cd forecasting-platform/frontend
+cd forecasting-product/frontend
 npm install
 npm run dev
 # → Open http://localhost:3000

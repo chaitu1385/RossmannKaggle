@@ -1,6 +1,6 @@
 # Quick Start
 
-Get the forecasting platform running in your browser. Pick one path:
+Get the forecasting product running in your browser. Pick one path:
 
 ## Path A — Docker (recommended)
 
@@ -25,8 +25,8 @@ git clone https://github.com/chaitu1385/Forecasting-Platform.git
 cd Forecasting-Platform
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r forecasting-platform/requirements.txt
-streamlit run forecasting-platform/streamlit/app.py
+pip install -r forecasting-product/requirements.txt
+streamlit run forecasting-product/streamlit/app.py
 ```
 
 Open **http://localhost:8501** in your browser.
@@ -63,15 +63,15 @@ After onboarding, run a backtest to evaluate model performance. The command depe
 
 **Docker (Path A):**
 ```bash
-docker compose exec api python forecasting-platform/scripts/run_backtest.py \
-  --config forecasting-platform/configs/platform_config.yaml \
+docker compose exec api python forecasting-product/scripts/run_backtest.py \
+  --config forecasting-product/configs/platform_config.yaml \
   --lob uploaded
 ```
 
 **Local Python (Path B):**
 ```bash
-python forecasting-platform/scripts/run_backtest.py \
-  --config forecasting-platform/configs/platform_config.yaml \
+python forecasting-product/scripts/run_backtest.py \
+  --config forecasting-product/configs/platform_config.yaml \
   --lob uploaded
 ```
 
@@ -85,15 +85,15 @@ Similarly, generate predictions:
 
 **Docker (Path A):**
 ```bash
-docker compose exec api python forecasting-platform/scripts/run_forecast.py \
-  --config forecasting-platform/configs/platform_config.yaml \
+docker compose exec api python forecasting-product/scripts/run_forecast.py \
+  --config forecasting-product/configs/platform_config.yaml \
   --lob uploaded
 ```
 
 **Local Python (Path B):**
 ```bash
-python forecasting-platform/scripts/run_forecast.py \
-  --config forecasting-platform/configs/platform_config.yaml \
+python forecasting-product/scripts/run_forecast.py \
+  --config forecasting-product/configs/platform_config.yaml \
   --lob uploaded
 ```
 
@@ -124,7 +124,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 If you prefer a production-grade React UI over Streamlit, the Next.js frontend mirrors the same 8-page workflow:
 
 ```bash
-cd forecasting-platform/frontend
+cd forecasting-product/frontend
 npm install
 npm run dev
 # → Open http://localhost:3000

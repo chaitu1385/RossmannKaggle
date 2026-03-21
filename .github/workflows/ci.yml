@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install ruff
-      - run: ruff check forecasting-platform/src/
+      - run: ruff check forecasting-product/src/
 
   test:
     name: Test (Python ${{ matrix.python-version }})
@@ -39,15 +39,15 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: forecasting-platform/requirements.txt
+          cache-dependency-path: forecasting-product/requirements.txt
 
       - name: Install dependencies
         run: |
-          pip install -r forecasting-platform/requirements.txt
+          pip install -r forecasting-product/requirements.txt
           pip install pytest pytest-cov httpx rapidfuzz
 
       - name: Run tests
-        working-directory: forecasting-platform
+        working-directory: forecasting-product
         run: |
           python -m pytest \
             --ignore=tests/test_metrics.py \
@@ -62,7 +62,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: forecasting-platform/coverage.xml
+          path: forecasting-product/coverage.xml
 
   build:
     name: Docker Build
@@ -77,15 +77,15 @@ jobs:
         run: |
           docker build \
             --target production \
-            -t forecasting-platform:${{ github.sha }} \
-            forecasting-platform/
+            -t forecasting-product:${{ github.sha }} \
+            forecasting-product/
 
       - name: Verify image runs
         run: |
           docker run --rm -d \
             --name fp-smoke \
             -p 8000:8000 \
-            forecasting-platform:${{ github.sha }}
+            forecasting-product:${{ github.sha }}
           sleep 5
           curl -sf http://localhost:8000/health || (docker logs fp-smoke && exit 1)
           docker stop fp-smoke

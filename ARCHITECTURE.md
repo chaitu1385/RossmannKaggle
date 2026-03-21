@@ -1,6 +1,6 @@
 # Architecture
 
-Visual architecture diagrams for the Forecasting Platform. Each section starts with a **big-picture overview** (grasp in 5 minutes) followed by a **deep dive** with class-level detail.
+Visual architecture diagrams for the Forecasting Product. Each section starts with a **big-picture overview** (grasp in 5 minutes) followed by a **deep dive** with class-level detail.
 
 > All diagrams use [Mermaid](https://mermaid.js.org/) — GitHub renders them natively.
 
@@ -694,11 +694,11 @@ graph TB
         LF4["AI: explain, triage, config, commentary"]
     end
 
-    subgraph Placeholder["Coming Soon (no endpoint yet)"]
-        PH1["Multi-file classification"]
-        PH2["Pipeline execution"]
-        PH3["Hierarchy / SKU ops"]
-        PH4["SHAP / BI export"]
+    subgraph ImplementedFeatures["Now Live"]
+        IF1["Multi-file classification → /pipeline/analyze-multi-file"]
+        IF2["Pipeline execution → /pipeline/backtest, /pipeline/forecast"]
+        IF3["Hierarchy / SKU ops → /hierarchy/*, /sku-mapping/*"]
+        IF4["SHAP / BI export → /analytics/shap, /governance/export"]
     end
 ```
 

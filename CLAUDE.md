@@ -2,51 +2,51 @@
 
 ## Project Overview
 
-Multi-frequency (daily/weekly/monthly/quarterly) sales forecasting platform for retail S&OP. Python 3.8+, built on FastAPI (REST API), PySpark (distributed execution), and Polars (data processing). Combines statistical, ML, neural, and foundation model forecasting with hierarchical reconciliation.
+Multi-frequency (daily/weekly/monthly/quarterly) sales forecasting product for retail S&OP. Python 3.8+, built on FastAPI (REST API), PySpark (distributed execution), and Polars (data processing). Combines statistical, ML, neural, and foundation model forecasting with hierarchical reconciliation.
 
-Main code lives in `forecasting-platform/`.
+Main code lives in `forecasting-product/`.
 
 ## Common Commands
 
 ```bash
 # Install dependencies (full)
-pip install -r forecasting-platform/requirements.txt
+pip install -r forecasting-product/requirements.txt
 
 # Install dependencies (Fabric-compatible subset — no DuckDB, PySpark, neuralforecast)
-pip install -r forecasting-platform/requirements-fabric.txt
+pip install -r forecasting-product/requirements-fabric.txt
 
 # Run all tests
-python -m pytest forecasting-platform/tests/ --ignore=forecasting-platform/tests/test_metrics.py --ignore=forecasting-platform/tests/test_feature_engineering.py -v
+python -m pytest forecasting-product/tests/ --ignore=forecasting-product/tests/test_metrics.py --ignore=forecasting-product/tests/test_feature_engineering.py -v
 
 # Run a specific test file
-python -m pytest forecasting-platform/tests/test_platform.py -v
+python -m pytest forecasting-product/tests/test_platform.py -v
 
 # Start the REST API server
-python forecasting-platform/scripts/serve.py --port 8000 --data-dir data/
+python forecasting-product/scripts/serve.py --port 8000 --data-dir data/
 
 # Start Streamlit dashboard
-streamlit run forecasting-platform/streamlit/app.py
+streamlit run forecasting-product/streamlit/app.py
 
 # Start Next.js frontend (alternative UI)
-cd forecasting-platform/frontend && npm install && npm run dev
+cd forecasting-product/frontend && npm install && npm run dev
 
 # Docker quick-start (API + Streamlit)
 docker compose up
 
 # Run forecast pipeline
-python forecasting-platform/scripts/run_forecast.py --config forecasting-platform/configs/platform_config.yaml --lob retail
+python forecasting-product/scripts/run_forecast.py --config forecasting-product/configs/platform_config.yaml --lob retail
 
 # Run backtest pipeline
-python forecasting-platform/scripts/run_backtest.py --config forecasting-platform/configs/platform_config.yaml --lob retail
+python forecasting-product/scripts/run_backtest.py --config forecasting-product/configs/platform_config.yaml --lob retail
 
 # Build package
-python forecasting-platform/setup.py sdist bdist_wheel
+python forecasting-product/setup.py sdist bdist_wheel
 ```
 
 ## Architecture
 
 ```
-forecasting-platform/
+forecasting-product/
 ├── src/                    # Source modules (~20+ modules)
 │   ├── ai/                 # AI-native features (Claude-powered)
 │   │   ├── base.py         # AIFeatureBase — shared client wrapper

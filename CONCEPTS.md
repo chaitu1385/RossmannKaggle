@@ -1,6 +1,6 @@
 # Platform Concepts
 
-A "why this exists and when you'd use it" guide for the forecasting platform. Each concept is 3-4 sentences — enough to orient a new team member without becoming a textbook.
+A "why this exists and when you'd use it" guide for the forecasting product. Each concept is 3-4 sentences — enough to orient a new team member without becoming a textbook.
 
 ---
 
@@ -211,7 +211,7 @@ Forecasting platforms generate data (metrics, drift alerts, leaderboards) that p
 
 ### Streamlit Dashboard
 
-A forecasting platform that only data scientists can operate is incomplete — demand planners need to see forecasts, compare models, and review exceptions; platform admins need to monitor health and drift. The Streamlit dashboard provides a browser-based interface with eight pages mapped to four user personas: Data Onboarding (upload data, assess forecastability, get a recommended config), Series Explorer (SBC classification, structural breaks, cleansing audit, AI Q&A), SKU Transitions (predecessor matching, planner overrides), Hierarchy Manager (tree visualization, reconciliation), Backtest Results (model leaderboard with FVA cascade), Forecast Viewer (interactive fan chart with seasonal decomposition), Platform Health (drift alerts, pipeline manifests, compute cost), and S&OP Meeting (AI commentary, cross-run comparison, governance, BI export). It imports platform classes directly — no API round-trip — so a `docker compose up` gives a working demo in under two minutes.
+A forecasting product that only data scientists can operate is incomplete — demand planners need to see forecasts, compare models, and review exceptions; platform admins need to monitor health and drift. The Streamlit dashboard provides a browser-based interface with eight pages mapped to four user personas: Data Onboarding (upload data, assess forecastability, get a recommended config), Series Explorer (SBC classification, structural breaks, cleansing audit, AI Q&A), SKU Transitions (predecessor matching, planner overrides), Hierarchy Manager (tree visualization, reconciliation), Backtest Results (model leaderboard with FVA cascade), Forecast Viewer (interactive fan chart with seasonal decomposition), Platform Health (drift alerts, pipeline manifests, compute cost), and S&OP Meeting (AI commentary, cross-run comparison, governance, BI export). It imports platform classes directly — no API round-trip — so a `docker compose up` gives a working demo in under two minutes.
 
 *Implementation: `streamlit/` — `app.py`, `pages/1_Data_Onboarding.py` through `pages/8_SOP_Meeting.py`*
 
