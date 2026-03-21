@@ -139,6 +139,11 @@ forecasting-product/
 │       ├── 6_Forecast_Viewer.py    # Fan chart + decomposition + narrative
 │       ├── 7_Platform_Health.py    # Manifests, drift alerts, data quality, cost
 │       └── 8_SOP_Meeting.py        # AI commentary, cross-run comparison, governance, BI export
+├── frontend/               # Next.js 15 frontend (TypeScript, Tailwind, Recharts)
+│   ├── src/app/            # App Router pages (login + 8 workflow pages)
+│   ├── src/components/     # Reusable components (charts, AI panels, layout, shared)
+│   ├── src/hooks/          # React Query hooks for each API endpoint
+│   └── src/lib/            # API client, auth, types, constants
 ├── tests/                  # 1030+ unit + integration tests
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
