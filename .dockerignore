@@ -15,3 +15,5 @@ dist/
 build/
 *.tar.gz
 *.whl
+node_modules/
+.next/
