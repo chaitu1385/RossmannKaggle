@@ -12,7 +12,7 @@ cd Forecasting-Platform
 docker compose up
 ```
 
-Open **http://localhost:8501** in your browser. That's it.
+Open **http://localhost:8501** (Streamlit) or **http://localhost:3000** (Next.js) in your browser. That's it.
 
 <!-- screenshot: Streamlit landing page after docker compose up -->
 
@@ -121,7 +121,9 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ## Alternative: Next.js Frontend
 
-If you prefer a production-grade React UI over Streamlit, the Next.js frontend mirrors the same 8-page workflow:
+The Next.js frontend starts automatically with `docker compose up` (Path A) at **http://localhost:3000**. It mirrors the same 8-page workflow as Streamlit.
+
+For local development without Docker:
 
 ```bash
 cd forecasting-product/frontend
