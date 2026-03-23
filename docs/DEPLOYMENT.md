@@ -14,12 +14,13 @@ cd Forecasting-Platform
 docker compose up
 ```
 
-This starts two services:
+This starts three services:
 
 | Service | Port | URL |
 |---------|------|-----|
 | REST API (FastAPI) | 8000 | http://localhost:8000/docs (Swagger UI) |
 | Dashboard (Streamlit) | 8501 | http://localhost:8501 |
+| Frontend (Next.js) | 3000 | http://localhost:3000 |
 
 Both services share a data volume at `./forecasting-product/data`.
 
@@ -30,6 +31,9 @@ Both services share a data volume at `./forecasting-product/data`.
 | `API_DATA_DIR` | `forecasting-product/data/` | Root data directory for the API |
 | `API_METRICS_DIR` | `forecasting-product/data/metrics/` | Metric store location |
 | `ANTHROPIC_API_KEY` | (empty) | Claude API key for AI features (optional) |
+| `NEXTAUTH_SECRET` | `docker-dev-secret` | Secret for NextAuth.js session encryption |
+| `NEXTAUTH_URL` | `http://localhost:3000` | Canonical URL of the Next.js frontend |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | FastAPI backend URL for the frontend |
 
 Set AI features:
 ```bash
@@ -110,8 +114,6 @@ For production builds:
 npm run build
 npm start          # starts production server on port 3000
 ```
-
-> **Note:** The Docker Compose setup currently runs the API and Streamlit dashboard only. To add the Next.js frontend to Docker, a separate service definition is needed in `docker-compose.yml`.
 
 ---
 

@@ -30,7 +30,7 @@ streamlit run forecasting-product/streamlit/app.py
 # Start Next.js frontend (alternative UI)
 cd forecasting-product/frontend && npm install && npm run dev
 
-# Docker quick-start (API + Streamlit)
+# Docker quick-start (API + Streamlit + Next.js)
 docker compose up
 
 # Run forecast pipeline
