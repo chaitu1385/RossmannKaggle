@@ -41,5 +41,5 @@ lightning_logs/
 .env.*
 
 # Data artifacts (metric store, forecasts)
-data/
-forecasting-product/data/
+/data/
+/forecasting-product/data/

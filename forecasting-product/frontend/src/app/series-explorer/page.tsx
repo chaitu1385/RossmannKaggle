@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { NLQueryPanel } from "@/components/ai/nl-query-panel";
 import { MetricCard } from "@/components/shared/metric-card";
@@ -39,6 +39,14 @@ function PanelLoading() {
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default function SeriesExplorerPage() {
+  return (
+    <Suspense fallback={<PanelLoading />}>
+      <SeriesExplorerContent />
+    </Suspense>
+  );
+}
+
+function SeriesExplorerContent() {
   const searchParams = useSearchParams();
   const [lob, setLob] = useState(searchParams.get("lob") || "retail");
 
