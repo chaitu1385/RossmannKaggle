@@ -28,7 +28,6 @@ from src.hierarchy.reconciler import Reconciler
 from src.hierarchy.tree import HierarchyTree
 from utils import COLORS, format_number, polars_to_pandas
 
-st.set_page_config(page_title="Hierarchy Manager", page_icon="🌳", layout="wide")
 st.title("Hierarchy Manager")
 st.markdown(
     "Visualize hierarchy structure, explore aggregations across levels, "

@@ -24,7 +24,6 @@ import polars as pl
 
 from utils import COLORS, format_number, format_pct, polars_to_pandas
 
-st.set_page_config(page_title="SKU Transitions", page_icon="🔄", layout="wide")
 st.title("SKU Transitions")
 st.markdown(
     "Discover product transitions using the SKU mapping pipeline, manage "

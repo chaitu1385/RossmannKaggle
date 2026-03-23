@@ -36,7 +36,6 @@ from utils import (
     load_uploaded_csv,
 )
 
-st.set_page_config(page_title="Series Explorer", page_icon="🔍", layout="wide")
 render_api_key_sidebar()
 st.title("Series Explorer")
 st.markdown(

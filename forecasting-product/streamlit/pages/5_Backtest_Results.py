@@ -39,7 +39,6 @@ from utils import (
     render_api_key_sidebar,
 )
 
-st.set_page_config(page_title="Backtest Results", page_icon="🏆", layout="wide")
 render_api_key_sidebar()
 st.title("Backtest Results")
 
