@@ -11,7 +11,6 @@ from datetime import date
 from pathlib import Path
 
 import plotly.graph_objects as go
-import polars as pl
 import streamlit as st
 
 _PLATFORM_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -20,6 +19,8 @@ if str(_PLATFORM_ROOT) not in sys.path:
     sys.path.insert(0, str(_PLATFORM_ROOT))
 if str(_STREAMLIT_DIR) not in sys.path:
     sys.path.insert(0, str(_STREAMLIT_DIR))
+
+import polars as pl
 
 from src.metrics.store import MetricStore
 from utils import (
