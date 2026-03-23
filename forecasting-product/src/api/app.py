@@ -129,6 +129,17 @@ def create_app(
         redoc_url="/redoc",
     )
 
+    # ── CORS — allow cross-origin requests from frontend (Next.js / Streamlit)
+    from fastapi.middleware.cors import CORSMiddleware
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     # ── Shared state (attached to app for testability) ─────────────────────
     app.state.data_dir    = Path(data_dir)
     app.state.metrics_dir = Path(metrics_dir)
