@@ -31,7 +31,7 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 #  Explicit page registration (replaces file-based auto-discovery)
 # ---------------------------------------------------------------------------
-_PAGES_DIR = Path(__file__).resolve().parent / "pages"
+_PAGES_DIR = Path(__file__).resolve().parent / "_pages"
 
 pages = st.navigation(
     [
