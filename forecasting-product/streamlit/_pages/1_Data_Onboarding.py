@@ -122,7 +122,10 @@ if uploaded_files and len(uploaded_files) == 1:
     except Exception as exc:
         st.error(
             f"Failed to parse CSV: {exc}\n\n"
-            "Check that the file is a valid CSV with headers in the first row."
+            "You might want to try:\n"
+            "- Ensuring the file is a valid CSV with headers in the first row\n"
+            "- Checking for columns with mixed types "
+            "(e.g. a column containing both numbers and text)"
         )
         st.stop()
 

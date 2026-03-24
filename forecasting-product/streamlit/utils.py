@@ -63,10 +63,25 @@ MODEL_LAYER_COLORS = {
 # ---------------------------------------------------------------------------
 #  Data helpers
 # ---------------------------------------------------------------------------
+def _read_csv_robust(source: io.BytesIO) -> pl.DataFrame:
+    """Read CSV with fallback for mixed-type columns.
+
+    First attempts with ``infer_schema_length=10_000`` so Polars samples
+    enough rows to detect mixed-type columns (e.g. StateHoliday containing
+    both integers and strings).  If that still fails, retries scanning
+    *all* rows (``infer_schema_length=0``) as a last resort.
+    """
+    try:
+        return pl.read_csv(source, try_parse_dates=True, infer_schema_length=10_000)
+    except Exception:
+        source.seek(0)
+        return pl.read_csv(source, try_parse_dates=True, infer_schema_length=0)
+
+
 def load_uploaded_csv(uploaded_file) -> pl.DataFrame:
     """Read an uploaded CSV file into a Polars DataFrame."""
     raw = uploaded_file.getvalue()
-    return pl.read_csv(io.BytesIO(raw), try_parse_dates=True)
+    return _read_csv_robust(io.BytesIO(raw))
 
 
 def load_uploaded_csvs(uploaded_files: List) -> Dict[str, pl.DataFrame]:
@@ -74,7 +89,7 @@ def load_uploaded_csvs(uploaded_files: List) -> Dict[str, pl.DataFrame]:
     result: Dict[str, pl.DataFrame] = {}
     for f in uploaded_files:
         raw = f.getvalue()
-        result[f.name] = pl.read_csv(io.BytesIO(raw), try_parse_dates=True)
+        result[f.name] = _read_csv_robust(io.BytesIO(raw))
     return result
 
 
