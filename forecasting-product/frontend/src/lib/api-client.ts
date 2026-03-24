@@ -79,10 +79,20 @@ async function request<T>(
     headers["Content-Type"] = "application/json";
   }
 
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch (err) {
+    throw new ApiError(
+      0,
+      `Unable to reach the API server at ${BASE_URL}. ` +
+        `Please check that the backend is running and NEXT_PUBLIC_API_URL is set correctly. ` +
+        `(${err instanceof Error ? err.message : String(err)})`,
+    );
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => "Unknown error");
