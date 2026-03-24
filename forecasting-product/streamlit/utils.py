@@ -68,14 +68,14 @@ def _read_csv_robust(source: io.BytesIO) -> pl.DataFrame:
 
     First attempts with ``infer_schema_length=10_000`` so Polars samples
     enough rows to detect mixed-type columns (e.g. StateHoliday containing
-    both integers and strings).  If that still fails, retries scanning
-    *all* rows (``infer_schema_length=0``) as a last resort.
+    both integers and strings).  If that still fails, retries with
+    ``infer_schema_length=None`` which scans *every* row for type inference.
     """
     try:
         return pl.read_csv(source, try_parse_dates=True, infer_schema_length=10_000)
     except Exception:
         source.seek(0)
-        return pl.read_csv(source, try_parse_dates=True, infer_schema_length=0)
+        return pl.read_csv(source, try_parse_dates=True, infer_schema_length=None)
 
 
 def load_uploaded_csv(uploaded_file) -> pl.DataFrame:
@@ -106,11 +106,7 @@ def load_sample_data() -> pl.DataFrame:
     """
     if SAMPLE_DATA.exists():
         try:
-            return pl.read_csv(
-                str(SAMPLE_DATA),
-                try_parse_dates=True,
-                infer_schema_length=10000,
-            )
+            return _read_csv_robust(io.BytesIO(SAMPLE_DATA.read_bytes()))
         except Exception:
             pass  # fall through to synthetic
     return _generate_synthetic_retail()
