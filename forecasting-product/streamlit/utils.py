@@ -22,42 +22,19 @@ DATA_DIR = PLATFORM_ROOT / "data"
 SAMPLE_DATA = DATA_DIR / "rossmann" / "train.csv"
 
 # ---------------------------------------------------------------------------
-#  Colour palette (consistent across pages)
+#  Colour palette — single source of truth in src.visualization.chart_palette
 # ---------------------------------------------------------------------------
-COLORS = {
-    "primary": "#4361ee",
-    "secondary": "#3a0ca3",
-    "accent": "#f72585",
-    "success": "#06d6a0",
-    "warning": "#ffd166",
-    "danger": "#ef476f",
-    "neutral": "#8d99ae",
-    "bg_light": "#f8f9fa",
-}
+from src.visualization.chart_palette import (
+    COLORS,
+    SEVERITY_COLORS,
+    FVA_COLORS,
+    MODEL_LAYER_COLORS,
+    DEMAND_CLASS_COLORS,
+    CATEGORICAL_PALETTE,
+)
 
-SEVERITY_COLORS = {
-    "critical": "#ef476f",
-    "warning": "#ffd166",
-    "info": "#4361ee",
-}
-
-FVA_COLORS = {
-    "ADDS_VALUE": "#06d6a0",
-    "NEUTRAL": "#8d99ae",
-    "DESTROYS_VALUE": "#ef476f",
-    "BASELINE": "#4361ee",
-}
-
-MODEL_LAYER_COLORS = {
-    "naive": "#8d99ae",
-    "statistical": "#4361ee",
-    "ml": "#06d6a0",
-    "neural": "#f72585",
-    "foundation": "#3a0ca3",
-    "intermittent": "#ffd166",
-    "ensemble": "#7209b7",
-    "override": "#ff6b35",
-}
+# Backward-compat alias: some pages may reference COLORS["bg_light"]
+COLORS["bg_light"] = COLORS["bg"]
 
 
 # ---------------------------------------------------------------------------
