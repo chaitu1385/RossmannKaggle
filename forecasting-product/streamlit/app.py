@@ -19,6 +19,15 @@ if str(_PLATFORM_ROOT) not in sys.path:
 import streamlit as st
 
 # ---------------------------------------------------------------------------
+#  Apply SWD Plotly theme globally (before any page renders charts)
+# ---------------------------------------------------------------------------
+try:
+    from src.visualization.plotly_theme import apply_swd_plotly_theme
+    apply_swd_plotly_theme()
+except ImportError:
+    pass  # plotly not installed — charts will use Plotly defaults
+
+# ---------------------------------------------------------------------------
 #  Page configuration (must be first Streamlit call)
 # ---------------------------------------------------------------------------
 st.set_page_config(
