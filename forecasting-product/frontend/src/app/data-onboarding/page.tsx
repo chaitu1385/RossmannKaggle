@@ -12,6 +12,7 @@ import { MultiFilePanel } from "@/components/pipeline/multi-file-panel";
 import { PipelineExecutionPanel } from "@/components/pipeline/pipeline-execution-panel";
 import { useAnalyze } from "@/hooks/use-analyze";
 import { formatNumber } from "@/lib/utils";
+import { WorkflowNav } from "@/components/shared/workflow-nav";
 import type { AnalysisResponse } from "@/lib/types";
 
 export default function DataOnboardingPage() {
@@ -209,6 +210,8 @@ export default function DataOnboardingPage() {
           <PipelineExecutionPanel lobName={lobName} />
         </>
       )}
+
+      <WorkflowNav currentStep="/data-onboarding" />
     </div>
   );
 }

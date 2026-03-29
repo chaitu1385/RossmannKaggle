@@ -12,24 +12,10 @@ Covers:
 
 import random
 import unittest
-from datetime import date, timedelta
 
 import polars as pl
 
-
-def _make_weekly_series(n_series: int = 2, n_weeks: int = 104, seed: int = 42):
-    random.seed(seed)
-    rows = []
-    for s in range(1, n_series + 1):
-        sid = f"S{s}"
-        base = 100.0 + s * 20
-        for w in range(n_weeks):
-            rows.append({
-                "series_id": sid,
-                "week": date(2023, 1, 1) + timedelta(weeks=w),  # Sunday
-                "quantity": base + random.gauss(0, 10),
-            })
-    return pl.DataFrame(rows).with_columns(pl.col("quantity").cast(pl.Float64))
+from conftest import make_weekly_series as _make_weekly_series
 
 
 class TestAutoARIMAForecaster(unittest.TestCase):

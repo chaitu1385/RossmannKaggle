@@ -7,6 +7,7 @@ import { CrossRunComparisonPanel } from "@/components/forecast/cross-run-compari
 import { ModelCardsPanel } from "@/components/governance/model-cards-panel";
 import { LineagePanel } from "@/components/governance/lineage-panel";
 import { BIExportPanel } from "@/components/governance/bi-export-panel";
+import { WorkflowNav } from "@/components/shared/workflow-nav";
 
 export default function SOPPage() {
   const { lob, setLob } = useLob();
@@ -59,6 +60,8 @@ export default function SOPPage() {
 
       {/* BI Export */}
       <BIExportPanel lob={lob} />
+
+      <WorkflowNav currentStep="/sop" />
     </div>
   );
 }

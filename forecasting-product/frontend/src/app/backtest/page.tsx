@@ -14,6 +14,7 @@ import { DataTable } from "@/components/data/data-table";
 import { useLeaderboard } from "@/hooks/use-leaderboard";
 import { api } from "@/lib/api-client";
 import { formatPct } from "@/lib/utils";
+import { WorkflowNav } from "@/components/shared/workflow-nav";
 import type { FVAResponse, CalibrationResponse, ShapResponse } from "@/lib/types";
 
 export default function BacktestPage() {
@@ -293,6 +294,8 @@ export default function BacktestPage() {
         <h2 className="text-lg font-semibold mb-3">AI Configuration Tuner</h2>
         <ConfigTunerPanel lob={lob} runType={runType} />
       </section>
+
+      <WorkflowNav currentStep="/backtest" />
     </div>
   );
 }

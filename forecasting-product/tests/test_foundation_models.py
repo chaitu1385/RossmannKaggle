@@ -29,29 +29,7 @@ import pytest
 from src.forecasting.foundation import ChronosForecaster, TimeGPTForecaster
 from src.forecasting.registry import registry
 
-
-# ── helpers ────────────────────────────────────────────────────────────────────
-
-
-def _make_weekly_series(
-    n_series: int = 2,
-    n_weeks: int = 52,
-    start: date = date(2023, 1, 2),
-    seed: int = 0,
-) -> pl.DataFrame:
-    import random
-    random.seed(seed)
-    rows = []
-    for i in range(n_series):
-        sid = f"SKU-{i:03d}"
-        base = 50.0 + i * 20
-        for w in range(n_weeks):
-            rows.append({
-                "series_id": sid,
-                "week": start + timedelta(weeks=w),
-                "quantity": max(0.0, base + random.gauss(0, 5)),
-            })
-    return pl.DataFrame(rows)
+from conftest import make_weekly_series as _make_weekly_series
 
 
 def _make_torch_forecast_tensor(n_series: int, num_samples: int, horizon: int):

@@ -15,6 +15,7 @@ import { ConstrainedForecastPanel } from "@/components/forecast/constrained-fore
 import { useForecast } from "@/hooks/use-forecast";
 import { formatNumber } from "@/lib/utils";
 import { COLORS } from "@/lib/constants";
+import { WorkflowNav } from "@/components/shared/workflow-nav";
 
 export default function ForecastPage() {
   const { lob, setLob } = useLob();
@@ -189,6 +190,8 @@ export default function ForecastPage() {
           <ConstrainedForecastPanel />
         </>
       )}
+
+      <WorkflowNav currentStep="/forecast" />
     </div>
   );
 }

@@ -50,8 +50,6 @@ jobs:
         working-directory: forecasting-product
         run: |
           python -m pytest \
-            --ignore=tests/test_metrics.py \
-            --ignore=tests/test_feature_engineering.py \
             -v \
             --cov=src \
             --cov-report=xml \

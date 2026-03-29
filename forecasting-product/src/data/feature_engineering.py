@@ -27,7 +27,7 @@ class FeatureEngineer:
             pl.col(date_col).dt.weekday().alias("DayOfWeek"),
             pl.col(date_col).dt.week().alias("WeekOfYear"),
             pl.col(date_col).dt.quarter().alias("Quarter"),
-            (pl.col(date_col).dt.weekday() >= 5).cast(pl.Int64).alias("IsWeekend"),
+            (pl.col(date_col).dt.weekday() >= 6).cast(pl.Int64).alias("IsWeekend"),
             (pl.col(date_col).dt.day() == 1).cast(pl.Int64).alias("IsMonthStart"),
             pl.col(date_col).dt.month_end().alias("_month_end"),
         ])
@@ -69,14 +69,14 @@ class FeatureEngineer:
             exprs.append(
                 pl.col(target_col)
                 .shift(1)
-                .rolling_mean(window_size=window, min_periods=1)
+                .rolling_mean(window_size=window, min_samples=1)
                 .over(group_col)
                 .alias(f"{target_col}_roll_mean_{window}")
             )
             exprs.append(
                 pl.col(target_col)
                 .shift(1)
-                .rolling_std(window_size=window, min_periods=1)
+                .rolling_std(window_size=window, min_samples=1)
                 .over(group_col)
                 .alias(f"{target_col}_roll_std_{window}")
             )
@@ -86,7 +86,7 @@ class FeatureEngineer:
 
     def create_competition_features(self, df: pl.DataFrame) -> pl.DataFrame:
         """Create competition-related features."""
-        if "CompetitionOpenSinceMonth" in df.columns and "Date" in df.columns:
+        if "CompetitionOpenSinceMonth" in df.columns:
             df = df.with_columns(
                 (
                     12 * (pl.col("Year") - pl.col("CompetitionOpenSinceYear"))
@@ -101,9 +101,9 @@ class FeatureEngineer:
         if "Promo2SinceWeek" in df.columns and "WeekOfYear" in df.columns:
             df = df.with_columns(
                 (
-                    12 * (pl.col("Year") - pl.col("Promo2SinceYear"))
-                    + (pl.col("WeekOfYear") - pl.col("Promo2SinceWeek")) / 4.0
-                ).clip(lower_bound=0).alias("Promo2Open")
+                    52 * (pl.col("Year") - pl.col("Promo2SinceYear"))
+                    + (pl.col("WeekOfYear") - pl.col("Promo2SinceWeek"))
+                ).cast(pl.Float64).clip(lower_bound=0).alias("Promo2Open")
             )
 
         return df

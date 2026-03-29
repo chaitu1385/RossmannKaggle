@@ -14,6 +14,7 @@ import { useAudit } from "@/hooks/use-audit";
 import { api } from "@/lib/api-client";
 import { SEVERITY_COLORS } from "@/lib/constants";
 import type { ManifestListResponse, CostListResponse } from "@/lib/types";
+import { WorkflowNav } from "@/components/shared/workflow-nav";
 
 function ManifestsTabContent({ lob }: { lob: string }) {
   const [manifests, setManifests] = useState<ManifestListResponse | null>(null);
@@ -351,6 +352,8 @@ export default function HealthPage() {
       {activeTab === "manifests" && (
         <ManifestsTabContent lob={lob} />
       )}
+
+      <WorkflowNav currentStep="/health" />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { RampShape } from "@/components/charts/ramp-shape";
 import { MetricCard } from "@/components/shared/metric-card";
 import { SKUMappingPanel } from "@/components/sku/sku-mapping-panel";
 import { OverrideManagementPanel } from "@/components/sku/override-management-panel";
+import { WorkflowNav } from "@/components/shared/workflow-nav";
 
 export default function SKUTransitionsPage() {
   const [rampShape, setRampShape] = useState<"linear" | "step" | "exponential">("linear");
@@ -79,6 +80,8 @@ export default function SKUTransitionsPage() {
           <RampShape shape={rampShape} periods={periods} targetProportion={proportion} />
         </div>
       </section>
+
+      <WorkflowNav currentStep="/sku-transitions" />
     </div>
   );
 }

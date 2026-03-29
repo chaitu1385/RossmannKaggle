@@ -20,47 +20,15 @@ import polars as pl
 import pytest
 import yaml
 
+from conftest import make_hierarchy_data, make_weekly_actuals
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Test data generators
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _make_hierarchy_data() -> pl.DataFrame:
-    """Small geography hierarchy for testing."""
-    return pl.DataFrame({
-        "global": ["Global"] * 6,
-        "region": ["Americas", "Americas", "Americas", "EMEA", "EMEA", "EMEA"],
-        "subregion": ["NA", "NA", "LATAM", "WE", "WE", "NE"],
-        "country": ["USA", "CAN", "BRA", "GBR", "DEU", "NOR"],
-    })
-
-
-def _make_weekly_actuals(
-    n_series: int = 3,
-    n_weeks: int = 104,
-    start_date: date = date(2022, 1, 3),
-) -> pl.DataFrame:
-    """Generate synthetic weekly actuals for testing."""
-    import random
-    random.seed(42)
-
-    rows = []
-    for i in range(n_series):
-        sid = f"SKU-{i:03d}"
-        base = 100 + i * 50
-        for w in range(n_weeks):
-            week_date = start_date + timedelta(weeks=w)
-            # Simple seasonal pattern: higher in Q4
-            seasonal = 1.3 if week_date.month >= 10 else 1.0
-            noise = random.gauss(0, base * 0.1)
-            value = max(0, base * seasonal + noise)
-            rows.append({
-                "series_id": sid,
-                "week": week_date,
-                "quantity": round(value, 2),
-            })
-
-    return pl.DataFrame(rows)
+_make_hierarchy_data = make_hierarchy_data
+_make_weekly_actuals = make_weekly_actuals
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

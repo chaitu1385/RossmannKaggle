@@ -16,7 +16,7 @@ pip install -r forecasting-product/requirements.txt
 pip install -r forecasting-product/requirements-fabric.txt
 
 # Run all tests
-python -m pytest forecasting-product/tests/ --ignore=forecasting-product/tests/test_metrics.py --ignore=forecasting-product/tests/test_feature_engineering.py -v
+python -m pytest forecasting-product/tests/ -v
 
 # Run a specific test file
 python -m pytest forecasting-product/tests/test_platform.py -v
@@ -163,8 +163,7 @@ Helper functions: `get_frequency_profile(freq)` returns the profile dict; `freq_
 - Framework: pytest
 - Test files mirror source structure with `test_` prefix
 - Helper fixtures use `_make_*` factory functions (e.g., `_make_weekly_actuals`)
-- Skip `test_metrics.py` and `test_feature_engineering.py` (legacy/slow)
-- 1060+ tests across 49 test files
+- 1099+ tests across 49 test files
 - Key test modules: `test_platform.py` (85 tests), `test_sku_mapping.py` (81), `test_ai_*.py` (73), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55), `test_observability.py` (41), `test_file_classifier.py` (26), `test_file_merger.py` (20)
 
 ## Key Dependencies

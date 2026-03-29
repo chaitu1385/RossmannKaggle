@@ -73,7 +73,6 @@ class XGBoostForecaster(BaseForecaster):
             y_pd,
             eval_set=eval_set,
             verbose=100,
-            early_stopping_rounds=self.params.get("early_stopping_rounds", 50),
         )
         self.is_fitted = True
         return self

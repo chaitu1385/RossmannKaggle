@@ -11,6 +11,7 @@ import { DEMAND_CLASS_COLORS } from "@/lib/constants";
 import { BreakTimeline } from "@/components/charts/break-timeline";
 import { CleansingOverlay } from "@/components/charts/cleansing-overlay";
 import { NoDataGuide } from "@/components/shared/no-data-guide";
+import { WorkflowNav } from "@/components/shared/workflow-nav";
 import { api } from "@/lib/api-client";
 import type {
   SeriesItem,
@@ -546,6 +547,8 @@ function SeriesExplorerContent() {
           ]}
         />
       </section>
+
+      <WorkflowNav currentStep="/series-explorer" />
     </div>
   );
 }

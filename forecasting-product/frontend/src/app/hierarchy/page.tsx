@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { api } from "@/lib/api-client";
 import { MetricCard } from "@/components/shared/metric-card";
 import { HierarchySunburst } from "@/components/charts/hierarchy-sunburst";
+import { WorkflowNav } from "@/components/shared/workflow-nav";
 import type {
   HierarchyBuildResponse,
   HierarchyAggregateResponse,
@@ -322,6 +323,8 @@ export default function HierarchyPage() {
           )}
         </section>
       </div>
+
+      <WorkflowNav currentStep="/hierarchy" />
     </div>
   );
 }
