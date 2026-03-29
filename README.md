@@ -14,6 +14,7 @@ A production-grade, modular multi-frequency sales forecasting product (daily, we
 | [Deployment](docs/DEPLOYMENT.md) | Docker, env vars, production checklist, scaling |
 | [User Guide](docs/USER_GUIDE.md) | Model selection, backtest interpretation, AI features |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Common errors, FAQ, debugging tips |
+| [Frontend](docs/FRONTEND.md) | Frontend architecture, components, API client, auth flow |
 
 ---
 
@@ -23,7 +24,7 @@ A production-grade, modular multi-frequency sales forecasting product (daily, we
 ┌─────────────────────────────────────────────────────────────┐
 │  REST API  (FastAPI, JWT-protected)   src/api/              │
 │  POST /auth/token                                           │
-│  40 endpoints: /health /forecast /metrics /series /hierarchy│
+│  41 endpoints: /health /forecast /metrics /series /hierarchy│
 │  /sku-mapping /overrides /pipeline /governance /ai/*       │
 │  GET /forecast/{lob}/{series_id}  /metrics/drift/{lob}     │
 │  GET /audit                                                 │
@@ -136,7 +137,7 @@ forecasting-product/
 │   │   └── sku/            # SKU mapping, override management panels
 │   ├── src/hooks/          # React Query hooks + useAsyncOperation utility
 │   └── src/lib/            # API client, auth, types, constants
-├── tests/                  # 1060+ unit + integration tests
+├── tests/                  # 1281 unit + integration tests
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
 ├── notebooks/              # Jupyter notebooks for exploration
@@ -951,7 +952,7 @@ pip install -r forecasting-product/requirements.txt
 python -m pytest forecasting-product/tests/ \
   --ignore=forecasting-product/tests/test_metrics.py \
   --ignore=forecasting-product/tests/test_feature_engineering.py -v
-# 1060+ tests collected across 49 test files
+# 1281 tests collected across 53 test files
 ```
 
 | Test file | Tests | Covers |

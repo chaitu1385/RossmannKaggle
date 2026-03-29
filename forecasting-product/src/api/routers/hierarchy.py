@@ -37,7 +37,7 @@ async def build_hierarchy(
             df = pl.read_parquet(io.BytesIO(content))
         else:
             df = pl.read_csv(io.BytesIO(content), try_parse_dates=True)
-    except Exception as exc:
+    except (ValueError, UnicodeDecodeError, OSError) as exc:
         raise HTTPException(status_code=400, detail=f"Failed to read file: {exc}")
 
     level_list = [l.strip() for l in levels.split(",")]
@@ -111,7 +111,7 @@ async def aggregate_hierarchy(
             df = pl.read_parquet(io.BytesIO(content))
         else:
             df = pl.read_csv(io.BytesIO(content), try_parse_dates=True)
-    except Exception as exc:
+    except (ValueError, UnicodeDecodeError, OSError) as exc:
         raise HTTPException(status_code=400, detail=f"Failed to read file: {exc}")
 
     level_list = [l.strip() for l in levels.split(",")]
@@ -170,7 +170,7 @@ async def reconcile_hierarchy(
             df = pl.read_parquet(io.BytesIO(content))
         else:
             df = pl.read_csv(io.BytesIO(content), try_parse_dates=True)
-    except Exception as exc:
+    except (ValueError, UnicodeDecodeError, OSError) as exc:
         raise HTTPException(status_code=400, detail=f"Failed to read file: {exc}")
 
     level_list = [l.strip() for l in levels.split(",")]
@@ -188,7 +188,7 @@ async def reconcile_hierarchy(
             value_columns=val_cols,
             time_column=time_column,
         )
-    except Exception as exc:
+    except (ValueError, RuntimeError, KeyError) as exc:
         raise HTTPException(status_code=500, detail=f"Reconciliation failed: {exc}")
 
     # Compute before/after totals for comparison

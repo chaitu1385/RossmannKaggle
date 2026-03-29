@@ -52,7 +52,7 @@ def list_overrides(
             df = store.get_overrides(old_sku=old_sku, new_sku=new_sku)
         else:
             df = store.get_all()
-    except Exception as exc:
+    except (FileNotFoundError, OSError, ValueError, KeyError) as exc:
         raise HTTPException(status_code=500, detail=f"Failed to read overrides: {exc}")
     finally:
         store.close()
@@ -86,7 +86,7 @@ def create_override(
             created_by=user.user_id if hasattr(user, "user_id") else "api",
             notes=body.notes,
         )
-    except Exception as exc:
+    except (FileNotFoundError, OSError, ValueError, KeyError) as exc:
         raise HTTPException(status_code=500, detail=f"Failed to create override: {exc}")
     finally:
         store.close()
@@ -132,7 +132,7 @@ def update_override(
         )
     except HTTPException:
         raise
-    except Exception as exc:
+    except (FileNotFoundError, OSError, ValueError, KeyError) as exc:
         raise HTTPException(status_code=500, detail=f"Failed to update override: {exc}")
     finally:
         store.close()
@@ -154,7 +154,7 @@ def delete_override(
 
     try:
         deleted = store.delete_override(override_id)
-    except Exception as exc:
+    except (FileNotFoundError, OSError, ValueError, KeyError) as exc:
         raise HTTPException(status_code=500, detail=f"Failed to delete override: {exc}")
     finally:
         store.close()

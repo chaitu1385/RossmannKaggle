@@ -39,7 +39,7 @@ async def run_backtest(
             df = pl.read_parquet(io.BytesIO(content))
         else:
             df = pl.read_csv(io.BytesIO(content), try_parse_dates=True)
-    except Exception as exc:
+    except (ValueError, UnicodeDecodeError, OSError) as exc:
         raise HTTPException(status_code=400, detail=f"Failed to read file: {exc}")
 
     # Load config
@@ -51,7 +51,7 @@ async def run_backtest(
         try:
             config_dict = yaml.safe_load(config_content.decode("utf-8"))
             config = PlatformConfig(**config_dict) if config_dict else PlatformConfig(lob=lob)
-        except Exception:
+        except (yaml.YAMLError, ValueError, TypeError, UnicodeDecodeError):
             logging.getLogger(__name__).warning("Invalid config file, using defaults for lob=%s", lob, exc_info=True)
             config = PlatformConfig(lob=lob)
     else:
@@ -61,7 +61,7 @@ async def run_backtest(
     try:
         pipeline = BacktestPipeline(config=config, data_dir=str(request.app.state.data_dir))
         results = pipeline.run(actuals=df)
-    except Exception as exc:
+    except (ValueError, RuntimeError, KeyError) as exc:
         raise HTTPException(status_code=500, detail=f"Backtest failed: {exc}")
 
     # Summarize results
@@ -100,7 +100,7 @@ async def run_forecast(
             df = pl.read_parquet(io.BytesIO(content))
         else:
             df = pl.read_csv(io.BytesIO(content), try_parse_dates=True)
-    except Exception as exc:
+    except (ValueError, UnicodeDecodeError, OSError) as exc:
         raise HTTPException(status_code=400, detail=f"Failed to read file: {exc}")
 
     config = None
@@ -111,7 +111,7 @@ async def run_forecast(
         try:
             config_dict = yaml.safe_load(config_content.decode("utf-8"))
             config = PlatformConfig(**config_dict) if config_dict else PlatformConfig(lob=lob)
-        except Exception:
+        except (yaml.YAMLError, ValueError, TypeError, UnicodeDecodeError):
             logging.getLogger(__name__).warning("Invalid config file, using defaults for lob=%s", lob, exc_info=True)
             config = PlatformConfig(lob=lob)
     else:
@@ -125,7 +125,7 @@ async def run_forecast(
             model_id=model_id,
             horizon=horizon,
         )
-    except Exception as exc:
+    except (ValueError, RuntimeError, KeyError) as exc:
         raise HTTPException(status_code=500, detail=f"Forecast pipeline failed: {exc}")
 
     summary = {
@@ -185,7 +185,7 @@ def list_manifests(
                 "cleansing_applied": manifest.cleansing_applied,
                 "outliers_clipped": manifest.outliers_clipped,
             })
-        except Exception as exc:
+        except (FileNotFoundError, json.JSONDecodeError, ValueError, OSError) as exc:
             logger.warning(f"Failed to read manifest {mf}: {exc}")
 
     return {"count": len(results), "manifests": results}
@@ -232,7 +232,7 @@ def get_costs(
                 "total_seconds": total_seconds,
                 "seconds_per_series": round(total_seconds / series_count, 3) if total_seconds else None,
             })
-        except Exception as exc:
+        except (FileNotFoundError, json.JSONDecodeError, ValueError, OSError) as exc:
             logger.warning(f"Failed to read manifest {mf}: {exc}")
 
     return {"count": len(costs), "costs": costs}
@@ -257,7 +257,7 @@ async def analyze_multi_file(
                 file_dfs[filename] = pl.read_parquet(io.BytesIO(content))
             else:
                 file_dfs[filename] = pl.read_csv(io.BytesIO(content), try_parse_dates=True)
-        except Exception as exc:
+        except (ValueError, UnicodeDecodeError, OSError) as exc:
             raise HTTPException(status_code=400, detail=f"Failed to read '{filename}': {exc}")
 
     classifier = FileClassifier()
@@ -298,7 +298,7 @@ async def analyze_multi_file(
                 "warnings": preview.warnings,
                 "sample_rows": preview.sample_rows.head(20).to_dicts() if preview.sample_rows is not None else [],
             }
-        except Exception as exc:
+        except (ValueError, KeyError, RuntimeError) as exc:
             result["merge_error"] = str(exc)
 
     return result

@@ -133,7 +133,7 @@ async def compute_shap(
                 df = pl.read_parquet(io.BytesIO(content))
             else:
                 df = pl.read_csv(io.BytesIO(content), try_parse_dates=True)
-        except Exception as exc:
+        except (ValueError, UnicodeDecodeError, OSError) as exc:
             raise HTTPException(status_code=400, detail=f"Failed to read file: {exc}")
     else:
         # Try loading from data_dir
@@ -225,7 +225,7 @@ async def decompose_forecast(
             forecast = pl.read_parquet(io.BytesIO(forecast_content))
         else:
             forecast = pl.read_csv(io.BytesIO(forecast_content), try_parse_dates=True)
-    except Exception as exc:
+    except (ValueError, UnicodeDecodeError, OSError) as exc:
         raise HTTPException(status_code=400, detail=f"Failed to read files: {exc}")
 
     explainer = ForecastExplainer(season_length=season_length)
@@ -265,7 +265,7 @@ async def compare_forecasts(
 
         ef = external_file.filename or ""
         ext_df = pl.read_parquet(io.BytesIO(ext_content)) if ef.endswith(".parquet") else pl.read_csv(io.BytesIO(ext_content), try_parse_dates=True)
-    except Exception as exc:
+    except (ValueError, UnicodeDecodeError, OSError) as exc:
         raise HTTPException(status_code=400, detail=f"Failed to read files: {exc}")
 
     comparator = ForecastComparator()
@@ -302,7 +302,7 @@ async def constrain_forecast(
             df = pl.read_parquet(io.BytesIO(content))
         else:
             df = pl.read_csv(io.BytesIO(content), try_parse_dates=True)
-    except Exception as exc:
+    except (ValueError, UnicodeDecodeError, OSError) as exc:
         raise HTTPException(status_code=400, detail=f"Failed to read file: {exc}")
 
     constrained = df.clone()

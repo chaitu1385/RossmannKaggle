@@ -114,7 +114,7 @@ forecasting-product/
 │   │   └── sku/            # SKU mapping, override management panels
 │   ├── src/hooks/          # React Query hooks + useAsyncOperation utility
 │   └── src/lib/            # API client, auth, types, constants
-├── tests/                  # 1060+ tests (pytest)
+├── tests/                  # 1281 tests (pytest)
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
 └── notebooks/              # Jupyter notebooks for exploration
@@ -163,7 +163,7 @@ Helper functions: `get_frequency_profile(freq)` returns the profile dict; `freq_
 - Framework: pytest
 - Test files mirror source structure with `test_` prefix
 - Helper fixtures use `_make_*` factory functions (e.g., `_make_weekly_actuals`)
-- 1099+ tests across 49 test files
+- 1281 tests across 53 test files
 - Key test modules: `test_platform.py` (85 tests), `test_sku_mapping.py` (81), `test_ai_*.py` (73), `test_forecast_explainability.py` (59), `test_intermittent_demand.py` (55), `test_observability.py` (41), `test_file_classifier.py` (26), `test_file_merger.py` (20)
 
 ## Key Dependencies
@@ -182,6 +182,6 @@ When adding a new module or capability, update these files:
 4. **`EDGE_CASES.md`** (root) — Add an entry if the feature handles a new failure mode (what happens, how we handle it, what to watch for).
 5. **`ARCHITECTURE.md`** (root) — Visual Mermaid diagrams showing system overview, data flow, pipeline sequences, and component interactions. Update if adding new subsystems or changing data flow.
 6. **`QUICKSTART.md`** (root) — Get-running-in-2-minutes guide. Update if setup steps, Docker config, or prerequisites change.
-7. **`docs/`** (directory) — User-facing guides: `DATA_FORMAT.md` (input/output schemas), `DEPLOYMENT.md` (deployment & config), `USER_GUIDE.md` (end-to-end usage), `TROUBLESHOOTING.md` (common issues & FAQ). Update the relevant guide when adding user-visible features or changing data schemas.
+7. **`docs/`** (directory) — User-facing guides: `DATA_FORMAT.md` (input/output schemas), `DEPLOYMENT.md` (deployment & config), `USER_GUIDE.md` (end-to-end usage), `TROUBLESHOOTING.md` (common issues & FAQ), `FRONTEND.md` (frontend architecture & component reference). Update the relevant guide when adding user-visible features or changing data schemas.
 
 These are the only documentation files in the repo. All other docs (plans, specs, analyses) are transient working documents — delete them once the work is merged.

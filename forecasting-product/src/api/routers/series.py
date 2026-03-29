@@ -262,7 +262,7 @@ async def _read_upload_or_lob(file, request: Request, lob):
             if filename.endswith(".parquet"):
                 return pl.read_parquet(io.BytesIO(content))
             return pl.read_csv(io.BytesIO(content), try_parse_dates=True)
-        except Exception as exc:
+        except (ValueError, UnicodeDecodeError, OSError) as exc:
             raise HTTPException(status_code=400, detail=f"Failed to read file: {exc}")
     elif lob:
         return _load_actuals(request.app.state.data_dir, lob)
