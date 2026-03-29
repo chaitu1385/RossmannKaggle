@@ -22,6 +22,9 @@ class ForecastPoint(BaseModel):
     forecast: float
     model: Optional[str] = None
     lob: Optional[str] = None
+    forecast_p10: Optional[float] = None
+    forecast_p50: Optional[float] = None
+    forecast_p90: Optional[float] = None
 
 
 class ForecastResponse(BaseModel):

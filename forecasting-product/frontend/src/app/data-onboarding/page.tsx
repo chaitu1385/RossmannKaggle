@@ -186,6 +186,20 @@ export default function DataOnboardingPage() {
           <section className="space-y-3">
             <h2 className="text-lg font-semibold">Recommended Configuration</h2>
             <ConfigViewer yaml={result.recommended_config_yaml} />
+            <button
+              onClick={() => {
+                const blob = new Blob([result.recommended_config_yaml], { type: "text/yaml" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `${lobName}_config.yaml`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="rounded-md border bg-background px-4 py-1.5 text-sm font-medium hover:bg-muted transition-colors"
+            >
+              Download YAML
+            </button>
           </section>
 
           {/* Multi-File Classification & Merge */}

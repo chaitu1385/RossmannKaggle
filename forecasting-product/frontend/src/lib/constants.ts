@@ -4,7 +4,7 @@
 
 import type { Role } from "./types";
 
-// ── Colors (match Streamlit utils.py) ────────────────────────────────────────
+// ── Colors ──────────────────────────────────────────────────────────────────
 
 export const COLORS = {
   primary: "#1f77b4",

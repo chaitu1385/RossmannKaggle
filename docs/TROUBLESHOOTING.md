@@ -250,7 +250,7 @@ Yes. The platform is fully usable via:
 - **Python API** — Import classes directly (see Quick Start in README)
 - **REST API** — All endpoints available via HTTP
 
-The Streamlit dashboard is a convenience layer, not a requirement.
+The Next.js frontend is a convenience layer, not a requirement.
 
 ---
 
@@ -343,7 +343,7 @@ if len(failures) > 0:
 
 ### Docker volume mounts
 
-**Issue:** Forecast/metric files aren't visible between API and Streamlit containers.
+**Issue:** Forecast/metric files aren't visible between API and frontend containers.
 
 **Fix:** Both services must share the same data volume:
 ```yaml

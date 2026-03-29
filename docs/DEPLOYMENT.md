@@ -14,12 +14,11 @@ cd Forecasting-Platform
 docker compose up
 ```
 
-This starts three services:
+This starts two services:
 
 | Service | Port | URL |
 |---------|------|-----|
 | REST API (FastAPI) | 8000 | http://localhost:8000/docs (Swagger UI) |
-| Dashboard (Streamlit) | 8501 | http://localhost:8501 |
 | Frontend (Next.js) | 3000 | http://localhost:3000 |
 
 Both services share a data volume at `./forecasting-product/data`.
@@ -42,7 +41,7 @@ ANTHROPIC_API_KEY=sk-ant-... docker compose up
 
 ### Docker Health Check
 
-The API service has a built-in health check hitting `GET /health` every 30 seconds. The Streamlit service waits for the API to be healthy before starting.
+The API service has a built-in health check hitting `GET /health` every 30 seconds. The Next.js service waits for the API to be healthy before starting.
 
 ---
 
@@ -82,15 +81,7 @@ CLI arguments:
 
 Environment variables `API_DATA_DIR` and `API_METRICS_DIR` override their CLI counterparts.
 
-### Start the Dashboard
-
-```bash
-streamlit run forecasting-product/streamlit/app.py
-```
-
-Opens at http://localhost:8501.
-
-### Start the Next.js Frontend (Alternative UI)
+### Start the Next.js Frontend
 
 Requires Node.js 18+. The frontend connects to the FastAPI backend over REST.
 

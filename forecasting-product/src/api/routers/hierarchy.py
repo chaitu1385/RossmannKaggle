@@ -63,6 +63,17 @@ async def build_hierarchy(
     s_matrix = tree.summing_matrix()
     s_sample = s_matrix.head(20).to_dicts() if not s_matrix.is_empty() else []
 
+    # Build flat tree_nodes list for sunburst visualization
+    tree_nodes = []
+    for level in level_list:
+        for node in tree.get_nodes(level):
+            tree_nodes.append({
+                "key": node.key,
+                "level": level,
+                "parent": node.parent.key if node.parent else "",
+                "is_leaf": node.is_leaf,
+            })
+
     return {
         "name": name,
         "levels": level_list,
@@ -71,6 +82,7 @@ async def build_hierarchy(
         "leaf_count": len(leaves),
         "s_matrix_shape": [s_matrix.height, s_matrix.width],
         "s_matrix_sample": s_sample,
+        "tree_nodes": tree_nodes,
     }
 
 

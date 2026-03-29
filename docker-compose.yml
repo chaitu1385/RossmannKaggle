@@ -25,26 +25,6 @@ services:
         reservations:
           memory: 512M
 
-  streamlit:
-    build:
-      context: .
-      target: streamlit
-    ports:
-      - "8501:8501"
-    environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-    volumes:
-      - ./forecasting-product/data:/app/forecasting-product/data
-    depends_on:
-      - api
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 1G
-        reservations:
-          memory: 256M
-
   frontend:
     build:
       context: ./forecasting-product/frontend

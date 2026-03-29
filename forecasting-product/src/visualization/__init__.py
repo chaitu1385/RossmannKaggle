@@ -3,7 +3,7 @@ Visualization module — SWD-style chart helpers for the Forecasting Platform.
 
 Provides consistent, publication-quality chart builders following
 Storytelling with Data (SWD) principles. Both matplotlib (static export)
-and Plotly (Streamlit / interactive) helpers are available.
+and Plotly (interactive) helpers are available.
 
 Usage:
     from src.visualization.chart_helpers import (

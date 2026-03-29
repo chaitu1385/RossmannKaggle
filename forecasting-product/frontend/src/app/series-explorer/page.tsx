@@ -7,9 +7,12 @@ import { MetricCard } from "@/components/shared/metric-card";
 import { DataTable } from "@/components/data/data-table";
 import { Skeleton } from "@/components/shared/loading-skeleton";
 import { DEMAND_CLASS_COLORS } from "@/lib/constants";
+import { BreakTimeline } from "@/components/charts/break-timeline";
+import { CleansingOverlay } from "@/components/charts/cleansing-overlay";
 import { api } from "@/lib/api-client";
 import type {
   SeriesItem,
+  SeriesHistoryPoint,
   BreakDetectionResponse,
   CleansingAuditResponse,
   RegressorScreenResponse,
@@ -70,6 +73,9 @@ function SeriesExplorerContent() {
   const [regressors, setRegressors] = useState<RegressorScreenResponse | null>(null);
   const [regressorsLoading, setRegressorsLoading] = useState(true);
   const [regressorsError, setRegressorsError] = useState<string | null>(null);
+
+  // Series history (for charts)
+  const [seriesHistory, setSeriesHistory] = useState<SeriesHistoryPoint[]>([]);
 
   // Fetch series list
   const fetchSeries = useCallback(async () => {
@@ -137,6 +143,14 @@ function SeriesExplorerContent() {
     fetchCleansing();
     fetchRegressors();
   }, [fetchSeries, fetchBreaks, fetchCleansing, fetchRegressors]);
+
+  // Fetch series history when selected series changes
+  useEffect(() => {
+    if (!selectedSeries || !lob) return;
+    api.getSeriesHistory(lob, selectedSeries)
+      .then((res) => setSeriesHistory(res.points))
+      .catch(() => setSeriesHistory([]));
+  }, [lob, selectedSeries]);
 
   // Derived: selected series details
   const currentSeries = seriesList.find((s) => s.series_id === selectedSeries);
@@ -293,6 +307,21 @@ function SeriesExplorerContent() {
                   ))}
                 </div>
               )}
+              {/* Break timeline chart for selected series */}
+              {selectedSeries && seriesHistory.length > 0 && (() => {
+                const seriesBreaks = breaks.per_series.find(
+                  (s) => (s as Record<string, unknown>).series_id === selectedSeries
+                ) as Record<string, unknown> | undefined;
+                const breakDates = Array.isArray(seriesBreaks?.break_dates)
+                  ? (seriesBreaks.break_dates as string[])
+                  : [];
+                return breakDates.length > 0 ? (
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs font-medium mb-1">{selectedSeries} — Breaks</p>
+                    <BreakTimeline data={seriesHistory} breakDates={breakDates} height={220} />
+                  </div>
+                ) : null;
+              })()}
               {breaks.per_series.length > 0 && (
                 <DataTable
                   columns={[
@@ -328,6 +357,34 @@ function SeriesExplorerContent() {
                 <MetricCard label="Stockout Series" value={cleansing.series_with_stockouts} />
                 <MetricCard label="Stockout Periods" value={cleansing.total_stockout_periods} />
               </div>
+              {/* Cleansing before/after chart for selected series */}
+              {selectedSeries && seriesHistory.length > 0 && cleansing.cleansed_preview.length > 0 && (() => {
+                // Build overlay data: match original history with cleansed preview
+                const cleanedRows = cleansing.cleansed_preview.filter(
+                  (r) => (r as Record<string, unknown>).series_id === selectedSeries
+                ) as Record<string, unknown>[];
+                if (cleanedRows.length === 0) return null;
+                // Build a week→cleaned map
+                const cleanedMap = new Map<string, number>();
+                for (const r of cleanedRows) {
+                  const w = String(r.week ?? r.date ?? "");
+                  const v = Number(r.quantity ?? r.target ?? r.value ?? r.demand ?? 0);
+                  if (w) cleanedMap.set(w, v);
+                }
+                const overlayData = seriesHistory.map((h) => ({
+                  week: h.week,
+                  original: h.value,
+                  cleaned: cleanedMap.get(h.week) ?? h.value,
+                  is_outlier: cleanedMap.has(h.week) && Math.abs((cleanedMap.get(h.week) ?? h.value) - h.value) > 0.01,
+                }));
+                const hasChanges = overlayData.some((d) => d.is_outlier);
+                return hasChanges ? (
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs font-medium mb-1">{selectedSeries} — Before/After Cleansing</p>
+                    <CleansingOverlay data={overlayData} height={220} />
+                  </div>
+                ) : null;
+              })()}
               {cleansing.per_series.length > 0 && (
                 <DataTable
                   columns={[

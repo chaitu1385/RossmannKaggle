@@ -32,6 +32,9 @@ export interface ForecastPoint {
   forecast: number;
   model?: string;
   lob?: string;
+  forecast_p10?: number;
+  forecast_p50?: number;
+  forecast_p90?: number;
 }
 
 export interface ForecastResponse {
@@ -205,6 +208,17 @@ export interface SeriesListResponse {
   series: SeriesItem[];
 }
 
+export interface SeriesHistoryPoint {
+  week: string;
+  value: number;
+}
+
+export interface SeriesHistoryResponse {
+  series_id: string;
+  lob: string;
+  points: SeriesHistoryPoint[];
+}
+
 export interface BreakDetectionResponse {
   total_series: number;
   series_with_breaks: number;
@@ -239,6 +253,13 @@ export interface RegressorScreenResponse {
 
 // ── Hierarchy ────────────────────────────────────────────────────────────────
 
+export interface HierarchyTreeNode {
+  key: string;
+  level: string;
+  parent: string;
+  is_leaf: boolean;
+}
+
 export interface HierarchyBuildResponse {
   name: string;
   levels: string[];
@@ -247,6 +268,7 @@ export interface HierarchyBuildResponse {
   leaf_count: number;
   s_matrix_shape: [number, number];
   s_matrix_sample: Record<string, unknown>[];
+  tree_nodes: HierarchyTreeNode[];
 }
 
 export interface HierarchyAggregateResponse {
