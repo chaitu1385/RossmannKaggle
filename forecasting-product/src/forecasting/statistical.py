@@ -49,7 +49,7 @@ class _StatsforecastBase(BaseForecaster):
         self._time_col: str = "week"
         self._target_col: str = "quantity"
 
-    def _get_model(self):
+    def _get_model(self) -> Any:
         raise NotImplementedError
 
     def fit(
@@ -182,7 +182,7 @@ class AutoARIMAForecaster(_StatsforecastBase):
 
     name = "auto_arima"
 
-    def _get_model(self):
+    def _get_model(self) -> Any:
         return _AutoARIMA(season_length=self.season_length)
 
     def get_params(self) -> Dict[str, Any]:
@@ -195,7 +195,7 @@ class AutoETSForecaster(_StatsforecastBase):
 
     name = "auto_ets"
 
-    def _get_model(self):
+    def _get_model(self) -> Any:
         return _AutoETS(season_length=self.season_length)
 
     def get_params(self) -> Dict[str, Any]:
@@ -231,7 +231,7 @@ class AutoThetaForecaster(_StatsforecastBase):
         super().__init__(season_length=season_length, frequency=frequency)
         self.decomposition_type = decomposition_type
 
-    def _get_model(self):
+    def _get_model(self) -> Any:
         return _AutoTheta(
             season_length=self.season_length,
             decomposition_type=self.decomposition_type,
@@ -277,7 +277,7 @@ class MSTLForecaster(_StatsforecastBase):
         super().__init__(season_length=season_length, frequency=frequency)
         self.secondary_season_length = secondary_season_length
 
-    def _get_model(self):
+    def _get_model(self) -> Any:
         season_lengths = [self.season_length]
         if self.secondary_season_length is not None:
             season_lengths.append(self.secondary_season_length)

@@ -126,8 +126,12 @@ class SparkForecastPipeline:
         ])
 
         def _forecast_partition(pdf):
-            """Called once per series partition.  Runs entirely on the executor."""
-            import pandas as pd
+            """Called once per series partition.  Runs entirely on the executor.
+
+            Note: ``applyInPandas`` requires pandas DataFrames at the boundary.
+            All internal processing uses Polars.
+            """
+            import pandas as pd  # Spark applyInPandas requires pandas DataFrame
             import polars as pl
 
             from src.forecasting.registry import registry
@@ -224,9 +228,13 @@ class SparkForecastPipeline:
         ])
 
         def _backtest_partition(pdf):
-            """Per-series backtest.  Runs entirely on the executor."""
+            """Per-series backtest.  Runs entirely on the executor.
+
+            Note: ``applyInPandas`` requires pandas DataFrames at the boundary.
+            All internal processing uses Polars.
+            """
             import numpy as np
-            import pandas as pd
+            import pandas as pd  # Spark applyInPandas requires pandas DataFrame
             import polars as pl
 
             from src.forecasting.registry import registry

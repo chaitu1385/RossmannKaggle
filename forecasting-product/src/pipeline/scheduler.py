@@ -151,7 +151,7 @@ class PipelineScheduler:
         self._running = True
         scheduler = sched.scheduler(time.time, time.sleep)
 
-        def _run():
+        def _run() -> None:
             if not self._running:
                 return
             self.run_once()

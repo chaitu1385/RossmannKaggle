@@ -6,7 +6,7 @@ from a JWT token and check permissions before the endpoint executes.
 """
 
 import logging
-from typing import Optional
+from typing import Callable, Coroutine, Any, Optional
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -78,7 +78,7 @@ async def get_current_user(
     return user
 
 
-def require_permission(permission: Permission):
+def require_permission(permission: Permission) -> Callable[..., Coroutine[Any, Any, User]]:
     """
     FastAPI dependency factory: ensure the current user has a specific permission.
 
@@ -104,7 +104,7 @@ def require_permission(permission: Permission):
     return _check
 
 
-def require_role(*roles: Role):
+def require_role(*roles: Role) -> Callable[..., Coroutine[Any, Any, User]]:
     """
     FastAPI dependency factory: ensure the current user has one of the specified roles.
 

@@ -76,13 +76,20 @@ def main():
     X_val = train_df.iloc[split_idx:][feature_cols]
     y_val = train_df.iloc[split_idx:][target]
 
+    # Convert to Polars for model API (models accept pl.DataFrame / pl.Series)
+    import polars as pl
+    X_train_pl = pl.from_pandas(X_train)
+    y_train_pl = pl.from_pandas(y_train)
+    X_val_pl = pl.from_pandas(X_val)
+    y_val_pl = pl.from_pandas(y_val)
+
     logger.info("Training model")
     model = build_model(config)
-    model.fit(X_train, y_train, X_val, y_val)
+    model.fit(X_train_pl, y_train_pl, X_val_pl, y_val_pl)
 
     logger.info("Evaluating model")
     evaluator = ModelEvaluator()
-    scores = evaluator.evaluate(model, X_val, y_val)
+    scores = evaluator.evaluate(model, X_val_pl, y_val_pl)
     for metric, score in scores.items():
         logger.info(f"  {metric}: {score:.4f}")
 

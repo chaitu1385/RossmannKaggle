@@ -10,6 +10,7 @@ Handles:
   4. Accepting user-provided future features via ``set_future_features``.
 """
 
+import datetime
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -34,8 +35,8 @@ class MLForecastFeatureManager:
 
     def __init__(self, feature_types: Optional[Dict[str, str]] = None) -> None:
         self._feature_cols: List[str] = []
-        self._train_pdf: Optional[Any] = None  # pandas DataFrame
-        self._future_features: Optional[Any] = None  # pandas DataFrame
+        self._train: Optional[pl.DataFrame] = None
+        self._future_features: Optional[pl.DataFrame] = None
         # Maps column name → "known_ahead" | "contemporaneous"
         self._feature_types: Dict[str, str] = feature_types or {}
 
@@ -95,30 +96,35 @@ class MLForecastFeatureManager:
         """
         self.detect_features(df, id_col, time_col, target_col)
 
-        # Core columns
-        pdf = (
-            df.select([id_col, time_col, target_col])
-            .rename({id_col: "unique_id", time_col: "ds", target_col: "y"})
-            .to_pandas()
+        # Core columns (keep in Polars)
+        core_pl = df.select([id_col, time_col, target_col]).rename(
+            {id_col: "unique_id", time_col: "ds", target_col: "y"}
         )
-        pdf["ds"] = pdf["ds"].astype("datetime64[ns]")
-        self._train_pdf = pdf
+        # Store Polars version for internal use
+        self._train = core_pl
 
         if not self._feature_cols:
+            # External library (mlforecast) requires pandas DataFrame
+            pdf = core_pl.to_pandas()
+            pdf["ds"] = pdf["ds"].astype("datetime64[ns]")
             return pdf
 
-        # Merge external features (only usable ones)
-        exog_pdf = (
-            df.select([id_col, time_col] + self._feature_cols)
-            .rename({id_col: "unique_id", time_col: "ds"})
-            .to_pandas()
+        # Merge external features using Polars
+        exog_pl = df.select([id_col, time_col] + self._feature_cols).rename(
+            {id_col: "unique_id", time_col: "ds"}
         )
-        exog_pdf["ds"] = exog_pdf["ds"].astype("datetime64[ns]")
-        pdf_with_features = pdf.merge(exog_pdf, on=["unique_id", "ds"], how="left")
-        pdf_with_features[self._feature_cols] = (
-            pdf_with_features[self._feature_cols].fillna(0)
+        merged_pl = core_pl.join(exog_pl, on=["unique_id", "ds"], how="left")
+        merged_pl = merged_pl.with_columns(
+            [pl.col(c).fill_null(0) for c in self._feature_cols]
         )
-        return pdf_with_features
+
+        # Store training data with features for prepare_predict
+        self._train = merged_pl
+
+        # External library (mlforecast) requires pandas DataFrame
+        pdf = merged_pl.to_pandas()
+        pdf["ds"] = pdf["ds"].astype("datetime64[ns]")
+        return pdf
 
     def _get_feature_type(self, col: str) -> str:
         """Return the temporal type for a feature column."""
@@ -164,37 +170,50 @@ class MLForecastFeatureManager:
 
         # User-provided future features take priority
         if self._future_features is not None:
-            return self._future_features
+            # External library (mlforecast) requires pandas DataFrame
+            pdf = self._future_features.to_pandas()
+            pdf["ds"] = pdf["ds"].astype("datetime64[ns]")
+            return pdf
 
         # Determine which features can be forward-filled
         eligible_cols = self._eligible_predict_cols()
         if not eligible_cols:
             return None
 
-        # Forward-fill fallback (known-ahead features only)
-        if self._train_pdf is None:
+        # Forward-fill fallback (known-ahead features only) using Polars
+        if self._train is None:
             return None
 
-        last_ds = self._train_pdf["ds"].max()
-        uids = self._train_pdf["unique_id"].unique()
-        future_rows = []
-        for uid in uids:
-            uid_data = self._train_pdf[self._train_pdf["unique_id"] == uid]
-            last_row = uid_data.iloc[-1]
-            for h in range(1, horizon + 1):
-                row: Dict[str, Any] = {
-                    "unique_id": uid,
-                    "ds": last_ds + pd.Timedelta(weeks=h),
-                }
-                for col in eligible_cols:
-                    row[col] = (
-                        float(last_row.get(col, 0))
-                        if col in uid_data.columns
-                        else 0.0
-                    )
-                future_rows.append(row)
+        last_ds = self._train.select(pl.col("ds").max()).item()
+        # Get the last row per unique_id with eligible feature values
+        last_per_series = (
+            self._train
+            .sort("ds")
+            .group_by("unique_id")
+            .last()
+        )
 
-        return pd.DataFrame(future_rows)
+        # Build future rows for each series and horizon step
+        future_frames = []
+        for h in range(1, horizon + 1):
+            future_ds = last_ds + datetime.timedelta(weeks=h)
+            frame = last_per_series.select(
+                [pl.col("unique_id"), pl.lit(future_ds).alias("ds")]
+                + [
+                    pl.col(c).fill_null(0.0).cast(pl.Float64).alias(c)
+                    if c in last_per_series.columns
+                    else pl.lit(0.0).alias(c)
+                    for c in eligible_cols
+                ]
+            )
+            future_frames.append(frame)
+
+        future_pl = pl.concat(future_frames)
+
+        # External library (mlforecast) requires pandas DataFrame
+        pdf = future_pl.to_pandas()
+        pdf["ds"] = pdf["ds"].astype("datetime64[ns]")
+        return pdf
 
     def set_future_features(
         self,
@@ -204,16 +223,16 @@ class MLForecastFeatureManager:
     ) -> None:
         """Set user-provided external feature values for the forecast horizon."""
         if future_features is not None and not future_features.is_empty():
-            self._future_features = (
-                future_features
-                .rename({id_col: "unique_id", time_col: "ds"})
-                .to_pandas()
-            )
-            self._future_features["ds"] = self._future_features["ds"].astype(
-                "datetime64[ns]"
+            self._future_features = future_features.rename(
+                {id_col: "unique_id", time_col: "ds"}
             )
 
     @property
     def train_pdf(self) -> Optional["pd.DataFrame"]:
         """Stored training pandas DataFrame (for quantile model retraining)."""
-        return self._train_pdf
+        if self._train is None:
+            return None
+        # External library (mlforecast) requires pandas DataFrame
+        pdf = self._train.to_pandas()
+        pdf["ds"] = pdf["ds"].astype("datetime64[ns]")
+        return pdf

@@ -24,7 +24,7 @@ Usage
 
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import polars as pl
 
@@ -403,7 +403,7 @@ class MultiFileMerger:
         right: pl.DataFrame,
         right_filename: str,
         join_keys: List[str],
-    ) -> tuple:
+    ) -> Tuple[List[str], pl.DataFrame]:
         """Rename conflicting non-key columns in *right*.
 
         Returns

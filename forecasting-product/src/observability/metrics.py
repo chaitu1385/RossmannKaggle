@@ -26,7 +26,7 @@ import json
 import logging
 import time
 from contextlib import contextmanager
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 from .context import PipelineContext
 
@@ -120,7 +120,7 @@ class MetricsEmitter:
         self.emit(name, value, metric_type="gauge", **tags)
 
     @contextmanager
-    def timer(self, name: str, **tags: Any):
+    def timer(self, name: str, **tags: Any) -> Generator[None, None, None]:
         """
         Context manager that emits ``{name}_duration_seconds`` on exit.
 

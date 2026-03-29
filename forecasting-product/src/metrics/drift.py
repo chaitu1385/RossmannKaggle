@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional
+from typing import Iterator, List, Optional, Tuple
 
 import polars as pl
 
@@ -352,7 +352,7 @@ class ForecastDriftDetector:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _iter_series(self, df: pl.DataFrame):
+    def _iter_series(self, df: pl.DataFrame) -> Iterator[Tuple[str, pl.DataFrame]]:
         """Yield ``(series_id, group_df)`` sorted by ``target_week``."""
         for series_id in df["series_id"].unique().sort().to_list():
             group = (
@@ -363,7 +363,7 @@ class ForecastDriftDetector:
 
     def _split_windows(
         self, group: pl.DataFrame
-    ):
+    ) -> Tuple[pl.DataFrame, pl.DataFrame]:
         """
         Split a single-series DataFrame into (baseline_df, recent_df).
 

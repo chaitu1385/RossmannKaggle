@@ -7,7 +7,7 @@ thresholds and correction actions are driven by ``CleansingConfig``.
 
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import List
+from typing import List, Tuple
 
 import polars as pl
 
@@ -418,7 +418,7 @@ class DemandCleanser:
         time_col: str,
         value_col: str,
         sid_col: str,
-    ) -> tuple:
+    ) -> Tuple[pl.DataFrame, int]:
         """Apply configured period exclusions.  Returns (df, excluded_week_count)."""
         total_excluded = 0
 

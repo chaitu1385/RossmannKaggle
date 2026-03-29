@@ -16,6 +16,7 @@ from typing import Optional
 import polars as pl
 
 from ..config.schema import PlatformConfig, get_frequency_profile
+from ..utils.gap_fill import fill_gaps as _shared_fill_gaps
 from .transition import TransitionEngine
 
 logger = logging.getLogger(__name__)
@@ -282,34 +283,14 @@ class SeriesBuilder:
         value_col: str,
         fill_value: float = 0.0,
     ) -> pl.DataFrame:
-        """Fill missing weeks for each series."""
-        if df.is_empty():
-            return df
-
-        min_date = df[time_col].min()
-        max_date = df[time_col].max()
-
-        if min_date is None or max_date is None:
-            return df
-
-        _interval_map = {"D": "1d", "W": "1w", "M": "1mo", "Q": "1q"}
+        """Fill missing periods for each series using shared utility."""
         freq = getattr(self, "_frequency", "W")
-        interval = _interval_map.get(freq, "1w")
-        all_weeks = pl.date_range(
-            min_date, max_date, interval=interval, eager=True
-        ).alias(time_col)
-        all_weeks_df = pl.DataFrame({time_col: all_weeks})
-
-        series_ids = df.select(sid_col).unique()
-        complete_grid = series_ids.join(all_weeks_df, how="cross")
-
-        filled = complete_grid.join(
-            df, on=[sid_col, time_col], how="left"
+        return _shared_fill_gaps(
+            df,
+            time_col=time_col,
+            id_col=sid_col,
+            target_col=value_col,
+            fill_value=fill_value,
+            strategy="zero",
+            freq=freq,
         )
-
-        if value_col in filled.columns:
-            filled = filled.with_columns(
-                pl.col(value_col).fill_null(fill_value)
-            )
-
-        return filled

@@ -10,7 +10,7 @@ Gracefully degrades when Claude is unavailable.
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import polars as pl
 
@@ -116,7 +116,7 @@ class NaturalLanguageQueryEngine(AIFeatureBase):
         ml_model: Optional[Any],
         features_df: Optional[pl.DataFrame],
         comparison: Optional[pl.DataFrame],
-    ) -> tuple:
+    ) -> Tuple[Dict[str, Any], List[str]]:
         """Collect available data into a context dict for the prompt."""
         context: Dict[str, Any] = {}
         sources: List[str] = []

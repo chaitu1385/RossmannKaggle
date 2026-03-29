@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 
-import pandas as pd
+import polars as pl
 
 
 class FeatureEngineer:
@@ -16,83 +16,99 @@ class FeatureEngineer:
         self.lag_periods = lag_periods or [1, 7, 14, 30]
         self.rolling_windows = rolling_windows or [7, 14, 30]
 
-    def create_temporal_features(self, df: pd.DataFrame, date_col: str = "Date") -> pd.DataFrame:
+    def create_temporal_features(self, df: pl.DataFrame, date_col: str = "Date") -> pl.DataFrame:
         """Extract temporal features from a date column."""
-        df = df.copy()
-        df[date_col] = pd.to_datetime(df[date_col])
+        df = df.with_columns(pl.col(date_col).cast(pl.Date))
 
-        df["Year"] = df[date_col].dt.year
-        df["Month"] = df[date_col].dt.month
-        df["Day"] = df[date_col].dt.day
-        df["DayOfWeek"] = df[date_col].dt.dayofweek
-        df["WeekOfYear"] = df[date_col].dt.isocalendar().week.astype(int)
-        df["Quarter"] = df[date_col].dt.quarter
-        df["IsWeekend"] = (df["DayOfWeek"] >= 5).astype(int)
-        df["IsMonthStart"] = df[date_col].dt.is_month_start.astype(int)
-        df["IsMonthEnd"] = df[date_col].dt.is_month_end.astype(int)
+        df = df.with_columns([
+            pl.col(date_col).dt.year().alias("Year"),
+            pl.col(date_col).dt.month().alias("Month"),
+            pl.col(date_col).dt.day().alias("Day"),
+            pl.col(date_col).dt.weekday().alias("DayOfWeek"),
+            pl.col(date_col).dt.week().alias("WeekOfYear"),
+            pl.col(date_col).dt.quarter().alias("Quarter"),
+            (pl.col(date_col).dt.weekday() >= 5).cast(pl.Int64).alias("IsWeekend"),
+            (pl.col(date_col).dt.day() == 1).cast(pl.Int64).alias("IsMonthStart"),
+            pl.col(date_col).dt.month_end().alias("_month_end"),
+        ])
+
+        df = df.with_columns(
+            (pl.col(date_col) == pl.col("_month_end")).cast(pl.Int64).alias("IsMonthEnd")
+        ).drop("_month_end")
 
         return df
 
     def create_lag_features(
         self,
-        df: pd.DataFrame,
+        df: pl.DataFrame,
         target_col: str = "Sales",
         group_col: str = "Store",
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Create lag features grouped by store."""
-        df = df.copy().sort_values([group_col, "Date"])
+        df = df.sort([group_col, "Date"])
 
-        for lag in self.lag_periods:
-            col_name = f"{target_col}_lag_{lag}"
-            df[col_name] = df.groupby(group_col)[target_col].shift(lag)
+        lag_exprs = [
+            pl.col(target_col).shift(lag).over(group_col).alias(f"{target_col}_lag_{lag}")
+            for lag in self.lag_periods
+        ]
+        df = df.with_columns(lag_exprs)
 
         return df
 
     def create_rolling_features(
         self,
-        df: pd.DataFrame,
+        df: pl.DataFrame,
         target_col: str = "Sales",
         group_col: str = "Store",
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Create rolling statistics grouped by store."""
-        df = df.copy().sort_values([group_col, "Date"])
+        df = df.sort([group_col, "Date"])
 
+        exprs = []
         for window in self.rolling_windows:
-            group = df.groupby(group_col)[target_col]
-            df[f"{target_col}_roll_mean_{window}"] = group.transform(
-                lambda x: x.shift(1).rolling(window, min_periods=1).mean()
+            exprs.append(
+                pl.col(target_col)
+                .shift(1)
+                .rolling_mean(window_size=window, min_periods=1)
+                .over(group_col)
+                .alias(f"{target_col}_roll_mean_{window}")
             )
-            df[f"{target_col}_roll_std_{window}"] = group.transform(
-                lambda x: x.shift(1).rolling(window, min_periods=1).std()
+            exprs.append(
+                pl.col(target_col)
+                .shift(1)
+                .rolling_std(window_size=window, min_periods=1)
+                .over(group_col)
+                .alias(f"{target_col}_roll_std_{window}")
             )
+        df = df.with_columns(exprs)
 
         return df
 
-    def create_competition_features(self, df: pd.DataFrame) -> pd.DataFrame:
+    def create_competition_features(self, df: pl.DataFrame) -> pl.DataFrame:
         """Create competition-related features."""
-        df = df.copy()
-
         if "CompetitionOpenSinceMonth" in df.columns and "Date" in df.columns:
-            df["CompetitionOpen"] = (
-                12 * (df["Year"] - df["CompetitionOpenSinceYear"])
-                + (df["Month"] - df["CompetitionOpenSinceMonth"])
-            ).clip(lower=0)
+            df = df.with_columns(
+                (
+                    12 * (pl.col("Year") - pl.col("CompetitionOpenSinceYear"))
+                    + (pl.col("Month") - pl.col("CompetitionOpenSinceMonth"))
+                ).clip(lower_bound=0).alias("CompetitionOpen")
+            )
 
         return df
 
-    def create_promo_features(self, df: pd.DataFrame) -> pd.DataFrame:
+    def create_promo_features(self, df: pl.DataFrame) -> pl.DataFrame:
         """Create promotion-related features."""
-        df = df.copy()
-
         if "Promo2SinceWeek" in df.columns and "WeekOfYear" in df.columns:
-            df["Promo2Open"] = (
-                12 * (df["Year"] - df["Promo2SinceYear"])
-                + (df["WeekOfYear"] - df["Promo2SinceWeek"]) / 4.0
-            ).clip(lower=0)
+            df = df.with_columns(
+                (
+                    12 * (pl.col("Year") - pl.col("Promo2SinceYear"))
+                    + (pl.col("WeekOfYear") - pl.col("Promo2SinceWeek")) / 4.0
+                ).clip(lower_bound=0).alias("Promo2Open")
+            )
 
         return df
 
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pl.DataFrame) -> pl.DataFrame:
         """Apply all feature engineering steps."""
         df = self.create_temporal_features(df)
         df = self.create_lag_features(df)

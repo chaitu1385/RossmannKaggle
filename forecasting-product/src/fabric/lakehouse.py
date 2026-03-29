@@ -18,7 +18,7 @@ Usage
 
 import logging
 import re
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from .config import FabricConfig
 
@@ -60,7 +60,7 @@ class FabricLakehouse:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         partition_filter: Optional[str] = None,
-    ):
+    ) -> Any:
         """
         Read a Delta table from the Lakehouse with optional partition pruning.
 
@@ -149,7 +149,7 @@ class FabricLakehouse:
 
         return df
 
-    def read_file(self, subpath: str, format: str = "parquet", **options):
+    def read_file(self, subpath: str, format: str = "parquet", **options) -> Any:
         """
         Read an unmanaged file from the Lakehouse Files root.
 
@@ -298,7 +298,7 @@ class FabricLakehouse:
 
     # ── history ───────────────────────────────────────────────────────────────
 
-    def history(self, table_name: str, limit: int = 10):
+    def history(self, table_name: str, limit: int = 10) -> Any:
         """Return the Delta transaction log history for a table."""
         path = self.config.table_path(table_name)
         return self.spark.sql(f"DESCRIBE HISTORY delta.`{path}` LIMIT {limit}")

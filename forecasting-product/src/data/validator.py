@@ -8,7 +8,7 @@ and completeness before any processing occurs in the pipeline.
 import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import polars as pl
 
@@ -144,7 +144,7 @@ class DataValidator:
         target_col: str,
         time_col: str,
         id_col: str,
-    ) -> tuple:
+    ) -> Tuple[List[ValidationIssue], List[str]]:
         """Validate required columns exist and have correct types.
 
         Returns (issues, missing_column_names).
@@ -190,7 +190,7 @@ class DataValidator:
         df: pl.DataFrame,
         time_col: str,
         id_col: str,
-    ) -> tuple:
+    ) -> Tuple[List[ValidationIssue], int]:
         """Detect duplicate (id_col, time_col) pairs.
 
         Returns (issues, duplicate_count).
@@ -219,7 +219,7 @@ class DataValidator:
         time_col: str,
         id_col: str,
         frequency: str = "W",
-    ) -> tuple:
+    ) -> Tuple[List[ValidationIssue], int]:
         """Validate consistent intervals per series for the given frequency.
 
         Parameters
@@ -266,7 +266,7 @@ class DataValidator:
         self,
         df: pl.DataFrame,
         target_col: str,
-    ) -> tuple:
+    ) -> Tuple[List[ValidationIssue], int]:
         """Check for values outside allowed range.
 
         Returns (issues, negative_count).

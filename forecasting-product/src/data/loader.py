@@ -3,7 +3,6 @@
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
-import pandas as pd
 import polars as pl
 
 
@@ -55,25 +54,31 @@ class DataLoader:
     def __init__(self, data_dir: str):
         self.data_dir = Path(data_dir)
 
-    def load_train(self) -> pd.DataFrame:
+    def load_train(self) -> pl.DataFrame:
         """Load training data."""
         path = self.data_dir / "train.csv"
-        df = pd.read_csv(path, parse_dates=["Date"], low_memory=False)
+        if not path.exists():
+            raise FileNotFoundError(f"No such file or directory: '{path}'")
+        df = pl.read_csv(str(path), try_parse_dates=True)
         return df
 
-    def load_test(self) -> pd.DataFrame:
+    def load_test(self) -> pl.DataFrame:
         """Load test data."""
         path = self.data_dir / "test.csv"
-        df = pd.read_csv(path, parse_dates=["Date"], low_memory=False)
+        if not path.exists():
+            raise FileNotFoundError(f"No such file or directory: '{path}'")
+        df = pl.read_csv(str(path), try_parse_dates=True)
         return df
 
-    def load_store(self) -> pd.DataFrame:
+    def load_store(self) -> pl.DataFrame:
         """Load store metadata."""
         path = self.data_dir / "store.csv"
-        df = pd.read_csv(path, low_memory=False)
+        if not path.exists():
+            raise FileNotFoundError(f"No such file or directory: '{path}'")
+        df = pl.read_csv(str(path))
         return df
 
-    def load_all(self) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    def load_all(self) -> Tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
         """Load all datasets and return (train, test, store)."""
         train = self.load_train()
         test = self.load_test()
@@ -81,7 +86,7 @@ class DataLoader:
         return train, test, store
 
     def merge_with_store(
-        self, df: pd.DataFrame, store: pd.DataFrame
-    ) -> pd.DataFrame:
+        self, df: pl.DataFrame, store: pl.DataFrame
+    ) -> pl.DataFrame:
         """Merge sales data with store metadata."""
-        return df.merge(store, on="Store", how="left")
+        return df.join(store, on="Store", how="left")
