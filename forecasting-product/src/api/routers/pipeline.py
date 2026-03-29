@@ -21,10 +21,10 @@ router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
 @router.post("/backtest")
 async def run_backtest(
+    request: Request,
     file: UploadFile = File(..., description="Actuals CSV/Parquet"),
     config_file: Optional[UploadFile] = File(None, description="YAML config file"),
     lob: str = Query("default", description="LOB name"),
-    request: Request,
     user: User = Depends(require_permission(Permission.RUN_BACKTEST)),
 ):
     """Run the backtest pipeline on uploaded data."""
@@ -50,6 +50,7 @@ async def run_backtest(
             config_dict = yaml.safe_load(config_content.decode("utf-8"))
             config = PlatformConfig(**config_dict) if config_dict else PlatformConfig(lob=lob)
         except Exception:
+            logging.getLogger(__name__).warning("Invalid config file, using defaults for lob=%s", lob, exc_info=True)
             config = PlatformConfig(lob=lob)
     else:
         from ...config.schema import PlatformConfig
@@ -78,12 +79,12 @@ async def run_backtest(
 
 @router.post("/forecast")
 async def run_forecast(
+    request: Request,
     file: UploadFile = File(..., description="Actuals CSV/Parquet"),
     config_file: Optional[UploadFile] = File(None, description="YAML config file"),
     lob: str = Query("default", description="LOB name"),
     model_id: Optional[str] = Query(None, description="Specific model to use"),
     horizon: int = Query(12, description="Forecast horizon in periods"),
-    request: Request,
     user: User = Depends(require_permission(Permission.RUN_PIPELINE)),
 ):
     """Run the forecast pipeline on uploaded data."""
@@ -108,6 +109,7 @@ async def run_forecast(
             config_dict = yaml.safe_load(config_content.decode("utf-8"))
             config = PlatformConfig(**config_dict) if config_dict else PlatformConfig(lob=lob)
         except Exception:
+            logging.getLogger(__name__).warning("Invalid config file, using defaults for lob=%s", lob, exc_info=True)
             config = PlatformConfig(lob=lob)
     else:
         from ...config.schema import PlatformConfig
@@ -139,9 +141,9 @@ async def run_forecast(
 
 @router.get("/manifests")
 def list_manifests(
+    request: Request,
     lob: Optional[str] = Query(None, description="Filter by LOB"),
     limit: int = Query(20, ge=1, le=100),
-    request: Request,
     user: User = Depends(require_permission(Permission.VIEW_METRICS)),
 ):
     """List recent pipeline run manifests."""
@@ -186,9 +188,9 @@ def list_manifests(
 
 @router.get("/costs")
 def get_costs(
+    request: Request,
     lob: Optional[str] = Query(None),
     limit: int = Query(20, ge=1, le=100),
-    request: Request,
     user: User = Depends(require_permission(Permission.VIEW_METRICS)),
 ):
     """Get cost tracking data from pipeline manifests."""

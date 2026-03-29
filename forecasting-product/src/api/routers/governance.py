@@ -61,9 +61,9 @@ def get_model_card(
 
 @router.get("/lineage")
 def get_lineage(
+    request: Request,
     lob: Optional[str] = Query(None),
     model_id: Optional[str] = Query(None),
-    request: Request,
     user: User = Depends(get_current_user),
 ):
     """Get forecast lineage history."""
@@ -89,10 +89,10 @@ def get_lineage(
 @router.post("/export/{report_type}")
 def bi_export(
     report_type: str,
+    request: Request,
     lob: str = Query(..., description="LOB name"),
     run_type: str = Query("backtest"),
     model_id: Optional[str] = Query(None),
-    request: Request,
     user: User = Depends(require_permission(Permission.VIEW_METRICS)),
 ):
     """Export BI report (forecast-actual, leaderboard, or bias-report)."""

@@ -28,6 +28,7 @@ ForecastLineage
 """
 
 import hashlib
+import logging
 import json
 from dataclasses import asdict, dataclass, field
 from datetime import date
@@ -37,6 +38,8 @@ from typing import Any, Dict, List, Optional
 import polars as pl
 
 from ..metrics.store import MetricStore
+
+logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Drift detection
@@ -251,7 +254,7 @@ class ModelCard:
                                sort_keys=True).encode()
                 ).hexdigest()[:8]
             except Exception:
-                pass
+                logger.debug("Failed to compute config hash", exc_info=True)
 
         return cls(
             model_name=model_name,
@@ -342,7 +345,7 @@ class ModelCardRegistry:
                     )
                     self._cards[card.model_name] = card
             except Exception:
-                pass
+                logger.debug("Failed to load model cards from storage", exc_info=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

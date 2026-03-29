@@ -74,13 +74,13 @@ def list_series(
 
 @router.post("/breaks")
 async def detect_breaks(
+    request: Request,
     file: Optional[UploadFile] = File(None),
     lob: Optional[str] = Query(None, description="LOB to load actuals from data_dir"),
     method: str = Query("cusum", description="Detection method: 'cusum' or 'pelt'"),
     penalty: float = Query(3.0, description="PELT penalty (higher = fewer breaks)"),
     min_segment_length: int = Query(13, description="Min periods between breaks"),
     max_breakpoints: int = Query(5),
-    request: Request,
     user: User = Depends(get_current_user),
 ):
     """Detect structural breaks in time series data."""
@@ -116,6 +116,7 @@ async def detect_breaks(
 
 @router.post("/cleansing-audit")
 async def cleansing_audit(
+    request: Request,
     file: Optional[UploadFile] = File(None),
     lob: Optional[str] = Query(None),
     outlier_method: str = Query("iqr", description="'iqr' or 'zscore'"),
@@ -124,7 +125,6 @@ async def cleansing_audit(
     outlier_action: str = Query("clip", description="'clip', 'interpolate', or 'flag_only'"),
     stockout_detection: bool = Query(True),
     min_zero_run: int = Query(2),
-    request: Request,
     user: User = Depends(get_current_user),
 ):
     """Run demand cleansing and return before/after audit report."""
@@ -169,6 +169,7 @@ async def cleansing_audit(
 
 @router.post("/regressor-screen")
 async def regressor_screen(
+    request: Request,
     file: Optional[UploadFile] = File(None),
     lob: Optional[str] = Query(None),
     feature_columns: Optional[str] = Query(None, description="Comma-separated feature column names"),
@@ -176,7 +177,6 @@ async def regressor_screen(
     variance_threshold: float = Query(1e-6),
     correlation_threshold: float = Query(0.95),
     mi_enabled: bool = Query(False),
-    request: Request,
     user: User = Depends(get_current_user),
 ):
     """Screen regressors for variance, correlation, and mutual information."""

@@ -20,12 +20,15 @@ Usage::
 
 from __future__ import annotations
 
+import logging
 import math
 from datetime import timedelta
 from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 import polars as pl
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Distribution profiling
@@ -182,7 +185,7 @@ def profile_temporal_patterns(
                 dow_counts["n"].to_list(),
             ))
         except Exception:
-            pass
+            logger.debug("Failed to compute day-of-week pattern", exc_info=True)
 
     # Monthly pattern
     monthly_pattern = {}
@@ -201,7 +204,7 @@ def profile_temporal_patterns(
                     [round(v, 2) for v in mo_agg["mean"].to_list()],
                 ))
     except Exception:
-        pass
+        logger.debug("Failed to compute monthly pattern", exc_info=True)
 
     # Trend detection
     trend = "insufficient_data"
