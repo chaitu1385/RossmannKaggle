@@ -29,7 +29,7 @@ def list_model_cards(
 
     try:
         cards_df = registry.all_cards()
-    except Exception as exc:
+    except (FileNotFoundError, OSError, ValueError) as exc:
         raise HTTPException(status_code=500, detail=f"Failed to read model cards: {exc}")
 
     if cards_df is None or cards_df.is_empty():
@@ -78,7 +78,7 @@ def get_lineage(
 
     try:
         history = lineage.history(lob=lob, model_id=model_id)
-    except Exception as exc:
+    except (FileNotFoundError, OSError, ValueError) as exc:
         raise HTTPException(status_code=500, detail=f"Failed to read lineage: {exc}")
 
     if history is None or history.is_empty():
@@ -121,7 +121,7 @@ def bi_export(
             path = exporter.export_leaderboard(
                 metric_store=store, lob=lob, run_type=run_type,
             )
-        except Exception as exc:
+        except (FileNotFoundError, OSError, ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=500, detail=f"Export failed: {exc}")
         return {"report_type": report_type, "export_path": str(path), "status": "exported"}
 
@@ -131,7 +131,7 @@ def bi_export(
             path = exporter.export_bias_report(
                 metric_store=store, lob=lob, model_id=model_id, run_type=run_type,
             )
-        except Exception as exc:
+        except (FileNotFoundError, OSError, ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=500, detail=f"Export failed: {exc}")
         return {"report_type": report_type, "export_path": str(path), "status": "exported"}
 
@@ -166,7 +166,7 @@ def bi_export(
             path = exporter.export_forecast_vs_actual(
                 forecasts=forecasts, actuals=actuals, lob=lob,
             )
-        except Exception as exc:
+        except (FileNotFoundError, OSError, ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=500, detail=f"Export failed: {exc}")
 
         return {"report_type": report_type, "export_path": str(path), "status": "exported"}

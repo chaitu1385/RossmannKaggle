@@ -204,8 +204,13 @@ def create_app(
 
     @app.get("/health", response_model=HealthResponse, tags=["system"])
     def health():
-        """Liveness probe — returns 200 OK when the service is running."""
-        return HealthResponse(status="ok", version=_API_VERSION)
+        """Readiness probe — returns dependency health checks."""
+        checks = {
+            "data_dir": app.state.data_dir.is_dir(),
+            "metrics_dir": app.state.metrics_dir.is_dir(),
+        }
+        status = "ok" if all(checks.values()) else "degraded"
+        return HealthResponse(status=status, version=_API_VERSION, checks=checks)
 
     # Dev token endpoint — only registered when API_DEV_MODE=1
     if os.environ.get("API_DEV_MODE", "1" if not auth_enabled else "0") == "1":
@@ -468,7 +473,7 @@ def create_app(
             else:
                 # Default to CSV
                 df = pl.read_csv(io.BytesIO(content), try_parse_dates=True)
-        except Exception as exc:
+        except (ValueError, UnicodeDecodeError, OSError) as exc:
             raise HTTPException(
                 status_code=400,
                 detail=f"Failed to read uploaded file: {exc}",
@@ -549,7 +554,7 @@ def create_app(
             from ..metrics.store import MetricStore
             store = MetricStore(str(app.state.metrics_dir))
             metrics_df = store.read(lob=request.lob, run_type="backtest")
-        except Exception:
+        except (FileNotFoundError, OSError, ValueError, KeyError):
             logger.debug("Could not load metrics for NL query (lob=%s)", request.lob, exc_info=True)
 
         # Load history data if available
@@ -561,7 +566,7 @@ def create_app(
                 try:
                     history_df = pl.read_parquet(parquet_files[-1])
                     history_df = history_df.filter(pl.col("series_id") == request.series_id)
-                except Exception:
+                except (FileNotFoundError, OSError, ValueError) as _exc:
                     logger.debug("Could not load history for NL query (series=%s)", request.series_id, exc_info=True)
 
         engine = NaturalLanguageQueryEngine()
@@ -653,7 +658,7 @@ def create_app(
         leaderboard = None
         try:
             leaderboard = store.leaderboard(lob=request.lob, run_type=request.run_type)
-        except Exception:
+        except (FileNotFoundError, OSError, ValueError, KeyError):
             logger.warning("Could not load leaderboard for config tuner (lob=%s)", request.lob, exc_info=True)
 
         # Use default config (in production, load from config file)
@@ -713,7 +718,7 @@ def create_app(
         leaderboard = None
         try:
             leaderboard = store.leaderboard(lob=request.lob, run_type=request.run_type)
-        except Exception:
+        except (FileNotFoundError, OSError, ValueError, KeyError):
             logger.warning("Could not load leaderboard for commentary (lob=%s)", request.lob, exc_info=True)
 
         engine = CommentaryEngine()

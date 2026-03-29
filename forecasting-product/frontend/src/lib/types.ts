@@ -22,6 +22,7 @@ export interface User {
 export interface HealthResponse {
   status: string;
   version: string;
+  checks?: Record<string, boolean>;
 }
 
 // ── Forecast ─────────────────────────────────────────────────────────────────

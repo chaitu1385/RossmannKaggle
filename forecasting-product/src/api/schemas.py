@@ -11,8 +11,9 @@ from pydantic import BaseModel, Field
 
 
 class HealthResponse(BaseModel):
-    status: str = Field(description="'ok' when the service is healthy")
+    status: str = Field(description="'ok' or 'degraded'")
     version: str = Field(description="API version string")
+    checks: Optional[Dict[str, bool]] = Field(None, description="Dependency health checks")
 
 
 class ForecastPoint(BaseModel):

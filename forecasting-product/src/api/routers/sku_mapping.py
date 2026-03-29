@@ -32,7 +32,7 @@ async def run_phase1(
     content = await validate_upload_size(product_master)
     try:
         df = pl.read_csv(io.BytesIO(content), try_parse_dates=True)
-    except Exception as exc:
+    except (ValueError, UnicodeDecodeError, OSError) as exc:
         raise HTTPException(status_code=400, detail=f"Failed to read product master: {exc}")
 
     pipeline = build_phase1_pipeline(
@@ -43,7 +43,7 @@ async def run_phase1(
 
     try:
         mappings = pipeline.run(df)
-    except Exception as exc:
+    except (ValueError, RuntimeError, KeyError) as exc:
         raise HTTPException(status_code=500, detail=f"Phase 1 mapping failed: {exc}")
 
     return {
@@ -69,7 +69,7 @@ async def run_phase2(
     content = await validate_upload_size(product_master)
     try:
         pm_df = pl.read_csv(io.BytesIO(content), try_parse_dates=True)
-    except Exception as exc:
+    except (ValueError, UnicodeDecodeError, OSError) as exc:
         raise HTTPException(status_code=400, detail=f"Failed to read product master: {exc}")
 
     sales_df = None
@@ -77,7 +77,7 @@ async def run_phase2(
         sales_content = await validate_upload_size(sales_history)
         try:
             sales_df = pl.read_csv(io.BytesIO(sales_content), try_parse_dates=True)
-        except Exception as exc:
+        except (ValueError, UnicodeDecodeError, OSError) as exc:
             raise HTTPException(status_code=400, detail=f"Failed to read sales history: {exc}")
 
     pipeline = build_phase2_pipeline(
@@ -90,7 +90,7 @@ async def run_phase2(
 
     try:
         mappings = pipeline.run(pm_df)
-    except Exception as exc:
+    except (ValueError, RuntimeError, KeyError) as exc:
         raise HTTPException(status_code=500, detail=f"Phase 2 mapping failed: {exc}")
 
     return {
