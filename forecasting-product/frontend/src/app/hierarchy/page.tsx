@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { api } from "@/lib/api-client";
 import { MetricCard } from "@/components/shared/metric-card";
+import { HierarchySunburst } from "@/components/charts/hierarchy-sunburst";
 import type {
   HierarchyBuildResponse,
   HierarchyAggregateResponse,
@@ -208,6 +209,15 @@ export default function HierarchyPage() {
                 <p className="text-lg font-semibold">{buildResult.s_matrix_shape[0]} x {buildResult.s_matrix_shape[1]}</p>
               </div>
             </div>
+            {/* Sunburst visualization */}
+            {buildResult.tree_nodes && buildResult.tree_nodes.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold mb-2">Hierarchy Tree</h3>
+                <div className="rounded-lg border p-2">
+                  <HierarchySunburst nodes={buildResult.tree_nodes} height={400} />
+                </div>
+              </div>
+            )}
           </div>
         )}
       </section>

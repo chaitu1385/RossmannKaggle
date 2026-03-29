@@ -151,7 +151,7 @@ holidays_df = generate_holiday_calendar(
 
 ---
 
-## Multi-File Upload (Streamlit)
+## Multi-File Upload
 
 When uploading multiple files via the Data Onboarding page, the platform auto-classifies each file into a role.
 
@@ -288,7 +288,7 @@ The bundled Rossmann dataset (`data/rossmann/`) provides a ready-to-use demo:
 | `store.csv` | Dimension | 1,115 | `Store` (join key), `StoreType`, `Assortment`, `CompetitionDistance` |
 | `test.csv` | Future features | 41K+ | `Store`, `Date`, `Open`, `Promo` (no `Sales` — forecast target) |
 
-Load the demo via the Streamlit Data Onboarding page (one-click) or programmatically:
+Load the demo via the Data Onboarding page or programmatically:
 
 ```python
 import polars as pl

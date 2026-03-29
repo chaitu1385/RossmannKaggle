@@ -65,7 +65,6 @@ graph TD
 
     subgraph Consumers["Consumers"]
         API["FastAPI REST<br/><small>auth-protected</small>"]
-        ST["Streamlit Dashboard<br/><small>8 pages</small>"]
         NX["Next.js Frontend<br/><small>8 pages, REST client</small>"]
         AI["AI Features<br/><small>NL Query, Triage,<br/>Commentary, Config Tuner</small>"]
     end
@@ -87,7 +86,7 @@ graph TD
     BP --> REC
     FP --> REC
     HT & AGG --> REC
-    MS & FS & MF --> API & ST
+    MS & FS & MF --> API
     API --> AI
     BP & FP --> LOG & MET & ALR & CST
     LOG & MET --> AL
@@ -473,7 +472,7 @@ graph TD
 
 ## 5. Data Onboarding
 
-The Streamlit multi-file upload workflow: classify files, merge them, analyze the result, and generate a recommended config.
+The multi-file upload workflow: classify files, merge them, analyze the result, and generate a recommended config.
 
 ```mermaid
 graph TD
@@ -545,15 +544,15 @@ graph LR
 
 ---
 
-## 6. API & Dashboard
+## 6. API & Frontend
 
-How external consumers — REST clients, dashboard users, and AI features — access the platform.
+How external consumers — REST clients, frontend users, and AI features — access the platform.
 
 ```mermaid
 graph TD
     subgraph Clients["External Clients"]
         REST["REST API Clients"]
-        BROWSER["Browser<br/><small>Streamlit Dashboard</small>"]
+        BROWSER["Browser<br/><small>Next.js Frontend</small>"]
     end
 
     subgraph Auth["Authentication"]
@@ -574,17 +573,6 @@ graph TD
         AIE4["/ai/commentary"]
     end
 
-    subgraph Dashboard["Streamlit Pages"]
-        P1["1. Data Onboarding<br/><small>upload → classify →<br/>merge → config</small>"]
-        P2["2. Series Explorer<br/><small>SBC, breaks, quality,<br/>cleansing, AI Q&A</small>"]
-        P3["3. SKU Transitions<br/><small>mapping, overrides,<br/>transition viz</small>"]
-        P4["4. Hierarchy Manager<br/><small>tree, aggregation,<br/>reconciliation</small>"]
-        P5["5. Backtest Results<br/><small>leaderboard, FVA,<br/>champion map</small>"]
-        P6["6. Forecast Viewer<br/><small>fan chart, decomposition,<br/>narrative</small>"]
-        P7["7. Platform Health<br/><small>manifests, drift,<br/>cost tracking</small>"]
-        P8["8. S&OP Meeting<br/><small>commentary, governance,<br/>BI export</small>"]
-    end
-
     subgraph DataStores["Data Stores"]
         MS2["MetricStore<br/><small>Parquet</small>"]
         FS2["Forecast Files<br/><small>Parquet</small>"]
@@ -593,21 +581,11 @@ graph TD
     end
 
     REST --> JWT --> RBAC --> APILayer
-    BROWSER --> Dashboard
+    BROWSER --> JWT
 
     F2 & F3 --> FS2
     L & D --> MS2
-    AN --> P1
     AIE1 & AIE2 & AIE3 & AIE4 --> CLAUDE2
-
-    P1 -.->|session_state| P5
-    P5 -.->|selected_series_id| P6
-    P7 -.->|drift_alerts| P6
-
-    P5 --> MS2
-    P6 --> FS2
-    P7 --> MF2 & MS2
-    P8 --> CLAUDE2
 ```
 
 ### Deep Dive: API Endpoint Map
@@ -625,52 +603,9 @@ graph TD
 | `POST` | `/ai/recommend-config` | `write:config` | Claude API | Config tuning recommendations |
 | `POST` | `/ai/commentary` | `read:ai` | Claude API | Executive forecast commentary |
 
-### Deep Dive: Streamlit Session State Flow
-
-Cross-page navigation uses `st.session_state` to pass context between pages.
-
-```mermaid
-graph LR
-    subgraph Page1["Page 1: Data Onboarding"]
-        AC["accepted_config"]
-        AR["analysis_report"]
-    end
-
-    subgraph Page2["Page 2: Series Explorer"]
-        SQ["series_quality"]
-        BC["break_candidates"]
-    end
-
-    subgraph Page5["Page 5: Backtest Results"]
-        CB["Config Banner<br/><small>shows accepted_config</small>"]
-        SS["selected_series_id"]
-    end
-
-    subgraph Page6["Page 6: Forecast Viewer"]
-        PS["Pre-select series<br/><small>from selected_series_id</small>"]
-        DI["Drift indicators<br/><small>from drift_alerts</small>"]
-    end
-
-    subgraph Page7["Page 7: Platform Health"]
-        DA["drift_alerts"]
-        SL["Series links<br/><small>→ Forecast Viewer</small>"]
-    end
-
-    subgraph Page8["Page 8: S&OP Meeting"]
-        CM["commentary"]
-    end
-
-    AC -->|session_state| CB
-    AR -->|session_state| CB
-    AR -->|session_state| SQ
-    SS -->|session_state| PS
-    DA -->|session_state| DI
-    SL -->|session_state| PS
-```
-
 ### Deep Dive: Next.js Frontend
 
-The Next.js frontend is an alternative UI that communicates with the same FastAPI backend over REST. It mirrors the 8-page workflow but runs as a standalone Node.js application.
+The Next.js frontend communicates with the FastAPI backend over REST. It provides the 8-page workflow UI and runs as a standalone Node.js application.
 
 ```mermaid
 graph TB
@@ -687,7 +622,7 @@ graph TB
 
     NC -->|HTTP/JSON| EP
 
-    subgraph LiveFeatures["Live (API-connected)"]
+    subgraph LiveFeatures["Core Features"]
         LF1["File upload / analysis"]
         LF2["Model leaderboard"]
         LF3["Drift alerts + audit log"]

@@ -133,7 +133,7 @@ action_title(ax, "LightGBM achieves lowest WMAPE", subtitle="Backtest results")
 save_chart(fig, "outputs/leaderboard.png")
 ```
 
-### Plotly (Streamlit dashboard)
+### Plotly (interactive charts)
 
 ```python
 from src.visualization.plotly_theme import apply_swd_plotly_theme, swd_plotly_layout

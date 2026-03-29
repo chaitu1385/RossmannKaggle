@@ -24,13 +24,10 @@ python -m pytest forecasting-product/tests/test_platform.py -v
 # Start the REST API server
 python forecasting-product/scripts/serve.py --port 8000 --data-dir data/
 
-# Start Streamlit dashboard
-streamlit run forecasting-product/streamlit/app.py
-
-# Start Next.js frontend (alternative UI)
+# Start Next.js frontend
 cd forecasting-product/frontend && npm install && npm run dev
 
-# Docker quick-start (API + Streamlit + Next.js)
+# Docker quick-start (API + Next.js)
 docker compose up
 
 # Run forecast pipeline
@@ -108,18 +105,6 @@ forecasting-product/
 │   ├── spark/              # PySpark distributed execution
 │   ├── fabric/             # Microsoft Fabric / Delta Lake deployment
 │   └── analytics/          # BI export, comparators, explainability, governance, FVA
-├── streamlit/              # Streamlit dashboard (8 pages)
-│   ├── app.py              # Main entry point / landing page (4 persona paths)
-│   ├── utils.py            # Shared helpers, colour palette, AI utilities
-│   └── pages/              # Streamlit multi-page layout (workflow-ordered)
-│       ├── 1_Data_Onboarding.py    # Upload CSV → DataAnalyzer → cleansing preview → config
-│       ├── 2_Series_Explorer.py    # SBC classification, breaks, quality, cleansing audit, AI Q&A
-│       ├── 3_SKU_Transitions.py    # SKU mapping pipeline, planner overrides, transition viz
-│       ├── 4_Hierarchy_Manager.py  # Hierarchy tree, aggregation, reconciliation (MinT/OLS/WLS)
-│       ├── 5_Backtest_Results.py   # Leaderboard, FVA, champions, calibration, SHAP, AI config tuner
-│       ├── 6_Forecast_Viewer.py    # Fan chart, decomposition, AI NL query, comparison, constraints
-│       ├── 7_Platform_Health.py    # Manifests, drift + AI triage, audit log, cost tracking
-│       └── 8_SOP_Meeting.py        # AI commentary, cross-run comparison, governance, BI export
 ├── frontend/               # Next.js 15 frontend (TypeScript, Tailwind, Recharts)
 │   ├── src/app/            # App Router pages (login + 8 workflow pages)
 │   ├── src/components/     # Reusable components (charts, AI panels, layout, shared)
@@ -185,8 +170,7 @@ Helper functions: `get_frequency_profile(freq)` returns the profile dict; `freq_
 ## Key Dependencies
 
 Core: polars, statsforecast, mlforecast, lightgbm, xgboost, scikit-learn, fastapi, pyyaml, duckdb
-Dashboard: streamlit, plotly
-Frontend: next, react, typescript, tailwindcss, recharts, @tanstack/react-query, next-auth
+Frontend: next, react, typescript, tailwindcss, recharts, @tanstack/react-query, next-auth, plotly
 Optional: neuralforecast, pyspark, shap, pyjwt, bcrypt, holidays, delta-spark, azure-identity
 
 ## Documentation Convention

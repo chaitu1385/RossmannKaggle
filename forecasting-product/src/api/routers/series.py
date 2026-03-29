@@ -72,6 +72,30 @@ def list_series(
     return {"lob": lob, "series_count": len(items), "series": items}
 
 
+@router.get("/{lob}/{series_id}/history")
+def get_series_history(
+    lob: str,
+    series_id: str,
+    request: Request,
+    user: User = Depends(get_current_user),
+):
+    """Return raw time series data for a single series."""
+    df = _load_actuals(request.app.state.data_dir, lob)
+
+    id_col, time_col, target_col = _detect_columns(df)
+    series_df = df.filter(pl.col(id_col) == series_id).sort(time_col)
+
+    if series_df.is_empty():
+        raise HTTPException(status_code=404, detail=f"Series '{series_id}' not found in LOB '{lob}'.")
+
+    points = [
+        {"week": str(row[time_col]), "value": float(row[target_col])}
+        for row in series_df.iter_rows(named=True)
+    ]
+
+    return {"series_id": series_id, "lob": lob, "points": points}
+
+
 @router.post("/breaks")
 async def detect_breaks(
     request: Request,

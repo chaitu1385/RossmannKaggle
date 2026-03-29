@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { TimeSeriesLine } from "@/components/charts/time-series-line";
+import { FanChart } from "@/components/charts/fan-chart";
 import { NLQueryPanel } from "@/components/ai/nl-query-panel";
 import { MetricCard } from "@/components/shared/metric-card";
 import { ErrorDisplay } from "@/components/shared/error-boundary";
@@ -34,8 +35,14 @@ export default function ForecastPage() {
         week: p.week,
         forecast: p.forecast,
         model: p.model || "unknown",
+        forecast_p10: p.forecast_p10,
+        forecast_p50: p.forecast_p50,
+        forecast_p90: p.forecast_p90,
       }));
   }, [data, selectedSeries]);
+
+  // Check if quantile data is available
+  const hasQuantiles = seriesPoints.some((p) => p.forecast_p10 != null && p.forecast_p90 != null);
 
   // Auto-select first series
   if (seriesIds.length > 0 && !selectedSeries) {
@@ -128,13 +135,24 @@ export default function ForecastPage() {
             </section>
           )}
 
-          {/* Fan Chart note */}
-          <section className="rounded-lg border p-6">
-            <h2 className="text-lg font-semibold">Fan Chart (P10-P90)</h2>
-            <p className="text-sm text-muted-foreground mt-2">
-              Fan chart requires quantile columns (p10, p25, p50, p75, p90) in forecast data. Available when prediction intervals are enabled in config.
-            </p>
-          </section>
+          {/* Fan Chart */}
+          {hasQuantiles && seriesPoints.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-lg font-semibold">Fan Chart (P10–P90)</h2>
+              <div className="rounded-lg border p-4">
+                <FanChart data={seriesPoints} height={380} />
+              </div>
+            </section>
+          )}
+          {!hasQuantiles && (
+            <section className="rounded-lg border p-6">
+              <h2 className="text-lg font-semibold">Fan Chart (P10–P90)</h2>
+              <p className="text-sm text-muted-foreground mt-2">
+                Fan chart requires quantile columns (forecast_p10, forecast_p50, forecast_p90) in forecast data.
+                Enable prediction intervals in config to generate these.
+              </p>
+            </section>
+          )}
 
           {/* Decomposition */}
           <DecompositionPanel />

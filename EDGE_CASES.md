@@ -215,13 +215,13 @@ A catalog of the failure modes that break forecasting platforms — what goes wr
 
 ---
 
-## 20. Large File Uploads in Streamlit Dashboard
+## 20. Large File Uploads in Frontend
 
-**What happens:** A user uploads a CSV with millions of rows via the Data Onboarding page. `DataAnalyzer.analyze()` runs synchronously in the Streamlit event loop, causing the page to hang or time out. Streamlit's default upload limit is 200 MB, but even smaller files can exhaust memory on constrained containers.
+**What happens:** A user uploads a CSV with millions of rows via the Data Onboarding page. The FastAPI `/analyze` endpoint runs `DataAnalyzer.analyze()` synchronously, which can time out for very large files. Memory consumption grows with file size.
 
-**How the platform handles it:** The `DataAnalyzer.analyze()` call is wrapped with `@st.cache_data`, so repeat analyses of the same data are instant. Plotly charts render client-side, avoiding server-side image generation bottlenecks. Each page shows graceful empty states (info messages) when no data is loaded, so the app never crashes on missing inputs. The Rossmann sample dataset (18 MB, 1M rows) is bundled as a one-click demo to bypass upload friction.
+**How the platform handles it:** The analysis endpoint processes data server-side and returns a structured response. The Next.js frontend renders charts client-side using Recharts and Plotly, avoiding server-side image generation bottlenecks. Each page shows graceful empty/loading states when no data is loaded. The Rossmann sample dataset (18 MB, 1M rows) is bundled as a demo to bypass upload friction.
 
-**What to watch for:** Streamlit re-runs the entire page script on every widget interaction. Heavy computations (DataAnalyzer, FVA cascade) must be cached or they re-execute on every click. If users upload datasets larger than the Rossmann sample, consider adding `st.session_state` checkpoints to avoid redundant recomputation. The Docker container should be provisioned with at least 2 GB RAM for datasets with 1000+ series.
+**What to watch for:** For datasets larger than the Rossmann sample, API request timeouts may need to be increased. The Docker API container should be provisioned with at least 2 GB RAM for datasets with 1000+ series. Consider adding file size validation on the frontend to warn users before uploading very large files.
 
 
 ---
@@ -279,4 +279,4 @@ A catalog of the failure modes that break forecasting platforms — what goes wr
 
 **How the product handles it:** The Forecast Viewer page downsamples data for chart rendering when the point count exceeds a threshold. The API's `/forecast/compare` endpoint supports a `max_points` parameter that returns pre-aggregated data. Individual series charts are paginated — only the selected series renders at full resolution.
 
-**What to watch for:** Comparison views overlaying multiple series are the worst case for rendering performance. If the browser becomes unresponsive, reduce the number of series shown simultaneously. Consider switching to the Streamlit dashboard for ad-hoc exploration of very large datasets, as Plotly handles large point counts more efficiently than SVG-based Recharts.
+**What to watch for:** Comparison views overlaying multiple series are the worst case for rendering performance. If the browser becomes unresponsive, reduce the number of series shown simultaneously. For very large datasets, the Plotly-based charts (fan chart, sunburst) handle large point counts more efficiently than SVG-based Recharts components.

@@ -127,18 +127,6 @@ forecasting-product/
 │   ├── sku_mapping/        # New/discontinued SKU mapping (4 methods + Bayesian fusion)
 │   ├── spark/              # PySpark distributed execution layer
 │   └── utils/              # Logger, config utilities
-├── streamlit/              # Streamlit dashboard (8 pages)
-│   ├── app.py              # Landing page
-│   ├── utils.py            # Shared helpers, colours, data loaders
-│   └── pages/              # Multi-page layout
-│       ├── 1_Data_Onboarding.py    # CSV → DataAnalyzer → config recommendation
-│       ├── 2_Series_Explorer.py    # SBC classification, breaks, quality, cleansing audit, AI Q&A
-│       ├── 3_SKU_Transitions.py    # SKU mapping pipeline, planner overrides, transition viz
-│       ├── 4_Hierarchy_Manager.py  # Hierarchy tree, aggregation, reconciliation (MinT/OLS/WLS)
-│       ├── 5_Backtest_Results.py   # Leaderboard, FVA cascade, champion map
-│       ├── 6_Forecast_Viewer.py    # Fan chart + decomposition + narrative
-│       ├── 7_Platform_Health.py    # Manifests, drift alerts, data quality, cost
-│       └── 8_SOP_Meeting.py        # AI commentary, cross-run comparison, governance, BI export
 ├── frontend/               # Next.js 15 frontend (TypeScript, Tailwind, Recharts)
 │   ├── src/app/            # App Router pages (login + 8 workflow pages)
 │   ├── src/components/     # Reusable components (charts, AI panels, layout, shared)
@@ -1011,39 +999,9 @@ python -m pytest forecasting-product/tests/ \
 
 ---
 
-## Streamlit Dashboard
-
-An 8-page interactive dashboard that puts the platform in a browser for data scientists, demand planners, and platform admins.
-
-| Page | Persona | What it does |
-|------|---------|-------------|
-| **1. Data Onboarding** | Data Scientist | Upload CSV → auto-detect schema, hierarchy, forecastability scores → recommended config with optional LLM narrative |
-| **2. Series Explorer** | Data Scientist | SBC demand classification, structural break detection, data quality audit, cleansing before/after, AI Q&A |
-| **3. SKU Transitions** | Data Scientist / Planner | SKU mapping pipeline (predecessor matching), planner overrides, transition visualization |
-| **4. Hierarchy Manager** | Data Scientist | Hierarchy tree visualization, aggregation, reconciliation method selection (MinT/OLS/WLS) |
-| **5. Backtest Results** | Data Scientist / Manager | Model leaderboard, FVA cascade chart (naive → statistical → ML), per-series champion map, layer leaderboard with Keep/Review/Remove |
-| **6. Forecast Viewer** | Demand Planner | Series selector → forecast line with P10/P90 fan chart, actuals overlay, seasonal decomposition, explainer narrative |
-| **7. Platform Health** | Platform Admin | Pipeline manifests, drift alerts (severity-coloured), data quality summary, compute cost tracking |
-| **8. S&OP Meeting** | Manager / S&OP Leader | AI executive commentary, cross-run forecast comparison, model governance, BI export |
-
-**Run locally:**
-```bash
-streamlit run forecasting-product/streamlit/app.py
-```
-
-**Docker quick-start** (API on port 8000, dashboard on port 8501):
-```bash
-docker compose up
-# → Open http://localhost:8501
-```
-
-The Streamlit app imports platform classes directly (DataAnalyzer, MetricStore, FVAAnalyzer, ForecastExplainer, etc.) — no network overhead, no dual-service dependency for development. Charts use Plotly for hover/zoom/pan interactivity.
-
----
-
 ## Next.js Frontend
 
-A production-grade alternative UI built with Next.js 15 (App Router), TypeScript, and Tailwind CSS. Mirrors the same 8-page workflow as the Streamlit dashboard but communicates with the FastAPI backend over REST instead of importing Python classes directly.
+A production-grade UI built with Next.js 15 (App Router), TypeScript, and Tailwind CSS. Provides an 8-page workflow and communicates with the FastAPI backend over REST.
 
 | Feature | Details |
 |---------|---------|
@@ -1052,12 +1010,12 @@ A production-grade alternative UI built with Next.js 15 (App Router), TypeScript
 | **Charts** | Recharts (bar, line, pie, area), Plotly (fan chart, sunburst, SBC scatter) |
 | **Data fetching** | TanStack React Query with typed API client |
 | **Auth** | NextAuth.js wrapping existing JWT/RBAC (5 roles) |
-| **Pages** | Login + 8 workflow pages matching Streamlit |
+| **Pages** | Login + 8 workflow pages |
 | **Dark mode** | Toggle with localStorage persistence |
 
 **Live features** (connected to existing API): file upload/analysis, model leaderboard, drift alerts, audit log, AI explain/triage/config-tuner/commentary.
 
-All frontend features are now backed by live API endpoints — no placeholder "Coming Soon" components remain.
+All frontend features are backed by live API endpoints — no placeholder "Coming Soon" components remain.
 
 **Run locally:**
 ```bash
@@ -1068,6 +1026,12 @@ npm run dev
 ```
 
 Set `NEXT_PUBLIC_API_URL=http://localhost:8000` in `.env.local` to connect to the FastAPI backend.
+
+**Docker quick-start** (API on port 8000, frontend on port 3000):
+```bash
+docker compose up
+# → Open http://localhost:3000
+```
 
 ---
 
@@ -1086,12 +1050,6 @@ rapidfuzz >= 3.0.0          # SKU name matching
 duckdb >= 0.9.0             # Override store
 pyyaml >= 5.4.0
 fastapi + uvicorn           # REST API
-```
-
-**Dashboard:**
-```
-streamlit >= 1.30.0         # Interactive web UI
-plotly >= 5.18.0            # Interactive charts (fan charts, gauges, bar charts)
 ```
 
 **Frontend** (Node.js 18+):

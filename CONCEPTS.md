@@ -209,15 +209,9 @@ Forecasting platforms generate data (metrics, drift alerts, leaderboards) that p
 
 ## Product & UX
 
-### Streamlit Dashboard
-
-A forecasting product that only data scientists can operate is incomplete — demand planners need to see forecasts, compare models, and review exceptions; platform admins need to monitor health and drift. The Streamlit dashboard provides a browser-based interface with eight pages mapped to four user personas: Data Onboarding (upload data, assess forecastability, get a recommended config), Series Explorer (SBC classification, structural breaks, cleansing audit, AI Q&A), SKU Transitions (predecessor matching, planner overrides), Hierarchy Manager (tree visualization, reconciliation), Backtest Results (model leaderboard with FVA cascade), Forecast Viewer (interactive fan chart with seasonal decomposition), Platform Health (drift alerts, pipeline manifests, compute cost), and S&OP Meeting (AI commentary, cross-run comparison, governance, BI export). It imports platform classes directly — no API round-trip — so a `docker compose up` gives a working demo in under two minutes.
-
-*Implementation: `streamlit/` — `app.py`, `pages/1_Data_Onboarding.py` through `pages/8_SOP_Meeting.py`*
-
 ### Next.js Frontend
 
-The Streamlit dashboard is ideal for rapid prototyping and direct Python class access, but production teams often need a richer client experience — role-based routing, dark mode, responsive layouts, and offline-capable caching. The Next.js frontend mirrors the same 8-page workflow but communicates with the FastAPI backend over REST, using TypeScript, Tailwind CSS, and React Query. All features are backed by live API endpoints — no placeholder components remain.
+A forecasting product that only data scientists can operate is incomplete — demand planners need to see forecasts, compare models, and review exceptions; platform admins need to monitor health and drift. The Next.js frontend provides a browser-based interface with eight pages mapped to four user personas: Data Onboarding (upload data, assess forecastability, get a recommended config), Series Explorer (SBC classification, structural breaks, cleansing audit, AI Q&A), SKU Transitions (predecessor matching, planner overrides), Hierarchy Manager (tree visualization with sunburst, reconciliation), Backtest Results (model leaderboard with FVA cascade), Forecast Viewer (interactive fan chart with seasonal decomposition), Platform Health (drift alerts, pipeline manifests, compute cost), and S&OP Meeting (AI commentary, cross-run comparison, governance, BI export). It communicates with the FastAPI backend over REST, using TypeScript, Tailwind CSS, React Query, and role-based authentication. All features are backed by live API endpoints.
 
 *Implementation: `frontend/` — Next.js 15 App Router, `src/app/` (pages), `src/components/` (charts, AI panels, layout, domain panels for forecast/governance/pipeline/sku), `src/hooks/` (React Query + useAsyncOperation), `src/lib/` (API client, auth, types)*
 

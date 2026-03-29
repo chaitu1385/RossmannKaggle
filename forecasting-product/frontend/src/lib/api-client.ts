@@ -19,6 +19,7 @@ import type {
   CommentaryResponse,
   AuditResponse,
   SeriesListResponse,
+  SeriesHistoryResponse,
   BreakDetectionResponse,
   CleansingAuditResponse,
   RegressorScreenResponse,
@@ -197,6 +198,11 @@ export const api = {
 
   listSeries: (lob: string) =>
     request<SeriesListResponse>(`/series/${encodeURIComponent(lob)}`),
+
+  getSeriesHistory: (lob: string, seriesId: string) =>
+    request<SeriesHistoryResponse>(
+      `/series/${encodeURIComponent(lob)}/${encodeURIComponent(seriesId)}/history`,
+    ),
 
   detectBreaks: (file: File, params?: { lob?: string; method?: string; penalty?: number }) => {
     const formData = new FormData();

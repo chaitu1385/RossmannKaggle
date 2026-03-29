@@ -162,12 +162,11 @@ def create_app(
         redoc_url="/redoc",
     )
 
-    # ── CORS — allow cross-origin requests from frontend (Next.js / Streamlit)
+    # ── CORS — allow cross-origin requests from frontend (Next.js)
     from fastapi.middleware.cors import CORSMiddleware
 
     _default_origins = [
         "http://localhost:3000",   # Next.js dev
-        "http://localhost:8501",   # Streamlit
         "http://localhost:8000",   # API docs (Swagger UI)
     ]
     app.add_middleware(
@@ -284,6 +283,10 @@ def create_app(
         if horizon:
             df = df.sort("week").head(horizon * df["series_id"].n_unique())
 
+        has_p10 = "forecast_p10" in df.columns
+        has_p50 = "forecast_p50" in df.columns
+        has_p90 = "forecast_p90" in df.columns
+
         points = [
             ForecastPoint(
                 series_id=row["series_id"],
@@ -291,6 +294,9 @@ def create_app(
                 forecast=float(row["forecast"]),
                 model=row.get("model"),
                 lob=lob,
+                forecast_p10=float(row["forecast_p10"]) if has_p10 and row.get("forecast_p10") is not None else None,
+                forecast_p50=float(row["forecast_p50"]) if has_p50 and row.get("forecast_p50") is not None else None,
+                forecast_p90=float(row["forecast_p90"]) if has_p90 and row.get("forecast_p90") is not None else None,
             )
             for row in df.iter_rows(named=True)
         ]

@@ -12,9 +12,7 @@ cd Forecasting-Platform
 docker compose up
 ```
 
-Open **http://localhost:8501** (Streamlit) or **http://localhost:3000** (Next.js) in your browser. That's it.
-
-<!-- screenshot: Streamlit landing page after docker compose up -->
+Open **http://localhost:3000** in your browser. That's it.
 
 ## Path B — Local Python
 
@@ -26,12 +24,18 @@ cd Forecasting-Platform
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r forecasting-product/requirements.txt
-streamlit run forecasting-product/streamlit/app.py
+python forecasting-product/scripts/serve.py --port 8000 --data-dir data/
 ```
 
-Open **http://localhost:8501** in your browser.
+Then, in a separate terminal:
 
-<!-- screenshot: Streamlit landing page running locally -->
+```bash
+cd forecasting-product/frontend
+npm install
+npm run dev
+```
+
+Open **http://localhost:3000** in your browser.
 
 ## What to do next
 
@@ -118,21 +122,6 @@ Set `ANTHROPIC_API_KEY` to enable Claude-powered features (natural-language expl
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
-
-## Alternative: Next.js Frontend
-
-The Next.js frontend starts automatically with `docker compose up` (Path A) at **http://localhost:3000**. It mirrors the same 8-page workflow as Streamlit.
-
-For local development without Docker:
-
-```bash
-cd forecasting-product/frontend
-npm install
-npm run dev
-# → Open http://localhost:3000
-```
-
-Set `NEXT_PUBLIC_API_URL=http://localhost:8000` in `.env.local`. The FastAPI backend must be running (Path A or B above).
 
 ## Next steps
 

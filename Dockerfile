@@ -20,12 +20,3 @@ EXPOSE 8000
 CMD ["python", "forecasting-product/scripts/serve.py", \
      "--host", "0.0.0.0", "--port", "8000", \
      "--data-dir", "forecasting-product/data/"]
-
-# ---------------------------------------------------------------------------
-#  Streamlit target
-# ---------------------------------------------------------------------------
-FROM base AS streamlit
-EXPOSE 8501
-CMD ["streamlit", "run", "forecasting-product/streamlit/app.py", \
-     "--server.port=8501", "--server.address=0.0.0.0", \
-     "--server.headless=true", "--browser.gatherUsageStats=false"]

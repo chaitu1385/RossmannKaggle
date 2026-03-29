@@ -1,7 +1,7 @@
 """
-Plotly theme — SWD-style configuration for all Plotly charts in Streamlit.
+Plotly theme — SWD-style configuration for all Plotly charts.
 
-Provides a consistent visual language across Streamlit dashboard pages,
+Provides a consistent visual language across the frontend and reports,
 matching the matplotlib SWD style used for static export/reports.
 
 Usage:
@@ -86,8 +86,7 @@ def swd_plotly_layout(**overrides) -> dict:
 def apply_swd_plotly_theme():
     """Register the SWD template as a named Plotly template and set as default.
 
-    Call this once at Streamlit app startup (e.g. in ``app.py`` or
-    ``streamlit/utils.py``).
+    Call this once at application startup to set the default Plotly template.
     """
     import plotly.graph_objects as go
     import plotly.io as pio
