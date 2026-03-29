@@ -11,26 +11,12 @@ Covers:
 
 import random
 import unittest
-from datetime import date, timedelta
+from datetime import timedelta
 from unittest.mock import patch
 
 import polars as pl
 
-
-def _make_weekly_series(n_series: int = 2, n_weeks: int = 104, seed: int = 42):
-    """Build a synthetic weekly panel DataFrame with Sunday dates (W freq)."""
-    random.seed(seed)
-    rows = []
-    for s in range(1, n_series + 1):
-        sid = f"S{s}"
-        base = 100.0 + s * 20
-        for w in range(n_weeks):
-            rows.append({
-                "series_id": sid,
-                "week": date(2023, 1, 1) + timedelta(weeks=w),  # Sunday
-                "quantity": base + random.gauss(0, 10),
-            })
-    return pl.DataFrame(rows).with_columns(pl.col("quantity").cast(pl.Float64))
+from conftest import make_weekly_series as _make_weekly_series
 
 
 # --------------------------------------------------------------------------- #
@@ -80,7 +66,7 @@ class TestLGBMDirectForecaster(unittest.TestCase):
         # build future features for horizon=4
         future_rows = []
         max_date = df["week"].max()
-        for s in ["S1", "S2"]:
+        for s in ["SKU-000", "SKU-001"]:
             for h in range(1, 5):
                 future_rows.append({
                     "series_id": s,

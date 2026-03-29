@@ -27,18 +27,7 @@ from src.pipeline.manifest import (
     write_manifest,
 )
 
-
-def _make_actuals(n_weeks: int = 52, n_series: int = 2) -> pl.DataFrame:
-    rows = []
-    base = date(2024, 1, 1)
-    for s in range(n_series):
-        for w in range(n_weeks):
-            rows.append({
-                "series_id": f"S{s:03d}",
-                "week": base + timedelta(weeks=w),
-                "quantity": float(100 + s * 10 + (w % 13) * 5),
-            })
-    return pl.DataFrame(rows)
+from conftest import make_actuals as _make_actuals
 
 
 def _make_forecast(n_series: int = 2, horizon: int = 4) -> pl.DataFrame:

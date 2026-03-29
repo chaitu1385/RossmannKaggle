@@ -10,7 +10,6 @@ Covers:
   - ForecastPipeline: quantile columns emitted when config.forecast.quantiles set
 """
 
-from datetime import date, timedelta
 from typing import List
 
 import polars as pl
@@ -25,29 +24,7 @@ from src.config.schema import (
     PlatformConfig,
 )
 
-
-# ── helpers ────────────────────────────────────────────────────────────────────
-
-
-def _make_weekly_series(
-    n_series: int = 2,
-    n_weeks: int = 104,
-    start: date = date(2022, 1, 3),
-    seed: int = 42,
-) -> pl.DataFrame:
-    import random
-    random.seed(seed)
-    rows = []
-    for i in range(n_series):
-        sid = f"SKU-{i:03d}"
-        base = 50.0 + i * 30
-        for w in range(n_weeks):
-            rows.append({
-                "series_id": sid,
-                "week": start + timedelta(weeks=w),
-                "quantity": max(0.0, base + random.gauss(0, 5)),
-            })
-    return pl.DataFrame(rows)
+from conftest import make_weekly_series as _make_weekly_series
 
 
 def _naive(season_length: int = 52) -> SeasonalNaiveForecaster:
