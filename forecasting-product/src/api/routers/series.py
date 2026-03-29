@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 
 from ...auth.models import Permission, User
 from ...auth.rbac import get_current_user, require_permission
+from ..deps import validate_path_param, validate_upload_size
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/series", tags=["series"])
 
 def _load_actuals(data_dir, lob: str) -> pl.DataFrame:
     """Load the most recent actuals/history file for a LOB."""
+    validate_path_param(lob, "lob")
     for subdir in ("history", "actuals"):
         d = data_dir / subdir / lob
         if d.exists():
@@ -254,7 +256,7 @@ async def regressor_screen(
 async def _read_upload_or_lob(file, request: Request, lob):
     """Read data from upload or from stored LOB actuals."""
     if file is not None:
-        content = await file.read()
+        content = await validate_upload_size(file)
         filename = file.filename or ""
         try:
             if filename.endswith(".parquet"):

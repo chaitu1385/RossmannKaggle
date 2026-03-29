@@ -44,7 +44,7 @@ python forecasting-product/setup.py sdist bdist_wheel
 
 ```
 forecasting-product/
-├── src/                    # Source modules (~32 modules)
+├── src/                    # Source modules (125 files across 36 packages)
 │   ├── ai/                 # AI-native features (Claude-powered)
 │   │   ├── base.py         # AIFeatureBase — shared client wrapper
 │   │   ├── nl_query.py     # NaturalLanguageQueryEngine — POST /ai/explain

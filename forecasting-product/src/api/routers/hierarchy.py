@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
 from ...auth.models import Permission, User
 from ...auth.rbac import get_current_user, require_permission
+from ..deps import validate_upload_size
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ async def build_hierarchy(
     from ...config.schema import HierarchyConfig
     from ...hierarchy.tree import HierarchyTree
 
-    content = await file.read()
+    content = await validate_upload_size(file)
     filename = file.filename or ""
     try:
         if filename.endswith(".parquet"):
@@ -103,7 +104,7 @@ async def aggregate_hierarchy(
     from ...hierarchy.aggregator import HierarchyAggregator
     from ...hierarchy.tree import HierarchyTree
 
-    content = await file.read()
+    content = await validate_upload_size(file)
     filename = file.filename or ""
     try:
         if filename.endswith(".parquet"):
@@ -162,7 +163,7 @@ async def reconcile_hierarchy(
     from ...hierarchy.reconciler import Reconciler
     from ...hierarchy.tree import HierarchyTree
 
-    content = await file.read()
+    content = await validate_upload_size(file)
     filename = file.filename or ""
     try:
         if filename.endswith(".parquet"):

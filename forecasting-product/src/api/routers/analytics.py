@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 
 from ...auth.models import Permission, User
 from ...auth.rbac import get_current_user, require_permission
+from ..deps import validate_path_param, validate_upload_size
 
 logger = logging.getLogger(__name__)
 
@@ -31,10 +32,13 @@ def get_fva(
     from ...analytics.fva_analyzer import FVAAnalyzer
     from ...metrics.store import MetricStore
 
+    validate_path_param(lob, "lob")
     store = MetricStore(str(request.app.state.metrics_dir))
     try:
         df = store.read(lob=lob, run_type=run_type)
-    except Exception as exc:
+    except (FileNotFoundError, OSError) as exc:
+        raise HTTPException(status_code=404, detail=f"Metric data not found for LOB '{lob}': {exc}")
+    except (ValueError, KeyError) as exc:
         raise HTTPException(status_code=500, detail=f"Failed to read metrics: {exc}")
 
     if df is None or df.is_empty():
@@ -64,10 +68,13 @@ def get_calibration(
     from ...evaluation.calibration import compute_calibration_report
     from ...metrics.store import MetricStore
 
+    validate_path_param(lob, "lob")
     store = MetricStore(str(request.app.state.metrics_dir))
     try:
         df = store.read(lob=lob, run_type=run_type)
-    except Exception as exc:
+    except (FileNotFoundError, OSError) as exc:
+        raise HTTPException(status_code=404, detail=f"Metric data not found for LOB '{lob}': {exc}")
+    except (ValueError, KeyError) as exc:
         raise HTTPException(status_code=500, detail=f"Failed to read metrics: {exc}")
 
     if df is None or df.is_empty():
@@ -79,7 +86,7 @@ def get_calibration(
 
     try:
         report = compute_calibration_report(df, quantiles=quantiles, coverage_targets=coverage_targets)
-    except Exception as exc:
+    except (ValueError, KeyError, ZeroDivisionError) as exc:
         raise HTTPException(status_code=500, detail=f"Calibration computation failed: {exc}")
 
     model_reports = {}
@@ -116,9 +123,10 @@ async def compute_shap(
     """Compute SHAP feature attribution for tree-based models."""
     from ...analytics.explainer import ForecastExplainer
 
+    validate_path_param(lob, "lob")
     # Load data
     if file:
-        content = await file.read()
+        content = await validate_upload_size(file)
         filename = file.filename or ""
         try:
             if filename.endswith(".parquet"):
@@ -181,7 +189,7 @@ async def compute_shap(
         }
     except HTTPException:
         raise
-    except Exception as exc:
+    except (ValueError, KeyError, TypeError) as exc:
         raise HTTPException(status_code=500, detail=f"SHAP computation failed: {exc}")
 
 
@@ -202,8 +210,8 @@ async def decompose_forecast(
     """Run STL decomposition on historical + forecast data."""
     from ...analytics.explainer import ForecastExplainer
 
-    history_content = await history_file.read()
-    forecast_content = await forecast_file.read()
+    history_content = await validate_upload_size(history_file)
+    forecast_content = await validate_upload_size(forecast_file)
 
     try:
         hf = history_file.filename or ""
@@ -248,8 +256,8 @@ async def compare_forecasts(
     """Compare model forecast against external/uploaded forecast."""
     from ...analytics.comparator import ForecastComparator
 
-    model_content = await model_file.read()
-    ext_content = await external_file.read()
+    model_content = await validate_upload_size(model_file)
+    ext_content = await validate_upload_size(external_file)
 
     try:
         mf = model_file.filename or ""
@@ -287,7 +295,7 @@ async def constrain_forecast(
     user: User = Depends(require_permission(Permission.RUN_PIPELINE)),
 ):
     """Apply capacity and budget constraints to forecast."""
-    content = await file.read()
+    content = await validate_upload_size(file)
     filename = file.filename or ""
     try:
         if filename.endswith(".parquet"):

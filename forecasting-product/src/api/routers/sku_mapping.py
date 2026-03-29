@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
 from ...auth.models import Permission, User
 from ...auth.rbac import require_permission
+from ..deps import validate_upload_size
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ async def run_phase1(
     """Run Phase 1 SKU mapping (attribute + naming matching)."""
     from ...sku_mapping.pipeline import build_phase1_pipeline
 
-    content = await product_master.read()
+    content = await validate_upload_size(product_master)
     try:
         df = pl.read_csv(io.BytesIO(content), try_parse_dates=True)
     except Exception as exc:
@@ -65,7 +66,7 @@ async def run_phase2(
     """Run Phase 2 SKU mapping (attribute + naming + curve fitting)."""
     from ...sku_mapping.pipeline import build_phase2_pipeline
 
-    content = await product_master.read()
+    content = await validate_upload_size(product_master)
     try:
         pm_df = pl.read_csv(io.BytesIO(content), try_parse_dates=True)
     except Exception as exc:
@@ -73,7 +74,7 @@ async def run_phase2(
 
     sales_df = None
     if sales_history:
-        sales_content = await sales_history.read()
+        sales_content = await validate_upload_size(sales_history)
         try:
             sales_df = pl.read_csv(io.BytesIO(sales_content), try_parse_dates=True)
         except Exception as exc:
