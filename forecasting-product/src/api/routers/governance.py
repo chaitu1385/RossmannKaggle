@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ...auth.models import Permission, User
 from ...auth.rbac import get_current_user, require_permission
+from ..deps import validate_path_param
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,7 @@ def get_model_card(
     """Get a specific model card by name."""
     from ...analytics.governance import ModelCardRegistry
 
+    validate_path_param(model_name, "model_name")
     base_path = str(request.app.state.data_dir / "model_cards")
     registry = ModelCardRegistry(base_path=base_path)
 
@@ -69,6 +71,8 @@ def get_lineage(
     """Get forecast lineage history."""
     from ...analytics.governance import ForecastLineage
 
+    if lob:
+        validate_path_param(lob, "lob")
     base_path = str(request.app.state.data_dir / "lineage")
     lineage = ForecastLineage(base_path=base_path)
 
@@ -99,6 +103,8 @@ def bi_export(
     from ...analytics.bi_export import BIExporter
     from ...metrics.store import MetricStore
 
+    validate_path_param(lob, "lob")
+    validate_path_param(report_type, "report_type")
     valid_types = ("forecast-actual", "leaderboard", "bias-report")
     if report_type not in valid_types:
         raise HTTPException(

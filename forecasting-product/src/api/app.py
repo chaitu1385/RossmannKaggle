@@ -58,6 +58,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Uploa
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
+from .deps import validate_path_param, validate_upload_size
 from .schemas import (
     AnalysisResponse,
     CommentaryRequest,
@@ -254,6 +255,7 @@ def create_app(
         Reads the most recently written ``forecast_*.parquet`` under
         ``{data_dir}/forecasts/{lob}/``.
         """
+        validate_path_param(lob, "lob")
         forecast_dir = app.state.data_dir / "forecasts" / lob
         if not forecast_dir.exists():
             raise HTTPException(
@@ -332,12 +334,18 @@ def create_app(
 
         Models are ranked by WMAPE (ascending).
         """
+        validate_path_param(lob, "lob")
         from ..metrics.store import MetricStore
 
         store = MetricStore(str(app.state.metrics_dir))
         try:
             df = store.leaderboard(lob=lob, run_type=run_type)
-        except Exception as exc:
+        except (FileNotFoundError, OSError) as exc:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Leaderboard data not found for LOB '{lob}': {exc}",
+            )
+        except (ValueError, KeyError) as exc:
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to read leaderboard: {exc}",
@@ -380,13 +388,19 @@ def create_app(
         Reads the metric store, runs ``ForecastDriftDetector``, and returns
         any accuracy / bias / volume alerts.
         """
+        validate_path_param(lob, "lob")
         from ..metrics.drift import DriftConfig, ForecastDriftDetector
         from ..metrics.store import MetricStore
 
         store = MetricStore(str(app.state.metrics_dir))
         try:
             df = store.read(lob=lob, run_type=run_type)
-        except Exception as exc:
+        except (FileNotFoundError, OSError) as exc:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Metric data not found for LOB '{lob}': {exc}",
+            )
+        except (ValueError, KeyError) as exc:
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to read metric store: {exc}",
@@ -442,8 +456,8 @@ def create_app(
         from ..analytics.analyzer import DataAnalyzer
         from ..analytics.llm_analyzer import LLMAnalyzer
 
-        # Read uploaded file
-        content = await file.read()
+        # Read uploaded file with size limit
+        content = await validate_upload_size(file)
         filename = file.filename or ""
 
         try:
@@ -517,6 +531,7 @@ def create_app(
         import polars as pl
         from ..ai.nl_query import NaturalLanguageQueryEngine
 
+        validate_path_param(request.lob, "lob")
         # Load forecast data for the series
         forecast_dir = app.state.data_dir / "forecasts" / request.lob
         forecast_df = pl.DataFrame()
@@ -574,10 +589,13 @@ def create_app(
         from ..metrics.drift import DriftConfig, ForecastDriftDetector
         from ..metrics.store import MetricStore
 
+        validate_path_param(request.lob, "lob")
         store = MetricStore(str(app.state.metrics_dir))
         try:
             df = store.read(lob=request.lob, run_type=request.run_type)
-        except Exception as exc:
+        except (FileNotFoundError, OSError) as exc:
+            raise HTTPException(status_code=404, detail=f"Metric data not found for LOB '{request.lob}': {exc}")
+        except (ValueError, KeyError) as exc:
             raise HTTPException(status_code=500, detail=f"Failed to read metric store: {exc}")
 
         if df is None or df.is_empty():
@@ -626,6 +644,7 @@ def create_app(
         from ..config.schema import PlatformConfig
         from ..metrics.store import MetricStore
 
+        validate_path_param(request.lob, "lob")
         store = MetricStore(str(app.state.metrics_dir))
 
         # Load leaderboard
@@ -672,10 +691,13 @@ def create_app(
         from ..metrics.drift import DriftConfig, ForecastDriftDetector
         from ..metrics.store import MetricStore
 
+        validate_path_param(request.lob, "lob")
         store = MetricStore(str(app.state.metrics_dir))
         try:
             df = store.read(lob=request.lob, run_type=request.run_type)
-        except Exception as exc:
+        except (FileNotFoundError, OSError) as exc:
+            raise HTTPException(status_code=404, detail=f"Metric data not found for LOB '{request.lob}': {exc}")
+        except (ValueError, KeyError) as exc:
             raise HTTPException(status_code=500, detail=f"Failed to read metric store: {exc}")
 
         if df is None or df.is_empty():

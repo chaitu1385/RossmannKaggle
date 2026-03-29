@@ -47,6 +47,10 @@ import type {
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+const MAX_RETRIES = 3;
+const RETRY_BASE_MS = 1000;
+const RETRYABLE_STATUS_CODES = new Set([502, 503, 504, 429]);
+
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -62,6 +66,20 @@ function getToken(): string | null {
   return localStorage.getItem("access_token");
 }
 
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    if (!payload.exp) return false;
+    return Date.now() >= payload.exp * 1000;
+  } catch {
+    return false;
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -72,6 +90,11 @@ async function request<T>(
   };
 
   if (token) {
+    if (isTokenExpired(token)) {
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("user");
+      throw new ApiError(401, "Session expired. Please log in again.");
+    }
     headers["Authorization"] = `Bearer ${token}`;
   }
 
@@ -80,27 +103,44 @@ async function request<T>(
     headers["Content-Type"] = "application/json";
   }
 
-  let res: Response;
-  try {
-    res = await fetch(`${BASE_URL}${path}`, {
-      ...options,
-      headers,
-    });
-  } catch (err) {
-    throw new ApiError(
-      0,
-      `Unable to reach the API server at ${BASE_URL}. ` +
-        `Please check that the backend is running and NEXT_PUBLIC_API_URL is set correctly. ` +
-        `(${err instanceof Error ? err.message : String(err)})`,
-    );
+  let lastError: ApiError | null = null;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE_URL}${path}`, {
+        ...options,
+        headers,
+      });
+    } catch (err) {
+      lastError = new ApiError(
+        0,
+        `Unable to reach the API server at ${BASE_URL}. ` +
+          `Please check that the backend is running and NEXT_PUBLIC_API_URL is set correctly. ` +
+          `(${err instanceof Error ? err.message : String(err)})`,
+      );
+      if (attempt < MAX_RETRIES) {
+        await sleep(RETRY_BASE_MS * 2 ** attempt);
+        continue;
+      }
+      throw lastError;
+    }
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "Unknown error");
+      lastError = new ApiError(res.status, text);
+
+      if (RETRYABLE_STATUS_CODES.has(res.status) && attempt < MAX_RETRIES) {
+        await sleep(RETRY_BASE_MS * 2 ** attempt);
+        continue;
+      }
+      throw lastError;
+    }
+
+    return res.json() as Promise<T>;
   }
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "Unknown error");
-    throw new ApiError(res.status, text);
-  }
-
-  return res.json() as Promise<T>;
+  throw lastError ?? new ApiError(0, "Request failed after retries");
 }
 
 // ── Endpoints ────────────────────────────────────────────────────────────────

@@ -31,16 +31,37 @@ const AuthContext = createContext<AuthContextValue>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
-  // Restore session from localStorage on mount
+  // Restore session from localStorage on mount, checking token expiry
   useEffect(() => {
     const stored = localStorage.getItem("user");
-    if (stored) {
+    const token = localStorage.getItem("access_token");
+
+    if (stored && token) {
+      // Check JWT expiry
+      try {
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        if (payload.exp && Date.now() >= payload.exp * 1000) {
+          // Token expired — clear session
+          localStorage.removeItem("user");
+          localStorage.removeItem("access_token");
+          return;
+        }
+      } catch {
+        // Malformed token — clear session
+        localStorage.removeItem("user");
+        localStorage.removeItem("access_token");
+        return;
+      }
+
       try {
         setUser(JSON.parse(stored));
       } catch {
         localStorage.removeItem("user");
         localStorage.removeItem("access_token");
       }
+    } else if (stored && !token) {
+      // User data without token — stale session
+      localStorage.removeItem("user");
     }
   }, []);
 

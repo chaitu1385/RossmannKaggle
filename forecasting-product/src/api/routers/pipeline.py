@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 
 from ...auth.models import Permission, User
 from ...auth.rbac import require_permission
+from ..deps import validate_path_param, validate_upload_size
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,8 @@ async def run_backtest(
     """Run the backtest pipeline on uploaded data."""
     from ...pipeline.backtest import BacktestPipeline
 
-    content = await file.read()
+    validate_path_param(lob, "lob")
+    content = await validate_upload_size(file)
     filename = file.filename or ""
     try:
         if filename.endswith(".parquet"):
@@ -45,7 +47,7 @@ async def run_backtest(
     if config_file:
         import yaml
         from ...config.schema import PlatformConfig
-        config_content = await config_file.read()
+        config_content = await validate_upload_size(config_file)
         try:
             config_dict = yaml.safe_load(config_content.decode("utf-8"))
             config = PlatformConfig(**config_dict) if config_dict else PlatformConfig(lob=lob)
@@ -90,7 +92,8 @@ async def run_forecast(
     """Run the forecast pipeline on uploaded data."""
     from ...pipeline.forecast import ForecastPipeline
 
-    content = await file.read()
+    validate_path_param(lob, "lob")
+    content = await validate_upload_size(file)
     filename = file.filename or ""
     try:
         if filename.endswith(".parquet"):
@@ -104,7 +107,7 @@ async def run_forecast(
     if config_file:
         import yaml
         from ...config.schema import PlatformConfig
-        config_content = await config_file.read()
+        config_content = await validate_upload_size(config_file)
         try:
             config_dict = yaml.safe_load(config_content.decode("utf-8"))
             config = PlatformConfig(**config_dict) if config_dict else PlatformConfig(lob=lob)
@@ -149,6 +152,8 @@ def list_manifests(
     """List recent pipeline run manifests."""
     from ...pipeline.manifest import PipelineManifest, read_manifest
 
+    if lob:
+        validate_path_param(lob, "lob")
     manifests_dir = request.app.state.data_dir / "forecasts"
     if not manifests_dir.exists():
         return {"count": 0, "manifests": []}
@@ -196,6 +201,8 @@ def get_costs(
     """Get cost tracking data from pipeline manifests."""
     from ...pipeline.manifest import read_manifest
 
+    if lob:
+        validate_path_param(lob, "lob")
     manifests_dir = request.app.state.data_dir / "forecasts"
     if not manifests_dir.exists():
         return {"count": 0, "costs": []}
@@ -243,7 +250,7 @@ async def analyze_multi_file(
 
     file_dfs = {}
     for f in files:
-        content = await f.read()
+        content = await validate_upload_size(f)
         filename = f.filename or f"file_{len(file_dfs)}"
         try:
             if filename.endswith(".parquet"):
