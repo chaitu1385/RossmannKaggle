@@ -207,22 +207,24 @@ def create_app(
         """Liveness probe — returns 200 OK when the service is running."""
         return HealthResponse(status="ok", version=_API_VERSION)
 
-    @app.post("/auth/token", tags=["auth"])
-    def create_auth_token(
-        username: str = Query(..., description="Username"),
-        role: str = Query("viewer", description="Role"),
-    ):
-        """Issue a JWT token (development endpoint)."""
-        if not auth_enabled:
-            return {"detail": "Auth is disabled. All endpoints are open."}
-        from ..auth.token import create_token
-        token = create_token(
-            user_id=username,
-            email=f"{username}@example.com",
-            role=role,
-            secret_key=jwt_secret,
-        )
-        return {"access_token": token, "token_type": "bearer"}
+    # Dev token endpoint — only registered when API_DEV_MODE=1
+    if os.environ.get("API_DEV_MODE", "1" if not auth_enabled else "0") == "1":
+        @app.post("/auth/token", tags=["auth"])
+        def create_auth_token(
+            username: str = Query(..., description="Username"),
+            role: str = Query("viewer", description="Role"),
+        ):
+            """Issue a JWT token (development only — set API_DEV_MODE=0 to disable)."""
+            if not auth_enabled:
+                return {"detail": "Auth is disabled. All endpoints are open."}
+            from ..auth.token import create_token
+            token = create_token(
+                user_id=username,
+                email=f"{username}@example.com",
+                role=role,
+                secret_key=jwt_secret,
+            )
+            return {"access_token": token, "token_type": "bearer"}
 
     @app.get("/audit", tags=["audit"])
     def get_audit_log(

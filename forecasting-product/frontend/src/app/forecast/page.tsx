@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useLob } from "@/providers/lob-provider";
 import { TimeSeriesLine } from "@/components/charts/time-series-line";
 import { FanChart } from "@/components/charts/fan-chart";
 import { NLQueryPanel } from "@/components/ai/nl-query-panel";
 import { MetricCard } from "@/components/shared/metric-card";
 import { ErrorDisplay } from "@/components/shared/error-boundary";
+import { NoDataGuide } from "@/components/shared/no-data-guide";
 import { ChartSkeleton } from "@/components/shared/loading-skeleton";
 import { DecompositionPanel } from "@/components/forecast/decomposition-panel";
 import { ComparisonPanel } from "@/components/forecast/comparison-panel";
@@ -15,7 +17,7 @@ import { formatNumber } from "@/lib/utils";
 import { COLORS } from "@/lib/constants";
 
 export default function ForecastPage() {
-  const [lob, setLob] = useState("retail");
+  const { lob, setLob } = useLob();
   const [selectedSeries, setSelectedSeries] = useState("");
   const { data, isLoading, error, refetch } = useForecast(lob);
 
@@ -94,9 +96,17 @@ export default function ForecastPage() {
       </div>
 
       {isLoading && <ChartSkeleton />}
-      {error && <ErrorDisplay message={error.message} onRetry={() => refetch()} />}
+      {error && (error.message.includes("404") ? (
+        <NoDataGuide lob={lob} dataType="forecast" />
+      ) : (
+        <ErrorDisplay message={error.message} onRetry={() => refetch()} />
+      ))}
 
-      {data && (
+      {data && data.points.length === 0 && (
+        <NoDataGuide lob={lob} dataType="forecast" />
+      )}
+
+      {data && data.points.length > 0 && (
         <>
           {/* Summary */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

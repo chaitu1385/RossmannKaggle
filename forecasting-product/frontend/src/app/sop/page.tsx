@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { CommentaryPanel } from "@/components/ai/commentary-panel";
+import { useLob } from "@/providers/lob-provider";
 import { MetricCard } from "@/components/shared/metric-card";
 import { CrossRunComparisonPanel } from "@/components/forecast/cross-run-comparison-panel";
 import { ModelCardsPanel } from "@/components/governance/model-cards-panel";
@@ -9,7 +9,7 @@ import { LineagePanel } from "@/components/governance/lineage-panel";
 import { BIExportPanel } from "@/components/governance/bi-export-panel";
 
 export default function SOPPage() {
-  const [lob, setLob] = useState("retail");
+  const { lob, setLob } = useLob();
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">

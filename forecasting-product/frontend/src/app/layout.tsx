@@ -4,6 +4,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { QueryProvider } from "@/providers/query-provider";
 import { AuthProvider } from "@/providers/auth-provider";
+import { LobProvider } from "@/providers/lob-provider";
 
 export const metadata: Metadata = {
   title: "Forecasting Product",
@@ -20,13 +21,15 @@ export default function RootLayout({
       <body className="font-sans antialiased">
         <QueryProvider>
           <AuthProvider>
-            <div className="flex h-screen overflow-hidden">
-              <Sidebar />
-              <div className="flex flex-1 flex-col overflow-hidden">
-                <Header />
-                <main className="flex-1 overflow-y-auto p-6">{children}</main>
+            <LobProvider>
+              <div className="flex h-screen overflow-hidden">
+                <Sidebar />
+                <div className="flex flex-1 flex-col overflow-hidden">
+                  <Header />
+                  <main className="flex-1 overflow-y-auto p-6">{children}</main>
+                </div>
               </div>
-            </div>
+            </LobProvider>
           </AuthProvider>
         </QueryProvider>
       </body>
