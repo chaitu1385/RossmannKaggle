@@ -3,7 +3,7 @@
 from typing import Any, Dict, List, Optional
 
 import numpy as np
-import pandas as pd
+import polars as pl
 import xgboost as xgb
 
 from .base import BaseForecaster
@@ -44,26 +44,33 @@ class XGBoostForecaster(BaseForecaster):
 
     def fit(
         self,
-        X: pd.DataFrame,
-        y: pd.Series,
-        X_val: Optional[pd.DataFrame] = None,
-        y_val: Optional[pd.Series] = None,
+        X: pl.DataFrame,
+        y: pl.Series,
+        X_val: Optional[pl.DataFrame] = None,
+        y_val: Optional[pl.Series] = None,
     ) -> "XGBoostForecaster":
         """Train the XGBoost model."""
         if self.feature_cols:
-            X = X[self.feature_cols]
+            X = X.select(self.feature_cols)
             if X_val is not None:
-                X_val = X_val[self.feature_cols]
+                X_val = X_val.select(self.feature_cols)
 
-        self.feature_names = list(X.columns)
+        self.feature_names = X.columns
 
-        eval_set = [(X, y)]
+        # External library requires pandas DataFrame
+        X_pd = X.to_pandas()
+        y_pd = y.to_pandas()
+
+        eval_set = [(X_pd, y_pd)]
         if X_val is not None and y_val is not None:
-            eval_set.append((X_val, y_val))
+            # External library requires pandas DataFrame
+            X_val_pd = X_val.to_pandas()
+            y_val_pd = y_val.to_pandas()
+            eval_set.append((X_val_pd, y_val_pd))
 
         self.model.fit(
-            X,
-            y,
+            X_pd,
+            y_pd,
             eval_set=eval_set,
             verbose=100,
             early_stopping_rounds=self.params.get("early_stopping_rounds", 50),
@@ -71,22 +78,29 @@ class XGBoostForecaster(BaseForecaster):
         self.is_fitted = True
         return self
 
-    def predict(self, X: pd.DataFrame) -> np.ndarray:
+    def predict(self, X: pl.DataFrame) -> np.ndarray:
         """Generate predictions."""
         if not self.is_fitted:
             raise RuntimeError("Model must be fitted before predicting.")
 
         if self.feature_cols:
-            X = X[self.feature_cols]
+            X = X.select(self.feature_cols)
         else:
-            X = X[self.feature_names]
+            X = X.select(self.feature_names)
 
-        return self.model.predict(X)
+        # External library requires pandas DataFrame
+        return self.model.predict(X.to_pandas())
 
-    def get_feature_importance(self) -> pd.Series:
-        """Return feature importances."""
+    def get_feature_importance(self) -> pl.DataFrame:
+        """Return feature importances as a Polars DataFrame with columns [feature, importance]."""
         if not self.is_fitted:
             raise RuntimeError("Model must be fitted first.")
 
         importance = self.model.feature_importances_
-        return pd.Series(importance, index=self.feature_names).sort_values(ascending=False)
+        return (
+            pl.DataFrame({
+                "feature": self.feature_names,
+                "importance": importance.tolist(),
+            })
+            .sort("importance", descending=True)
+        )

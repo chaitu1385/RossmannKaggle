@@ -8,7 +8,7 @@ before model training begins.
 
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import polars as pl
 
@@ -188,7 +188,7 @@ class DataQualityAnalyzer:
     @staticmethod
     def _detect_outliers_iqr(
         df: pl.DataFrame, value_col: str, sid_col: str
-    ) -> tuple:
+    ) -> Tuple[int, float]:
         """Lightweight per-series IQR outlier count (detect only)."""
         stats = (
             df.group_by(sid_col)

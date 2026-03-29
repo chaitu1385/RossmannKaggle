@@ -13,7 +13,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import pandas as pd
+import polars as pl
 
 
 def _write_csv(path: Path, content: str):
@@ -36,7 +36,7 @@ class TestDataLoader(unittest.TestCase):
             loader = self._make_loader(tmpdir)
             df = loader.load_train()
             self.assertEqual(len(df), 2)
-            self.assertTrue(pd.api.types.is_datetime64_any_dtype(df["Date"]))
+            self.assertTrue(df.schema["Date"] == pl.Date or df.schema["Date"] == pl.Datetime)
 
     def test_load_test(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -47,7 +47,7 @@ class TestDataLoader(unittest.TestCase):
             loader = self._make_loader(tmpdir)
             df = loader.load_test()
             self.assertEqual(len(df), 2)
-            self.assertTrue(pd.api.types.is_datetime64_any_dtype(df["Date"]))
+            self.assertTrue(df.schema["Date"] == pl.Date or df.schema["Date"] == pl.Datetime)
 
     def test_load_store(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -67,15 +67,15 @@ class TestDataLoader(unittest.TestCase):
             _write_csv(Path(tmpdir) / "store.csv", "Store,StoreType\n1,a\n")
             loader = self._make_loader(tmpdir)
             train, test, store = loader.load_all()
-            self.assertIsInstance(train, pd.DataFrame)
-            self.assertIsInstance(test, pd.DataFrame)
-            self.assertIsInstance(store, pd.DataFrame)
+            self.assertIsInstance(train, pl.DataFrame)
+            self.assertIsInstance(test, pl.DataFrame)
+            self.assertIsInstance(store, pl.DataFrame)
 
     def test_merge_with_store(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             loader = self._make_loader(tmpdir)
-            sales = pd.DataFrame({"Store": [1, 2], "Sales": [100, 200]})
-            store = pd.DataFrame({"Store": [1, 2], "StoreType": ["a", "b"]})
+            sales = pl.DataFrame({"Store": [1, 2], "Sales": [100, 200]})
+            store = pl.DataFrame({"Store": [1, 2], "StoreType": ["a", "b"]})
             merged = loader.merge_with_store(sales, store)
             self.assertIn("StoreType", merged.columns)
             self.assertEqual(len(merged), 2)

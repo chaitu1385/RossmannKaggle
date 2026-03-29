@@ -43,7 +43,7 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import date
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -267,7 +267,7 @@ class DeploymentOrchestrator:
     # Champion resolution
     # ------------------------------------------------------------------
 
-    def _resolve_champion(self, actuals_sdf):
+    def _resolve_champion(self, actuals_sdf) -> Tuple[str, bool]:
         """
         Return ``(champion_model_name, retrained: bool)``.
 

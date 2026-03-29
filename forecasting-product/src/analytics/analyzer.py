@@ -246,7 +246,7 @@ class DataAnalyzer:
             confidence=max(0.0, confidence),
         )
 
-    def _find_time_column(self, df, cols, dtypes) -> str:
+    def _find_time_column(self, df: pl.DataFrame, cols: list, dtypes: dict) -> str:
         """Find the time/date column."""
         # First pass: actual date/datetime types
         for c in cols:
@@ -268,7 +268,7 @@ class DataAnalyzer:
         # Fallback: first column
         return cols[0]
 
-    def _find_target_column(self, df, cols, dtypes, time_col) -> str:
+    def _find_target_column(self, df: pl.DataFrame, cols: list, dtypes: dict, time_col: str) -> str:
         """Find the numeric target column."""
         numeric_types = {pl.Float32, pl.Float64, pl.Int8, pl.Int16, pl.Int32,
                          pl.Int64, pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64}
@@ -358,7 +358,7 @@ class DataAnalyzer:
                 else:
                     return "Q", n_series
         except Exception:
-            pass
+            logger.debug("Frequency detection failed, defaulting to weekly", exc_info=True)
 
         return "W", n_series
 

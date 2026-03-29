@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence, Tuple
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
@@ -102,7 +102,7 @@ def highlight_bar(
     sort: bool = True,
     fmt: str | None = None,
     label_offset: float = 0.02,
-):
+) -> None:
     """Bar chart with one bar highlighted, the rest gray.
 
     Args:
@@ -175,7 +175,7 @@ def highlight_line(
     base_color: str | None = None,
     linewidth_highlight: float = 2.5,
     linewidth_base: float = 1.2,
-):
+) -> None:
     """Line chart with one line colored, the rest gray.
 
     Args:
@@ -215,7 +215,7 @@ def highlight_line(
     ax.set_axisbelow(True)
 
 
-def action_title(ax, title: str, subtitle: str | None = None):
+def action_title(ax, title: str, subtitle: str | None = None) -> None:
     """Add a bold action title and optional subtle subtitle.
 
     Args:
@@ -241,7 +241,7 @@ def action_title(ax, title: str, subtitle: str | None = None):
         )
 
 
-def format_date_axis(ax, fmt: str = "%b", axis: str = "x"):
+def format_date_axis(ax, fmt: str = "%b", axis: str = "x") -> None:
     """Format a date axis with readable labels.
 
     Args:
@@ -249,7 +249,7 @@ def format_date_axis(ax, fmt: str = "%b", axis: str = "x"):
         fmt: strftime format string. Default: ``"%b"`` (abbreviated month).
         axis: Which axis to format — ``"x"`` or ``"y"``.
     """
-    import pandas as pd
+    from datetime import datetime as _dt
 
     target = ax.xaxis if axis == "x" else ax.yaxis
 
@@ -269,11 +269,13 @@ def format_date_axis(ax, fmt: str = "%b", axis: str = "x"):
     try:
         tick_labels = [t.get_text() for t in target.get_ticklabels()]
         if tick_labels and any(tick_labels):
-            parsed = pd.to_datetime(tick_labels, errors="coerce")
-            new_labels = [
-                d.strftime(fmt) if pd.notna(d) else lbl
-                for d, lbl in zip(parsed, tick_labels)
-            ]
+            new_labels = []
+            for lbl in tick_labels:
+                try:
+                    parsed = _dt.fromisoformat(lbl)
+                    new_labels.append(parsed.strftime(fmt))
+                except (ValueError, TypeError):
+                    new_labels.append(lbl)
             if axis == "x":
                 ax.set_xticklabels(new_labels)
             else:
@@ -282,7 +284,7 @@ def format_date_axis(ax, fmt: str = "%b", axis: str = "x"):
         logger.debug("Failed to reformat tick labels", exc_info=True)
 
 
-def annotate_point(ax, x, y, text: str, arrow_color: str | None = None, offset=(20, 20)):
+def annotate_point(ax, x, y, text: str, arrow_color: str | None = None, offset=(20, 20)) -> None:
     """Add a clean annotation with an arrow to a specific data point.
 
     Args:
@@ -301,7 +303,7 @@ def annotate_point(ax, x, y, text: str, arrow_color: str | None = None, offset=(
     )
 
 
-def save_chart(fig, path, dpi: int = 150, close: bool = True):
+def save_chart(fig, path, dpi: int = 150, close: bool = True) -> None:
     """Save a chart with tight layout and correct DPI.
 
     Args:
@@ -325,7 +327,7 @@ def save_chart(fig, path, dpi: int = 150, close: bool = True):
 
 def stacked_bar(ax, categories, layers: dict, colors_map=None,
                 highlight_layer=None, show_totals: bool = True,
-                fmt=None, normalize: bool = False, sort_by=None):
+                fmt=None, normalize: bool = False, sort_by=None) -> None:
     """Stacked bar chart with one layer optionally highlighted.
 
     Args:
@@ -415,7 +417,7 @@ def stacked_bar(ax, categories, layers: dict, colors_map=None,
 
 
 def add_trendline(ax, x, y, exclude_indices=None, degree: int = 1,
-                  color: str | None = None, label: str = "expected\ntrend"):
+                  color: str | None = None, label: str = "expected\ntrend") -> np.ndarray:
     """Fit and draw a trend line, optionally excluding outlier indices.
 
     Args:
@@ -455,7 +457,7 @@ def add_trendline(ax, x, y, exclude_indices=None, degree: int = 1,
 
 
 def add_event_span(ax, start, end, label: str | None = None,
-                   color: str | None = None, alpha: float = 0.08):
+                   color: str | None = None, alpha: float = 0.08) -> None:
     """Highlight a time window with a shaded span and boundary lines.
 
     Args:
@@ -482,7 +484,7 @@ def add_event_span(ax, start, end, label: str | None = None,
 
 def fill_between_lines(ax, x, y1, y2, label1=None, label2=None,
                        color1=None, color2=None, fill_color=None,
-                       fill_alpha: float = 0.15):
+                       fill_alpha: float = 0.15) -> None:
     """Draw two lines with shaded area between them.
 
     Args:
@@ -517,7 +519,7 @@ def fill_between_lines(ax, x, y1, y2, label1=None, label2=None,
 
 
 def big_number_layout(ax, metrics: list, findings=None,
-                      recommendation=None, title=None, subtitle=None):
+                      recommendation=None, title=None, subtitle=None) -> None:
     """Render a big-number summary card — no data axes, just KPIs and text.
 
     Args:
@@ -607,7 +609,7 @@ def big_number_layout(ax, metrics: list, findings=None,
 
 
 def funnel_waterfall(ax, steps, counts, highlight_step=None,
-                     bar_color=None, highlight_color=None, fmt=None):
+                     bar_color=None, highlight_color=None, fmt=None) -> None:
     """Render a funnel as a horizontal waterfall showing drop-off at each step.
 
     Args:
@@ -675,7 +677,7 @@ def funnel_waterfall(ax, steps, counts, highlight_step=None,
 
 def grouped_bar(df, x_col: str, y_col: str, group_col: str,
                 highlight_group=None, title=None, ylabel=None,
-                xlabel=None, figsize=(10, 6)):
+                xlabel=None, figsize=(10, 6)) -> Tuple[Any, Any]:
     """Create a grouped bar chart comparing values across categories.
 
     Args:
@@ -694,8 +696,12 @@ def grouped_bar(df, x_col: str, y_col: str, group_col: str,
     """
     fig, ax = plt.subplots(figsize=figsize)
 
-    groups = df[group_col].unique()
-    categories = df[x_col].unique()
+    import polars as pl
+    if not isinstance(df, pl.DataFrame):
+        df = pl.DataFrame(df)  # Accept dict / pandas as convenience
+
+    groups = df.get_column(group_col).unique().sort().to_list()
+    categories = df.get_column(x_col).unique().sort().to_list()
     n_groups = len(groups)
     n_cats = len(categories)
 
@@ -704,8 +710,11 @@ def grouped_bar(df, x_col: str, y_col: str, group_col: str,
     x_indices = np.arange(n_cats)
 
     for i, group in enumerate(groups):
-        group_data = df[df[group_col] == group]
-        val_map = dict(zip(group_data[x_col], group_data[y_col]))
+        group_data = df.filter(pl.col(group_col) == group)
+        val_map = dict(zip(
+            group_data.get_column(x_col).to_list(),
+            group_data.get_column(y_col).to_list(),
+        ))
         vals = [val_map.get(cat, 0) for cat in categories]
 
         offset = (i - (n_groups - 1) / 2) * (bar_width + gap)
@@ -765,7 +774,7 @@ def forecast_plot(
     confidence_band=None,
     fig=None,
     ax=None,
-):
+) -> Tuple[Any, Any]:
     """Time-series chart with historical actuals and dashed forecast line.
 
     Historical data is rendered as a solid line, forecast as dashed, with an
@@ -832,7 +841,7 @@ def control_chart_plot(
     title: str | None = None,
     fig=None,
     ax=None,
-):
+) -> Tuple[Any, Any]:
     """Shewhart control chart with center line, limits, and violations.
 
     Plots a metric over time with SPC overlays: center line, upper/lower
@@ -939,7 +948,7 @@ def leaderboard_chart(
     champion: str | None = None,
     fig=None,
     ax=None,
-):
+) -> Tuple[Any, Any]:
     """Horizontal bar chart ranking models by a metric (lower is better).
 
     Champion model is highlighted. Others are gray context.
@@ -987,7 +996,7 @@ def fva_cascade_chart(
     fva_labels: Sequence[str] | None = None,
     fig=None,
     ax=None,
-):
+) -> Tuple[Any, Any]:
     """FVA cascade bar chart showing error at each forecasting layer.
 
     Bars are color-coded by FVA classification (adds value / neutral /
@@ -1067,7 +1076,7 @@ def drift_timeline(
     metric_name: str = "WMAPE",
     fig=None,
     ax=None,
-):
+) -> Tuple[Any, Any]:
     """Time-series plot of a metric with optional drift threshold and alerts.
 
     Args:
@@ -1134,7 +1143,7 @@ def demand_class_chart(
     title: str = "Demand classification distribution",
     fig=None,
     ax=None,
-):
+) -> Tuple[Any, Any]:
     """Horizontal bar chart showing the distribution of demand classes.
 
     Args:

@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 import joblib
 import numpy as np
-import pandas as pd
+import polars as pl
 
 
 class BaseForecaster(ABC):
@@ -20,11 +20,11 @@ class BaseForecaster(ABC):
         self.is_fitted = False
 
     @abstractmethod
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> "BaseForecaster":
+    def fit(self, X: pl.DataFrame, y: pl.Series) -> "BaseForecaster":
         """Train the model."""
 
     @abstractmethod
-    def predict(self, X: pd.DataFrame) -> np.ndarray:
+    def predict(self, X: pl.DataFrame) -> np.ndarray:
         """Generate predictions."""
 
     def save(self, path: str) -> None:
@@ -38,7 +38,7 @@ class BaseForecaster(ABC):
         """Load model from disk."""
         return joblib.load(Path(path) / f"{name}.pkl")
 
-    def get_feature_importance(self) -> Optional[pd.Series]:
+    def get_feature_importance(self) -> Optional[pl.DataFrame]:
         """Return feature importances if available."""
         return None
 

@@ -32,7 +32,7 @@ templated natural-language string per series, suitable for BI tools or
 planner review UIs.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import polars as pl
@@ -365,7 +365,7 @@ class ForecastExplainer:
     def _decompose_series(
         self,
         values: np.ndarray,
-    ) -> tuple:
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Classical additive decomposition: trend + seasonal + residual.
 

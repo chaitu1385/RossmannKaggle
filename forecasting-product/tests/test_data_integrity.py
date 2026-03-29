@@ -218,17 +218,18 @@ class TestFeatureManagerTemporalValidation(unittest.TestCase):
 
     def test_all_features_eligible_with_explicit_future(self):
         """All features are eligible when explicit future values are provided."""
-        import pandas as pd
+        import datetime
+        import polars as pl
         from src.forecasting.feature_manager import MLForecastFeatureManager
 
         mgr = MLForecastFeatureManager(
             feature_types={"promo_ratio": "contemporaneous"}
         )
         mgr._feature_cols = ["promo_ratio"]
-        # Simulate user-provided future features
-        mgr._future_features = pd.DataFrame({
+        # Simulate user-provided future features (Polars DataFrame)
+        mgr._future_features = pl.DataFrame({
             "unique_id": ["S1"] * 4,
-            "ds": pd.date_range("2024-01-01", periods=4, freq="W"),
+            "ds": [datetime.date(2024, 1, 1) + datetime.timedelta(weeks=i) for i in range(4)],
             "promo_ratio": [0.3, 0.0, 0.5, 0.0],
         })
 

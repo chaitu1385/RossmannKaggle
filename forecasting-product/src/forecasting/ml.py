@@ -74,7 +74,7 @@ class _DirectMLBase(BaseForecaster):
         self._quantile_mlfs: Dict[float, Any] = {}     # q -> fitted MLForecast
 
     @staticmethod
-    def _default_lag_transforms():
+    def _default_lag_transforms() -> Dict:
         """Default rolling window transforms applied to lag features."""
         try:
             from mlforecast.lag_transforms import RollingMean, RollingStd
@@ -91,10 +91,10 @@ class _DirectMLBase(BaseForecaster):
         except ImportError:
             return {}
 
-    def _get_learner(self):
+    def _get_learner(self) -> Any:
         raise NotImplementedError
 
-    def _get_quantile_learner(self, alpha: float):
+    def _get_quantile_learner(self, alpha: float) -> Any:
         """Return a quantile regression version of the base learner. Override in subclasses."""
         raise NotImplementedError
 
@@ -141,21 +141,21 @@ class _DirectMLBase(BaseForecaster):
     # ── mlforecast path ───────────────────────────────────────────────────
 
     @staticmethod
-    def _week_of_year(dates):
+    def _week_of_year(dates: Any) -> Any:
         """Extract ISO week-of-year as an integer feature for mlforecast."""
         return dates.isocalendar().week.astype(int)
 
     @staticmethod
-    def _month(dates):
+    def _month(dates: Any) -> Any:
         """Extract month as an integer feature."""
         return dates.month
 
     @staticmethod
-    def _quarter(dates):
+    def _quarter(dates: Any) -> Any:
         """Extract quarter as an integer feature."""
         return dates.quarter
 
-    def _detect_freq(self, df, time_col: str) -> str:
+    def _detect_freq(self, df: pl.DataFrame, time_col: str) -> str:
         """Detect the pandas-compatible frequency string from data dates.
 
         For weekly data, infers the correct ``W-<DAY>`` anchor from actual
@@ -174,7 +174,7 @@ class _DirectMLBase(BaseForecaster):
             return f"W-{day_name}"
         return "W"
 
-    def _get_date_features(self):
+    def _get_date_features(self) -> List:
         """Return date feature extractors appropriate for the frequency."""
         features = [self._month, self._quarter]
         if self.frequency in ("D", "W"):
@@ -184,11 +184,11 @@ class _DirectMLBase(BaseForecaster):
         return features
 
     @staticmethod
-    def _day_of_week(dates):
+    def _day_of_week(dates: Any) -> Any:
         """Extract day-of-week (0=Mon … 6=Sun) as an integer feature."""
         return dates.weekday
 
-    def _fit_mlforecast(self, df, target_col, time_col, id_col):
+    def _fit_mlforecast(self, df: pl.DataFrame, target_col: str, time_col: str, id_col: str) -> None:
         train_pdf = self._feature_mgr.prepare_fit(df, id_col, time_col, target_col)
 
         freq = self._freq or self._detect_freq(df, time_col)
@@ -207,7 +207,7 @@ class _DirectMLBase(BaseForecaster):
         else:
             self._mlf.fit(train_pdf, validate_data=False)
 
-    def _predict_mlforecast(self, horizon, id_col, time_col):
+    def _predict_mlforecast(self, horizon: int, id_col: str, time_col: str) -> pl.DataFrame:
         future_X = self._feature_mgr.prepare_predict(horizon)
         if future_X is not None:
             result_pdf = self._mlf.predict(h=horizon, X_df=future_X)
@@ -289,7 +289,7 @@ class _DirectMLBase(BaseForecaster):
         return output
 
     def _predict_quantile_mlforecast(
-        self, q: float, horizon: int, id_col: str, time_col: str
+        self, q: float, horizon: int, id_col: str, time_col: str,
     ) -> pl.DataFrame:
         """Lazily train + predict a quantile regression model via mlforecast."""
         if q not in self._quantile_mlfs:
@@ -349,13 +349,13 @@ class _DirectMLBase(BaseForecaster):
 
     # ── Manual fallback ───────────────────────────────────────────────────
 
-    def _fit_manual(self, df, target_col, time_col, id_col):
+    def _fit_manual(self, df: pl.DataFrame, target_col: str, time_col: str, id_col: str) -> None:
         """Direct multi-step: train one model per horizon step."""
         self._fitted_data = df.select([id_col, time_col, target_col]).sort(
             [id_col, time_col]
         )
 
-    def _predict_manual(self, horizon, id_col, time_col):
+    def _predict_manual(self, horizon: int, id_col: str, time_col: str) -> pl.DataFrame:
         """Simple lag-based prediction when mlforecast is unavailable."""
         if self._fitted_data is None:
             raise RuntimeError("Call fit() before predict()")
@@ -417,11 +417,11 @@ class LGBMDirectForecaster(_DirectMLBase):
         super().__init__(**kwargs)
         self._lgbm_params = {**self.DEFAULT_PARAMS, **(lgbm_params or {})}
 
-    def _get_learner(self):
+    def _get_learner(self) -> Any:
         import lightgbm as lgb
         return lgb.LGBMRegressor(**self._lgbm_params)
 
-    def _get_quantile_learner(self, alpha: float):
+    def _get_quantile_learner(self, alpha: float) -> Any:
         import lightgbm as lgb
         params = {**self._lgbm_params, "objective": "quantile", "alpha": alpha}
         return lgb.LGBMRegressor(**params)
@@ -453,11 +453,11 @@ class XGBoostDirectForecaster(_DirectMLBase):
         super().__init__(**kwargs)
         self._xgb_params = {**self.DEFAULT_PARAMS, **(xgb_params or {})}
 
-    def _get_learner(self):
+    def _get_learner(self) -> Any:
         import xgboost as xgb
         return xgb.XGBRegressor(**self._xgb_params)
 
-    def _get_quantile_learner(self, alpha: float):
+    def _get_quantile_learner(self, alpha: float) -> Any:
         import xgboost as xgb
         try:
             params = {

@@ -2,7 +2,8 @@
 
 from typing import Dict, List
 
-import pandas as pd
+import numpy as np
+import polars as pl
 
 from ..models.base import BaseForecaster
 from .metrics import mae, mape, rmse, rmspe
@@ -21,8 +22,8 @@ class ModelEvaluator:
     def evaluate(
         self,
         model: BaseForecaster,
-        X: pd.DataFrame,
-        y: pd.Series,
+        X: pl.DataFrame,
+        y: pl.Series,
         metrics: List[str] = None,
     ) -> Dict[str, float]:
         """Evaluate a model and return metric scores."""
@@ -30,7 +31,7 @@ class ModelEvaluator:
             metrics = list(self.METRICS.keys())
 
         y_pred = model.predict(X)
-        y_true = y.values
+        y_true = y.to_numpy()
 
         results = {}
         for metric_name in metrics:
@@ -42,9 +43,9 @@ class ModelEvaluator:
     def compare_models(
         self,
         models: List[BaseForecaster],
-        X: pd.DataFrame,
-        y: pd.Series,
-    ) -> pd.DataFrame:
+        X: pl.DataFrame,
+        y: pl.Series,
+    ) -> pl.DataFrame:
         """Compare multiple models and return a summary DataFrame."""
         rows = []
         for model in models:
@@ -52,4 +53,8 @@ class ModelEvaluator:
             scores["model"] = model.name
             rows.append(scores)
 
-        return pd.DataFrame(rows).set_index("model").sort_values("rmspe")
+        df = pl.DataFrame(rows)
+        df = df.sort("rmspe")
+        # Move 'model' to be a usable index-like column (first position)
+        cols = ["model"] + [c for c in df.columns if c != "model"]
+        return df.select(cols)

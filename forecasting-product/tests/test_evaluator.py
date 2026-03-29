@@ -12,7 +12,7 @@ Covers:
 import unittest
 
 import numpy as np
-import pandas as pd
+import polars as pl
 
 
 class _MockModel:
@@ -37,8 +37,8 @@ class TestModelEvaluator(unittest.TestCase):
         y_true = np.array([100.0, 200.0, 150.0, 300.0])
         y_pred = np.array([110.0, 190.0, 160.0, 280.0])
         model = _MockModel("test", y_pred)
-        X = pd.DataFrame({"f1": [1, 2, 3, 4]})
-        y = pd.Series(y_true)
+        X = pl.DataFrame({"f1": [1, 2, 3, 4]})
+        y = pl.Series("y", y_true)
 
         result = ev.evaluate(model, X, y)
         self.assertIn("rmspe", result)
@@ -53,8 +53,8 @@ class TestModelEvaluator(unittest.TestCase):
         ev = self._get_evaluator()
         y_true = np.array([100.0, 200.0])
         model = _MockModel("test", np.array([110.0, 190.0]))
-        X = pd.DataFrame({"f1": [1, 2]})
-        y = pd.Series(y_true)
+        X = pl.DataFrame({"f1": [1, 2]})
+        y = pl.Series("y", y_true)
 
         result = ev.evaluate(model, X, y, metrics=["mae", "rmse"])
         self.assertEqual(set(result.keys()), {"mae", "rmse"})
@@ -63,8 +63,8 @@ class TestModelEvaluator(unittest.TestCase):
         ev = self._get_evaluator()
         y_true = np.array([100.0, 200.0])
         model = _MockModel("test", np.array([100.0, 200.0]))
-        X = pd.DataFrame({"f1": [1, 2]})
-        y = pd.Series(y_true)
+        X = pl.DataFrame({"f1": [1, 2]})
+        y = pl.Series("y", y_true)
 
         result = ev.evaluate(model, X, y, metrics=["mae", "nonexistent"])
         self.assertIn("mae", result)
@@ -73,26 +73,27 @@ class TestModelEvaluator(unittest.TestCase):
     def test_compare_models(self):
         ev = self._get_evaluator()
         y_true = np.array([100.0, 200.0, 300.0])
-        X = pd.DataFrame({"f1": [1, 2, 3]})
-        y = pd.Series(y_true)
+        X = pl.DataFrame({"f1": [1, 2, 3]})
+        y = pl.Series("y", y_true)
 
         good = _MockModel("good", np.array([100.0, 200.0, 300.0]))
         bad = _MockModel("bad", np.array([200.0, 100.0, 400.0]))
 
         result = ev.compare_models([good, bad], X, y)
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertEqual(result.index.name, "model")
-        self.assertIn("good", result.index)
-        self.assertIn("bad", result.index)
+        self.assertIsInstance(result, pl.DataFrame)
+        self.assertIn("model", result.columns)
+        models = result.get_column("model").to_list()
+        self.assertIn("good", models)
+        self.assertIn("bad", models)
         # "good" should be first (lowest rmspe)
-        self.assertEqual(result.index[0], "good")
+        self.assertEqual(models[0], "good")
 
     def test_perfect_predictions_low_error(self):
         ev = self._get_evaluator()
         y_true = np.array([100.0, 200.0, 300.0])
         model = _MockModel("perfect", y_true.copy())
-        X = pd.DataFrame({"f1": [1, 2, 3]})
-        y = pd.Series(y_true)
+        X = pl.DataFrame({"f1": [1, 2, 3]})
+        y = pl.Series("y", y_true)
 
         result = ev.evaluate(model, X, y)
         for metric, val in result.items():

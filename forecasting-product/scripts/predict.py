@@ -56,7 +56,10 @@ def main():
     logger.info("Generating predictions")
     exclude_cols = {"Sales", "Date", "Id"}
     feature_cols = [c for c in test_df.columns if c not in exclude_cols]
-    predictions = model.predict(test_df[feature_cols])
+    # Convert to Polars for model API (models accept pl.DataFrame)
+    import polars as pl
+    test_features_pl = pl.from_pandas(test_df[feature_cols])
+    predictions = model.predict(test_features_pl)
 
     output = pd.DataFrame({"Id": test_df["Id"], "Sales": predictions})
     output["Sales"] = output["Sales"].clip(lower=0)

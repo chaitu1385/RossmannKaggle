@@ -182,7 +182,7 @@ class OverrideStore:
             return True
         return False
 
-    def close(self):
+    def close(self) -> None:
         """Close the database connection."""
         if self._conn:
             self._conn.close()
@@ -297,7 +297,7 @@ class ParquetOverrideStore:
             return True
         return False
 
-    def close(self):
+    def close(self) -> None:
         """No-op for Parquet backend (no persistent connection)."""
         pass
 

@@ -614,6 +614,155 @@ PySpark wrappers for large-scale runs on Fabric/Databricks:
 | `write_manifest()` | Writes manifest as JSON sidecar next to the forecast Parquet file |
 | `read_manifest()` | Loads manifest from JSON file |
 
+### `src/config/` — Configuration Schema & Loader
+
+YAML-driven config system with dataclass schema validation. `FREQUENCY_PROFILES` is the single source of truth for all frequency-dependent behaviour.
+
+| Class/Function | Description |
+|----------------|-------------|
+| `PlatformConfig` | Root dataclass for entire pipeline configuration |
+| `ForecastConfig` | Forecast settings (horizon, models, quantiles, external regressors) |
+| `BacktestConfig` | Walk-forward validation settings (folds, step size) |
+| `DataQualityConfig` | Validation + cleansing settings |
+| `load_config(path)` | Load and parse YAML config into `PlatformConfig` |
+| `load_config_with_overrides(path, overrides)` | Load config with LOB-level overrides merged |
+| `get_frequency_profile(freq)` | Get temporal properties for `"D"` / `"W"` / `"M"` / `"Q"` |
+| `freq_timedelta(freq, periods)` | Convert frequency + periods to `timedelta` |
+
+### `src/evaluation/` — Metric Computation
+
+Forecast accuracy metrics used by backtest engine and analytics.
+
+| Function | Description |
+|----------|-------------|
+| `rmse(y_true, y_pred)` | Root Mean Squared Error |
+| `rmspe(y_true, y_pred)` | Root Mean Squared Percentage Error |
+| `mae(y_true, y_pred)` | Mean Absolute Error |
+| `mape(y_true, y_pred)` | Mean Absolute Percentage Error |
+| `ModelEvaluator` | Framework for evaluating forecasts against actuals |
+
+### `src/errors/` — User-Friendly Error Translation
+
+Converts cryptic Python/Polars exceptions into plain-English messages with actionable suggestions.
+
+| Function | Description |
+|----------|-------------|
+| `friendly_error(exc, context, run_id)` | Translate exception to user-friendly dict with message and suggestion |
+| `safe_execute(func, *args, fallback, context)` | Execute callable with automatic error translation and fallback |
+| `suggest_column(target, available)` | Suggest closest matching column names for typo fixes |
+
+### `src/health/` — Pre-Pipeline Health Checks
+
+Validates system state, module imports, dependencies, config integrity, and directory availability before pipeline execution.
+
+| Function | Description |
+|----------|-------------|
+| `run_health_check(config_path, data_dir)` | Run all health checks and return combined report |
+| `check_dependencies()` | Verify required/optional Python packages are installed |
+| `check_module_imports()` | Validate all core/optional modules can be imported |
+| `check_config(config_path)` | Validate pipeline config file exists and parses |
+| `check_data_directory(data_dir)` | Verify data directory structure |
+
+### `src/lineage/` — Data Provenance Tracking
+
+Records data flow through pipeline steps with parent linkage for end-to-end traceability.
+
+| Class/Function | Description |
+|----------------|-------------|
+| `LineageTracker` | Track data lineage through pipeline steps |
+| `track(step, agent, inputs, outputs)` | Record a pipeline step via singleton tracker |
+| `LineageTracker.get_lineage_for_output(path)` | Walk parent chain back to root inputs |
+
+### `src/models/` — Legacy Model Wrappers
+
+Thin wrappers around XGBoost and LightGBM providing a unified interface. Superseded by `src/forecasting/ml.py` for new development.
+
+| Class | Description |
+|-------|-------------|
+| `BaseForecaster` | Abstract base class for model wrappers |
+| `XGBoostForecaster` | XGBoost forecast model wrapper |
+| `LightGBMForecaster` | LightGBM forecast model wrapper |
+
+### `src/profiler/` — Deep Data Profiling
+
+Distribution analysis, temporal pattern detection, correlation scanning, completeness checks, and rolling anomaly scoring.
+
+| Function | Description |
+|----------|-------------|
+| `run_deep_profile(df, date_col, metric_cols, freq)` | Run all profiling checks in one call |
+| `profile_distributions(df, cols)` | Profile shape, skewness, kurtosis per column |
+| `profile_temporal_patterns(df, date_col, cols, freq)` | Detect gaps, day-of-week/monthly patterns, trend |
+| `profile_correlations(df, cols, threshold)` | Find strong pairwise correlations |
+| `profile_anomalies(df, date_col, cols, window)` | Scan for anomalies using rolling statistics |
+
+### `src/stats/` — Statistical Testing Utilities
+
+Hypothesis testing, power analysis, and forecast accuracy comparison with structured results and human-readable interpretations.
+
+| Function | Description |
+|----------|-------------|
+| `two_sample_mean_test(a, b, alpha)` | Welch's t-test comparing means |
+| `mann_whitney_test(a, b, alpha)` | Non-parametric U test for skewed data |
+| `bootstrap_ci(series, stat_func, n, confidence)` | Non-parametric bootstrap confidence interval |
+| `forecast_accuracy_test(errors_a, errors_b)` | Paired Diebold-Mariano test for model comparison |
+| `rank_dimensions(df, metric_col, dims)` | Rank categorical dimensions by explanatory power |
+
+### `src/tieout/` — Data Integrity Verification
+
+Dual-path verification comparing Polars direct reads vs DuckDB SQL reads. Checks structural metrics and aggregations with tolerance-based gating.
+
+| Function | Description |
+|----------|-------------|
+| `run_full_tieout(source_path, db_con, label)` | Run complete tie-out comparing dual read paths |
+| `compare_profiles(source, db)` | Compare two profiles with tier-based gating |
+| `overall_status(results)` | Determine PASS / WARN / FAIL gate decision |
+
+### `src/validation/` — Four-Layer Validation Framework
+
+Structural, logical, business-rule, and Simpson's paradox checks producing a confidence grade (A–F).
+
+| Function | Description |
+|----------|-------------|
+| `run_full_validation(df, config)` | Run all 4 layers + confidence scoring |
+| `run_structural_checks(df, config)` | Validate schema, keys, completeness, date range |
+| `run_logical_checks(df, config)` | Check aggregation consistency, trends, monotonicity |
+| `validate_business_rules(df, config)` | Check ranges, metric relationships, temporal spikes |
+| `check_simpsons_paradox(df, segment_col, value_col)` | Detect Simpson's paradox across segments |
+| `score_confidence(structural, logical, business, paradox)` | Compute A–F confidence grade |
+
+### `src/visualization/` — Chart Builders
+
+SWD-style (Storytelling with Data) chart templates using matplotlib/Plotly for publication-quality visualizations.
+
+| Function | Description |
+|----------|-------------|
+| `forecast_plot(ax, actuals, forecast, ci_lower, ci_upper)` | Time series with forecast and confidence intervals |
+| `control_chart_plot(ax, values, dates, limits)` | Control chart with control limits |
+| `leaderboard_chart(ax, models, metrics)` | Rank models by performance |
+| `fva_cascade_chart(ax, components, values)` | Waterfall chart for FVA analysis |
+| `drift_timeline(ax, dates, drift_scores)` | Timeline showing model drift |
+
+### `src/presentation/` — Marp Slide Deck Builder
+
+Generates presentation-ready markdown decks from analysis results for S&OP meetings and backtest reviews.
+
+| Function | Description |
+|----------|-------------|
+| `DeckBuilder` | Build slide content from structured data |
+| `title_slide(title, subtitle, date, author)` | Generate title slide |
+| `kpi_slide(metrics, headline)` | Generate KPI dashboard slide |
+| `chart_slide(chart_path, headline, findings)` | Generate chart presentation slide |
+| `export_pdf(deck_path)` / `export_html(deck_path)` | Export to PDF or HTML |
+
+### `src/utils/` — General Utilities
+
+Logging setup and configuration I/O helpers used across the codebase.
+
+| Function | Description |
+|----------|-------------|
+| `get_logger(name)` | Get configured logger instance |
+| `load_config(path)` | Load configuration from file |
+
 ---
 
 ## Quick Start

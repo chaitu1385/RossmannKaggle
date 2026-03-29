@@ -11,6 +11,8 @@ from typing import Any, Dict, List
 
 import polars as pl
 
+from ..utils.gap_fill import fill_gaps as _shared_fill_gaps
+
 
 class BaseForecaster(ABC):
     """
@@ -64,8 +66,7 @@ class BaseForecaster(ABC):
         """
         Fill missing weeks for each series to ensure contiguous weekly dates.
 
-        Utility method available to any forecaster that needs contiguous
-        weekly dates (e.g. mlforecast, statsforecast).
+        Delegates to :func:`src.utils.gap_fill.fill_gaps`.
 
         Parameters
         ----------
@@ -76,45 +77,14 @@ class BaseForecaster(ABC):
             back-fill any leading nulls with the first known value.  Better
             for tree-based models where artificial zeros contaminate splits.
         """
-        if df.is_empty():
-            return df
-
-        min_date = df[time_col].min()
-        max_date = df[time_col].max()
-        if min_date is None or max_date is None:
-            return df
-
-        all_weeks = pl.date_range(
-            min_date, max_date, interval="1w", eager=True
-        ).alias(time_col)
-        all_weeks_df = pl.DataFrame({time_col: all_weeks})
-        series_ids = df.select(id_col).unique()
-        grid = series_ids.join(all_weeks_df, how="cross")
-
-        filled = grid.join(df, on=[id_col, time_col], how="left")
-
-        if target_col in filled.columns:
-            if strategy == "forward_fill":
-                # Forward-fill per series, then back-fill leading nulls
-                filled = filled.sort([id_col, time_col])
-                filled = filled.with_columns(
-                    pl.col(target_col)
-                    .forward_fill()
-                    .over(id_col)
-                    .alias(target_col)
-                )
-                filled = filled.with_columns(
-                    pl.col(target_col)
-                    .backward_fill()
-                    .over(id_col)
-                    .alias(target_col)
-                )
-            else:
-                filled = filled.with_columns(
-                    pl.col(target_col).fill_null(0.0)
-                )
-
-        return filled.sort([id_col, time_col])
+        return _shared_fill_gaps(
+            df,
+            time_col=time_col,
+            id_col=id_col,
+            target_col=target_col,
+            strategy=strategy,  # type: ignore[arg-type]
+            freq="W",
+        )
 
     @abstractmethod
     def fit(
