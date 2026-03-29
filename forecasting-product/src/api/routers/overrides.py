@@ -36,9 +36,9 @@ class UpdateOverrideRequest(BaseModel):
 
 @router.get("")
 def list_overrides(
+    request: Request,
     old_sku: Optional[str] = Query(None),
     new_sku: Optional[str] = Query(None),
-    request: Request,
     user: User = Depends(require_permission(Permission.VIEW_FORECASTS)),
 ):
     """List all planner overrides, optionally filtered by SKU."""
@@ -65,26 +65,26 @@ def list_overrides(
 
 @router.post("")
 def create_override(
-    request: CreateOverrideRequest,
-    request: Request,
+    http_request: Request,
+    body: CreateOverrideRequest,
     user: User = Depends(require_permission(Permission.CREATE_OVERRIDE)),
 ):
     """Create a new planner override."""
     from ...overrides.store import get_override_store
 
-    store_path = str(request.app.state.data_dir / "overrides")
+    store_path = str(http_request.app.state.data_dir / "overrides")
     store = get_override_store(path=store_path)
 
     try:
         override_id = store.add_override(
-            old_sku=request.old_sku,
-            new_sku=request.new_sku,
-            proportion=request.proportion,
-            scenario=request.scenario,
-            ramp_shape=request.ramp_shape,
-            effective_date=request.effective_date,
+            old_sku=body.old_sku,
+            new_sku=body.new_sku,
+            proportion=body.proportion,
+            scenario=body.scenario,
+            ramp_shape=body.ramp_shape,
+            effective_date=body.effective_date,
             created_by=user.user_id if hasattr(user, "user_id") else "api",
-            notes=request.notes,
+            notes=body.notes,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to create override: {exc}")
@@ -97,14 +97,14 @@ def create_override(
 @router.put("/{override_id}")
 def update_override(
     override_id: str,
-    request: UpdateOverrideRequest,
-    request: Request,
+    http_request: Request,
+    body: UpdateOverrideRequest,
     user: User = Depends(require_permission(Permission.CREATE_OVERRIDE)),
 ):
     """Update an existing planner override."""
     from ...overrides.store import get_override_store
 
-    store_path = str(request.app.state.data_dir / "overrides")
+    store_path = str(http_request.app.state.data_dir / "overrides")
     store = get_override_store(path=store_path)
 
     try:
@@ -123,12 +123,12 @@ def update_override(
         new_id = store.add_override(
             old_sku=row.get("old_sku", ""),
             new_sku=row.get("new_sku", ""),
-            proportion=request.proportion if request.proportion is not None else row.get("proportion", 1.0),
-            scenario=request.scenario or row.get("scenario", "manual"),
-            ramp_shape=request.ramp_shape or row.get("ramp_shape", "linear"),
-            effective_date=request.effective_date or row.get("effective_date"),
+            proportion=body.proportion if body.proportion is not None else row.get("proportion", 1.0),
+            scenario=body.scenario or row.get("scenario", "manual"),
+            ramp_shape=body.ramp_shape or row.get("ramp_shape", "linear"),
+            effective_date=body.effective_date or row.get("effective_date"),
             created_by=user.user_id if hasattr(user, "user_id") else "api",
-            notes=request.notes if request.notes is not None else row.get("notes"),
+            notes=body.notes if body.notes is not None else row.get("notes"),
         )
     except HTTPException:
         raise

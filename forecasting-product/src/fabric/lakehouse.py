@@ -17,11 +17,19 @@ Usage
 """
 
 import logging
+import re
 from typing import List, Optional
 
 from .config import FabricConfig
 
 logger = logging.getLogger(__name__)
+
+# Characters allowed in Spark SQL partition filters to prevent injection.
+# Permits column names, operators, literals, and common SQL keywords.
+_SAFE_FILTER_RE = re.compile(
+    r"^[\w\s=<>!.'\",()\-]+(?:(?:AND|OR|NOT|IN|IS|NULL|LIKE|BETWEEN)\s+[\w\s=<>!.'\",()\-]+)*$",
+    re.IGNORECASE,
+)
 
 
 class FabricLakehouse:
@@ -125,6 +133,11 @@ class FabricLakehouse:
             filters_applied.append(f"{date_col} < {end_date!r}")
 
         if partition_filter:
+            if not _SAFE_FILTER_RE.match(partition_filter):
+                raise ValueError(
+                    f"Rejected potentially unsafe partition_filter: {partition_filter!r}. "
+                    "Only simple column comparisons with AND/OR/IN/LIKE are allowed."
+                )
             df = df.filter(partition_filter)
             filters_applied.append(partition_filter)
 

@@ -148,7 +148,7 @@ forecasting-product/
 │   │   └── sku/            # SKU mapping, override management panels
 │   ├── src/hooks/          # React Query hooks + useAsyncOperation utility
 │   └── src/lib/            # API client, auth, types, constants
-├── tests/                  # 1030+ unit + integration tests
+├── tests/                  # 1060+ unit + integration tests
 ├── configs/                # YAML configuration files
 ├── scripts/                # Entry points (run_backtest, run_forecast, serve, spark_*)
 ├── notebooks/              # Jupyter notebooks for exploration
@@ -814,7 +814,7 @@ pip install -r forecasting-product/requirements.txt
 python -m pytest forecasting-product/tests/ \
   --ignore=forecasting-product/tests/test_metrics.py \
   --ignore=forecasting-product/tests/test_feature_engineering.py -v
-# 1030+ tests collected across 48 test files
+# 1060+ tests collected across 49 test files
 ```
 
 | Test file | Tests | Covers |

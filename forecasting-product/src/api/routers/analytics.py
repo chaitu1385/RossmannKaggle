@@ -23,8 +23,8 @@ router = APIRouter(tags=["analytics"])
 @router.get("/metrics/{lob}/fva")
 def get_fva(
     lob: str,
-    run_type: str = Query("backtest"),
     request: Request,
+    run_type: str = Query("backtest"),
     user: User = Depends(require_permission(Permission.VIEW_METRICS)),
 ):
     """Compute Forecast Value Add (FVA) cascade for a LOB."""
@@ -56,8 +56,8 @@ def get_fva(
 @router.get("/metrics/{lob}/calibration")
 def get_calibration(
     lob: str,
-    run_type: str = Query("backtest"),
     request: Request,
+    run_type: str = Query("backtest"),
     user: User = Depends(require_permission(Permission.VIEW_METRICS)),
 ):
     """Compute prediction interval calibration report."""
@@ -106,11 +106,11 @@ def get_calibration(
 @router.post("/metrics/{lob}/shap")
 async def compute_shap(
     lob: str,
+    request: Request,
     file: Optional[UploadFile] = File(None, description="Actuals CSV/Parquet for SHAP computation"),
     model_name: str = Query("lgbm_direct", description="Model to explain"),
     season_length: int = Query(52),
     top_k: int = Query(10, description="Number of top features to return"),
-    request: Request,
     user: User = Depends(require_permission(Permission.VIEW_METRICS)),
 ):
     """Compute SHAP feature attribution for tree-based models."""

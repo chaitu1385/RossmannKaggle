@@ -28,6 +28,7 @@ Usage:
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -39,6 +40,8 @@ import numpy as np
 from src.visualization.chart_palette import (
     COLORS, FVA_COLORS, MODEL_LAYER_COLORS, CATEGORICAL_PALETTE,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Chart dimensions
@@ -261,7 +264,7 @@ def format_date_axis(ax, fmt: str = "%b", axis: str = "x"):
         if labels:
             return
     except Exception:
-        pass
+        logger.debug("Failed to apply date formatter to axis", exc_info=True)
 
     try:
         tick_labels = [t.get_text() for t in target.get_ticklabels()]
@@ -276,7 +279,7 @@ def format_date_axis(ax, fmt: str = "%b", axis: str = "x"):
             else:
                 ax.set_yticklabels(new_labels)
     except Exception:
-        pass
+        logger.debug("Failed to reformat tick labels", exc_info=True)
 
 
 def annotate_point(ax, x, y, text: str, arrow_color: str | None = None, offset=(20, 20)):

@@ -49,10 +49,14 @@ from __future__ import annotations
 
 import logging
 import os
+import time
+from collections import defaultdict
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 from .schemas import (
     AnalysisResponse,
@@ -81,6 +85,34 @@ logger = logging.getLogger(__name__)
 _API_VERSION = os.environ.get("API_VERSION", "1.0.0")
 
 
+class _RateLimitMiddleware(BaseHTTPMiddleware):
+    """Simple in-memory sliding-window rate limiter per client IP."""
+
+    def __init__(self, app, max_requests: int = 100, window_seconds: int = 60):
+        super().__init__(app)
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self._hits: dict[str, list[float]] = defaultdict(list)
+
+    async def dispatch(self, request: Request, call_next):
+        client_ip = request.client.host if request.client else "unknown"
+        now = time.monotonic()
+        cutoff = now - self.window_seconds
+
+        # Prune old entries
+        hits = self._hits[client_ip]
+        self._hits[client_ip] = hits = [t for t in hits if t > cutoff]
+
+        if len(hits) >= self.max_requests:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded. Try again later."},
+            )
+
+        hits.append(now)
+        return await call_next(request)
+
+
 def _register_routers(app: FastAPI) -> None:
     """Include all domain routers."""
     from .routers import analytics, governance, hierarchy, overrides, pipeline, series, sku_mapping
@@ -104,6 +136,7 @@ def create_app(
     auth_enabled: bool = False,
     jwt_secret: str = "",
     audit_log_path: str = "data/audit_log/",
+    cors_origins: list[str] | None = None,
 ) -> FastAPI:
     """
     Factory function — returns a configured FastAPI application.
@@ -132,12 +165,24 @@ def create_app(
     # ── CORS — allow cross-origin requests from frontend (Next.js / Streamlit)
     from fastapi.middleware.cors import CORSMiddleware
 
+    _default_origins = [
+        "http://localhost:3000",   # Next.js dev
+        "http://localhost:8501",   # Streamlit
+        "http://localhost:8000",   # API docs (Swagger UI)
+    ]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=cors_origins or _default_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+    )
+
+    # ── Rate limiting ─────────────────────────────────────────────────────
+    app.add_middleware(
+        _RateLimitMiddleware,
+        max_requests=int(os.environ.get("API_RATE_LIMIT", "100")),
+        window_seconds=60,
     )
 
     # ── Shared state (attached to app for testability) ─────────────────────
@@ -482,7 +527,7 @@ def create_app(
             store = MetricStore(str(app.state.metrics_dir))
             metrics_df = store.read(lob=request.lob, run_type="backtest")
         except Exception:
-            pass
+            logger.debug("Could not load metrics for NL query (lob=%s)", request.lob, exc_info=True)
 
         # Load history data if available
         history_df = pl.DataFrame()
@@ -494,7 +539,7 @@ def create_app(
                     history_df = pl.read_parquet(parquet_files[-1])
                     history_df = history_df.filter(pl.col("series_id") == request.series_id)
                 except Exception:
-                    pass
+                    logger.debug("Could not load history for NL query (series=%s)", request.series_id, exc_info=True)
 
         engine = NaturalLanguageQueryEngine()
         result = engine.query(
@@ -582,7 +627,7 @@ def create_app(
         try:
             leaderboard = store.leaderboard(lob=request.lob, run_type=request.run_type)
         except Exception:
-            pass
+            logger.warning("Could not load leaderboard for config tuner (lob=%s)", request.lob, exc_info=True)
 
         # Use default config (in production, load from config file)
         config = PlatformConfig(lob=request.lob)
@@ -639,7 +684,7 @@ def create_app(
         try:
             leaderboard = store.leaderboard(lob=request.lob, run_type=request.run_type)
         except Exception:
-            pass
+            logger.warning("Could not load leaderboard for commentary (lob=%s)", request.lob, exc_info=True)
 
         engine = CommentaryEngine()
         result = engine.generate(

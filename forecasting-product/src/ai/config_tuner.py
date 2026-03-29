@@ -160,7 +160,7 @@ class ConfigTunerEngine(AIFeatureBase):
                 }
                 parts.append(f"\n## Forecastability\n```json\n{json.dumps(fc_data, indent=2, default=str)}\n```")
             except Exception:
-                pass
+                logger.debug("Failed to serialize forecastability data", exc_info=True)
 
         parts.append("""
 ## Instructions

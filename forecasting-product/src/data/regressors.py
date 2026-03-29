@@ -118,7 +118,7 @@ def generate_holiday_calendar(
                     if py_date in country_holidays:
                         count += 1
                 except Exception:
-                    pass
+                    logger.debug("Failed to check holiday for date offset %d", day_offset, exc_info=True)
         holiday_counts.append(count)
 
     return pl.DataFrame({

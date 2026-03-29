@@ -6,7 +6,7 @@ setup(
     description="Modular time series forecasting product for store sales",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
-    python_requires=">=3.8",
+    python_requires=">=3.10",
     install_requires=[
         "numpy>=1.21.0",
         "pandas>=1.3.0",
