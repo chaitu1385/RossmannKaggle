@@ -358,7 +358,7 @@ class DataAnalyzer:
                 else:
                     return "Q", n_series
         except Exception:
-            pass
+            logger.debug("Frequency detection failed, defaulting to weekly", exc_info=True)
 
         return "W", n_series
 

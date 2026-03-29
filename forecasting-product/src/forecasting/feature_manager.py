@@ -18,11 +18,10 @@ import polars as pl
 
 logger = logging.getLogger(__name__)
 
-try:
-    import pandas as pd
-    _HAS_PANDAS = True
-except ImportError:
-    _HAS_PANDAS = False
+# pandas is used at the boundary with mlforecast (which requires pandas DataFrames).
+# All internal processing uses Polars; .to_pandas() is called only when returning
+# DataFrames to the external library.
+import pandas as pd  # noqa: F401 — required for .to_pandas() and type hints
 
 
 class MLForecastFeatureManager:
