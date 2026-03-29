@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useLob } from "@/providers/lob-provider";
+import { NoDataGuide } from "@/components/shared/no-data-guide";
 import { DriftHistogram } from "@/components/charts/drift-histogram";
 import { TriagePanel } from "@/components/ai/triage-panel";
 import { DataTable } from "@/components/data/data-table";
@@ -144,7 +146,7 @@ function ManifestsTabContent({ lob }: { lob: string }) {
 }
 
 export default function HealthPage() {
-  const [lob, setLob] = useState("retail");
+  const { lob, setLob } = useLob();
   const [activeTab, setActiveTab] = useState<"drift" | "audit" | "manifests">("drift");
   const [auditAction, setAuditAction] = useState("");
   const [auditLimit, setAuditLimit] = useState(100);
@@ -204,9 +206,11 @@ export default function HealthPage() {
       {activeTab === "drift" && (
         <div className="space-y-6">
           {drift.isLoading && <ChartSkeleton />}
-          {drift.error && (
+          {drift.error && (drift.error.message.includes("404") ? (
+            <NoDataGuide lob={lob} dataType="drift" />
+          ) : (
             <ErrorDisplay message={drift.error.message} onRetry={() => drift.refetch()} />
-          )}
+          ))}
           {drift.data && (
             <>
               <div className="grid grid-cols-3 gap-3">

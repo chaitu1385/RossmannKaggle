@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useLob } from "@/providers/lob-provider";
 import { LeaderboardBar } from "@/components/charts/leaderboard-bar";
 import { FVACascade } from "@/components/charts/fva-cascade";
 import { CalibrationPlot } from "@/components/charts/calibration-plot";
 import { ConfigTunerPanel } from "@/components/ai/config-tuner-panel";
 import { MetricCard } from "@/components/shared/metric-card";
 import { ErrorDisplay } from "@/components/shared/error-boundary";
+import { NoDataGuide } from "@/components/shared/no-data-guide";
 import { ChartSkeleton } from "@/components/shared/loading-skeleton";
 import { DataTable } from "@/components/data/data-table";
 import { useLeaderboard } from "@/hooks/use-leaderboard";
@@ -15,7 +17,7 @@ import { formatPct } from "@/lib/utils";
 import type { FVAResponse, CalibrationResponse, ShapResponse } from "@/lib/types";
 
 export default function BacktestPage() {
-  const [lob, setLob] = useState("retail");
+  const { lob, setLob } = useLob();
   const [runType, setRunType] = useState("backtest");
   const { data, isLoading, error, refetch } = useLeaderboard(lob, runType);
 
@@ -122,7 +124,11 @@ export default function BacktestPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Model Leaderboard</h2>
         {isLoading && <ChartSkeleton />}
-        {error && <ErrorDisplay message={error.message} onRetry={() => refetch()} />}
+        {error && (error.message.includes("404") ? (
+          <NoDataGuide lob={lob} dataType="backtest" />
+        ) : (
+          <ErrorDisplay message={error.message} onRetry={() => refetch()} />
+        ))}
         {data && (
           <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

@@ -2,6 +2,7 @@
 
 import { Suspense, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import { useLob } from "@/providers/lob-provider";
 import { NLQueryPanel } from "@/components/ai/nl-query-panel";
 import { MetricCard } from "@/components/shared/metric-card";
 import { DataTable } from "@/components/data/data-table";
@@ -9,6 +10,7 @@ import { Skeleton } from "@/components/shared/loading-skeleton";
 import { DEMAND_CLASS_COLORS } from "@/lib/constants";
 import { BreakTimeline } from "@/components/charts/break-timeline";
 import { CleansingOverlay } from "@/components/charts/cleansing-overlay";
+import { NoDataGuide } from "@/components/shared/no-data-guide";
 import { api } from "@/lib/api-client";
 import type {
   SeriesItem,
@@ -51,7 +53,14 @@ export default function SeriesExplorerPage() {
 
 function SeriesExplorerContent() {
   const searchParams = useSearchParams();
-  const [lob, setLob] = useState(searchParams.get("lob") || "retail");
+  const { lob: sharedLob, setLob: setSharedLob } = useLob();
+  const [lob, setLobLocal] = useState(searchParams.get("lob") || sharedLob);
+
+  // Sync local changes to shared context
+  const setLob = useCallback((value: string) => {
+    setLobLocal(value);
+    setSharedLob(value);
+  }, [setSharedLob]);
 
   // Series list state
   const [seriesList, setSeriesList] = useState<SeriesItem[]>([]);
@@ -208,7 +217,11 @@ function SeriesExplorerContent() {
           </>
         ) : seriesError ? (
           <div className="col-span-4">
-            <ErrorMessage message={seriesError} />
+            {seriesError.includes("404") ? (
+              <NoDataGuide lob={lob} dataType="series" />
+            ) : (
+              <ErrorMessage message={seriesError} />
+            )}
           </div>
         ) : (
           <>
