@@ -13,6 +13,8 @@ from src.models.base import BaseForecaster
 from src.models.lightgbm_model import LightGBMForecaster
 from src.models.xgboost_model import XGBoostForecaster
 
+pytestmark = pytest.mark.unit
+
 
 # ---------------------------------------------------------------------------
 # Helpers

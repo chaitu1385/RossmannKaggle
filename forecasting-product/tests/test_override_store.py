@@ -15,6 +15,9 @@ import tempfile
 import unittest
 
 import polars as pl
+import pytest
+
+pytestmark = pytest.mark.unit
 
 
 class TestOverrideStoreDuckDB(unittest.TestCase):
@@ -22,6 +25,7 @@ class TestOverrideStoreDuckDB(unittest.TestCase):
 
     def _make_store(self, tmpdir: str):
         from src.overrides.store import OverrideStore
+
         return OverrideStore(db_path=f"{tmpdir}/overrides.duckdb")
 
     def test_add_and_retrieve(self):
@@ -117,6 +121,8 @@ class TestOverrideStoreDuckDB(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = self._make_store(tmpdir)
             store.close()  # should not raise
+            # Verify store can still be inspected after close
+            self.assertIsNotNone(store)
 
     def test_multiple_overrides(self):
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -10,7 +10,6 @@ Tests cover:
   - Backtesting engine (walk-forward CV, champion selection)
   - Pipeline orchestration (end-to-end smoke test)
 """
-
 import os
 import tempfile
 from datetime import date, timedelta
@@ -22,6 +21,7 @@ import yaml
 
 from conftest import make_hierarchy_data, make_weekly_actuals
 
+pytestmark = pytest.mark.integration
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Test data generators
@@ -507,7 +507,7 @@ class TestTransitionEngine:
         plans = engine.compute_plans(mapping, product_master, origin, horizon_weeks=39)
         assert len(plans) == 1
         assert plans[0].scenario == TransitionScenario.B_IN_HORIZON
-        assert plans[0].ramp_start is not None
+        assert isinstance(plans[0].ramp_start, date)
 
     def test_scenario_c_beyond_horizon(self):
         from src.config.schema import TransitionConfig
@@ -712,7 +712,7 @@ class TestRampShapes:
         engine = TransitionEngine(TransitionConfig(ramp_shape="scurve"))
         result = engine.stitch_series(actuals, [plan])
         assert isinstance(result, pl.DataFrame)
-        assert len(result) > 0
+        assert len(result) == 39  # 26 OLD-1 rows + 13 NEW-1 rows stitched
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1073,7 +1073,6 @@ class TestDeploymentPostRun:
 
     def test_postrun_raises_when_rows_insufficient(self):
         import unittest.mock as mock
-        import pytest
         orch = self._make_orch(min_forecast_rows=50)
         forecasts_sdf = mock.MagicMock()
         forecasts_sdf.count.return_value = 10
@@ -1475,6 +1474,7 @@ class TestRestApi:
     def test_openapi_docs_available(self):
         """The /docs endpoint should return 200 (Swagger UI)."""
         from fastapi.testclient import TestClient
+
         app = self._make_app("/tmp/test_api_docs")
         client = TestClient(app)
         resp = client.get("/docs")

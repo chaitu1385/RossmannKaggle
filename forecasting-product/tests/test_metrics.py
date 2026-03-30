@@ -4,6 +4,8 @@ import numpy as np
 import pytest
 from src.evaluation.metrics import rmspe, rmse, mae, mape
 
+pytestmark = pytest.mark.unit
+
 
 def test_rmse_perfect():
     y = np.array([1.0, 2.0, 3.0])

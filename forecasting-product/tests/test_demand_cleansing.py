@@ -17,6 +17,9 @@ import polars as pl
 
 from src.config.schema import CleansingConfig, DataQualityConfig, PlatformConfig
 from src.data.cleanser import DemandCleanser, CleansingReport, CleansingResult
+import pytest
+
+pytestmark = pytest.mark.unit
 
 
 # --------------------------------------------------------------------------- #

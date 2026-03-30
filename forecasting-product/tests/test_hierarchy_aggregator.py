@@ -9,13 +9,13 @@ Covers:
   - n_recent_weeks filtering
   - invalid agg raises ValueError
 """
-
 import unittest
 from datetime import date, timedelta
 
 import polars as pl
 import pytest
 
+pytestmark = pytest.mark.unit
 
 def _make_geo_tree():
     """
@@ -231,6 +231,7 @@ class TestComputeHistoricalProportions(unittest.TestCase):
 
     def test_n_recent_weeks_filter(self):
         from src.hierarchy.aggregator import HierarchyAggregator
+
         tree = _make_geo_tree()
         agg = HierarchyAggregator(tree)
         # Make data with dates as Datetime to support duration arithmetic

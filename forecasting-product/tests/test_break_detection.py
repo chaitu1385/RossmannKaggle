@@ -24,6 +24,8 @@ from src.config.schema import (
 )
 from src.series.break_detector import BreakReport, StructuralBreakDetector
 
+pytestmark = pytest.mark.unit
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -129,7 +131,7 @@ class TestDetectLevelShift:
         )
         df = _make_panel(values)
         report = detector.detect(df)
-        assert report.per_series is not None
+        assert isinstance(report.per_series, pl.DataFrame)
         row = report.per_series.filter(pl.col("series_id") == "S1")
         assert row["n_breaks"][0] >= 1
 
@@ -282,7 +284,7 @@ class TestBuilderIntegration:
         df = _make_panel(values)
 
         result = builder.build(df)
-        assert builder._last_break_report is not None
+        assert isinstance(builder._last_break_report, BreakReport)
         assert builder._last_break_report.total_series == 1
         assert builder._last_break_report.series_with_breaks >= 1
 
@@ -336,7 +338,8 @@ class TestQualityReportIntegration:
         builder.build(df)
 
         qr = builder._last_quality_report
-        assert qr is not None
+        from src.data.quality_report import DataQualityReport
+        assert isinstance(qr, DataQualityReport)
         assert qr.series_with_breaks >= 1
         assert qr.total_breaks >= 1
         # Check that the break warning appears

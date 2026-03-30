@@ -16,6 +16,8 @@ from src.forecasting.hierarchical import (
 from src.forecasting.neural import _NeuralforecastBase
 from src.forecasting.registry import registry
 
+pytestmark = pytest.mark.unit
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Test data generators

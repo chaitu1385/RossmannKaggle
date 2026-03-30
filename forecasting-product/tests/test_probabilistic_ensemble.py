@@ -26,6 +26,8 @@ from src.config.schema import (
 
 from conftest import make_weekly_series as _make_weekly_series
 
+pytestmark = pytest.mark.unit
+
 
 def _naive(season_length: int = 52) -> SeasonalNaiveForecaster:
     f = SeasonalNaiveForecaster(season_length=season_length)
@@ -327,7 +329,6 @@ class TestBacktestPipelineEnsemble:
         results = pipeline.run(data)
 
         assert "ensemble" in results
-        assert results["ensemble"] is not None
         assert isinstance(results["ensemble"], WeightedEnsembleForecaster)
 
     def test_no_ensemble_when_strategy_champion(self, tmp_path):

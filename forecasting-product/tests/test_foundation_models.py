@@ -17,7 +17,6 @@ Mock strategy:
   - Use a fixed random-seed NumPy array as the fake Chronos sample tensor
   - Use a fixed pandas DataFrame as the fake TimeGPT API response
 """
-
 from datetime import date, timedelta
 from typing import Dict, List
 from unittest.mock import MagicMock, patch
@@ -31,6 +30,7 @@ from src.forecasting.registry import registry
 
 from conftest import make_weekly_series as _make_weekly_series
 
+pytestmark = pytest.mark.unit
 
 def _make_torch_forecast_tensor(n_series: int, num_samples: int, horizon: int):
     """Return a fake Chronos forecast tensor (PyTorch-free mock)."""
@@ -88,7 +88,7 @@ class TestChronosForecasterFit:
         data = _make_weekly_series(n_series=2, n_weeks=10)
         f.fit(data)
         for sid, last_date in f._last_dates.items():
-            assert last_date is not None
+            assert isinstance(last_date, date)
 
     def test_fit_does_not_load_pipeline(self):
         """fit() must not trigger any model download."""
@@ -270,7 +270,6 @@ class TestTimeGPTForecasterFit:
         f = TimeGPTForecaster(api_key="dummy")
         data = _make_weekly_series(n_series=2, n_weeks=52)
         f.fit(data)
-        assert f._train_df is not None
         assert isinstance(f._train_df, pl.DataFrame)
         assert "unique_id" in f._train_df.columns
         assert "ds" in f._train_df.columns
@@ -400,6 +399,7 @@ class TestTimeGPTErrorHandling:
 
     def test_missing_api_key_raises_value_error(self):
         import os
+
         old = os.environ.pop("NIXTLA_API_KEY", None)
         try:
             f = TimeGPTForecaster()  # no key, no env var

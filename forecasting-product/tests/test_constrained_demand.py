@@ -13,6 +13,8 @@ from src.forecasting.constrained import (
 )
 from src.forecasting.registry import registry
 
+pytestmark = pytest.mark.unit
+
 
 # ---------------------------------------------------------------------------
 # Fake base forecaster for deterministic testing

@@ -9,6 +9,8 @@ import numpy as np
 import polars as pl
 import pytest
 
+pytestmark = pytest.mark.unit
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Test data generators

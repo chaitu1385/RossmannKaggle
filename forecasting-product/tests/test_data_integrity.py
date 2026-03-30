@@ -16,6 +16,9 @@ from datetime import date, timedelta
 from typing import List
 
 import polars as pl
+import pytest
+
+pytestmark = pytest.mark.integration
 
 
 # --------------------------------------------------------------------------- #

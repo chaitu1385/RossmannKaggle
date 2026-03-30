@@ -14,6 +14,8 @@ from src.utils.config import load_config
 from src.utils.gap_fill import fill_gaps
 from src.utils.logger import get_logger
 
+pytestmark = pytest.mark.unit
+
 
 # ---------------------------------------------------------------------------
 # config.py

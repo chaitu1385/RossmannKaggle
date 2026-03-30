@@ -15,6 +15,8 @@ from pathlib import Path
 import polars as pl
 import pytest
 
+pytestmark = pytest.mark.integration
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -49,20 +51,11 @@ class TestRequirementsFabric:
         packages = self._parse_requirements(path)
         assert len(packages) >= 5, f"Expected at least 5 packages, got {len(packages)}"
 
-    def test_excludes_pyspark(self):
+    @pytest.mark.parametrize("pkg", ["pyspark", "duckdb", "neuralforecast"])
+    def test_excludes_heavy_dependencies(self, pkg):
         path = ROOT / "requirements-fabric.txt"
         packages = self._parse_requirements(path)
-        assert "pyspark" not in packages, "pyspark should not be in Fabric requirements"
-
-    def test_excludes_duckdb(self):
-        path = ROOT / "requirements-fabric.txt"
-        packages = self._parse_requirements(path)
-        assert "duckdb" not in packages, "duckdb should not be in Fabric requirements"
-
-    def test_excludes_neuralforecast(self):
-        path = ROOT / "requirements-fabric.txt"
-        packages = self._parse_requirements(path)
-        assert "neuralforecast" not in packages
+        assert pkg not in packages, f"{pkg} should not be in Fabric requirements"
 
     def test_includes_core_packages(self):
         path = ROOT / "requirements-fabric.txt"
@@ -129,6 +122,7 @@ class TestParquetOverrideStore:
 
     def test_close_noop(self, store):
         store.close()  # should not raise
+        assert store is not None  # verify store object still valid after close
 
 
 # ── get_override_store factory ───────────────────────────────────────────────
@@ -170,4 +164,5 @@ class TestFabricAdapterImport:
 
     def test_class_exists(self):
         from src.fabric.notebook_adapter import FabricNotebookAdapter
+
         assert callable(FabricNotebookAdapter)

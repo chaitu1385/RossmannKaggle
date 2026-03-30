@@ -7,6 +7,10 @@ from unittest.mock import MagicMock
 from src.ai.anomaly_triage import AnomalyTriageEngine, TriagedAlert, TriageResult
 from src.metrics.drift import DriftAlert, DriftSeverity
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 # --------------------------------------------------------------------------- #
 #  Factory helpers
@@ -165,7 +169,8 @@ class TestTriageMockRoundtrip(unittest.TestCase):
 
         mock_client.messages.create.assert_called_once()
         self.assertEqual(result.total_alerts, 5)
-        self.assertTrue(len(result.executive_summary) > 0)
+        self.assertIsInstance(result.executive_summary, str)
+        self.assertIn("retail", result.executive_summary)
         self.assertEqual(result.ranked_alerts[0].series_id, "series_0")
 
     def test_api_error_falls_back(self):

@@ -67,7 +67,8 @@ pythonpath = [".", "tests"]
 addopts = "-v --tb=short --cov=src --cov-report=term-missing --cov-fail-under=30"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks integration tests",
+    "integration: marks integration tests (deselect with '-m \"not integration\"')",
+    "unit: marks fast unit tests (run with '-m unit')",
 ]
 
 [tool.coverage.run]

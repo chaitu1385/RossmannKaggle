@@ -16,6 +16,9 @@ import unittest
 import polars as pl
 
 from conftest import make_weekly_series as _make_weekly_series
+import pytest
+
+pytestmark = pytest.mark.unit
 
 
 class TestAutoARIMAForecaster(unittest.TestCase):

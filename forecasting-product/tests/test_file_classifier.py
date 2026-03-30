@@ -13,6 +13,10 @@ from src.data.file_classifier import (
     FileProfile,
 )
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 # --------------------------------------------------------------------------- #
 #  Factory helpers
@@ -178,7 +182,8 @@ class TestClassifySingle(unittest.TestCase):
     def test_reasoning_populated(self):
         df = _make_primary_timeseries()
         profile = self.clf.classify_single("data.csv", df)
-        self.assertTrue(len(profile.reasoning) > 0)
+        self.assertIsInstance(profile.reasoning, list)
+        self.assertGreaterEqual(len(profile.reasoning), 1)
 
     def test_profile_metadata_correct(self):
         df = _make_primary_timeseries(n_stores=2, n_weeks=10)
@@ -207,7 +212,8 @@ class TestClassifyFiles(unittest.TestCase):
         result = self.clf.classify_files(files)
         self.assertIsNone(result.primary_file)
         self.assertEqual(len(result.unknown_files), 1)
-        self.assertTrue(len(result.warnings) > 0)
+        self.assertIsInstance(result.warnings, list)
+        self.assertGreaterEqual(len(result.warnings), 1)
 
     def test_timeseries_plus_dimension(self):
         files = {
@@ -272,7 +278,8 @@ class TestClassifyFiles(unittest.TestCase):
         result = self.clf.classify_files({})
         self.assertIsNone(result.primary_file)
         self.assertEqual(len(result.profiles), 0)
-        self.assertTrue(len(result.warnings) > 0)
+        self.assertIsInstance(result.warnings, list)
+        self.assertGreaterEqual(len(result.warnings), 1)
 
     def test_all_unknown_produces_warning(self):
         files = {
@@ -281,7 +288,8 @@ class TestClassifyFiles(unittest.TestCase):
         }
         result = self.clf.classify_files(files)
         self.assertIsNone(result.primary_file)
-        self.assertTrue(len(result.warnings) > 0)
+        self.assertIsInstance(result.warnings, list)
+        self.assertGreaterEqual(len(result.warnings), 1)
 
     def test_dimension_role_assigned_correctly(self):
         files = {

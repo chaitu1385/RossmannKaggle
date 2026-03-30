@@ -18,6 +18,8 @@ from src.metrics.definitions import (
     make_mase,
 )
 
+pytestmark = pytest.mark.unit
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 

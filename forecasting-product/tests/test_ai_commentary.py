@@ -11,6 +11,10 @@ import polars as pl
 from src.ai.commentary import CommentaryEngine, CommentaryResult, KeyMetric
 from src.metrics.drift import DriftAlert, DriftSeverity
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 # --------------------------------------------------------------------------- #
 #  Factory helpers
@@ -126,8 +130,10 @@ class TestCommentaryGracefulDegradation(unittest.TestCase):
         result = engine.generate(lob="retail", metrics_df=df, drift_alerts=alerts)
 
         self.assertIn("unavailable", result.executive_summary.lower())
-        self.assertTrue(len(result.key_metrics) > 0)
-        self.assertTrue(len(result.action_items) > 0)
+        self.assertGreaterEqual(len(result.key_metrics), 1)
+        self.assertIsInstance(result.key_metrics, list)
+        self.assertGreaterEqual(len(result.action_items), 1)
+        self.assertIsInstance(result.action_items, list)
 
     def test_fallback_includes_drift_count(self):
         engine = CommentaryEngine.__new__(CommentaryEngine)
@@ -192,8 +198,8 @@ class TestCommentaryResponseParsing(unittest.TestCase):
 
         self.assertIn("retail", result.executive_summary.lower())
         self.assertEqual(len(result.key_metrics), 3)
-        self.assertTrue(len(result.exceptions) > 0)
-        self.assertTrue(len(result.action_items) > 0)
+        self.assertEqual(len(result.exceptions), 3)
+        self.assertEqual(len(result.action_items), 3)
 
     def test_handles_malformed_response(self):
         engine = CommentaryEngine.__new__(CommentaryEngine)
@@ -223,8 +229,9 @@ class TestCommentaryMockRoundtrip(unittest.TestCase):
         result = engine.generate(lob="retail", metrics_df=df)
 
         mock_client.messages.create.assert_called_once()
-        self.assertTrue(len(result.executive_summary) > 0)
-        self.assertTrue(len(result.key_metrics) > 0)
+        self.assertIsInstance(result.executive_summary, str)
+        self.assertIn("retail", result.executive_summary.lower())
+        self.assertEqual(len(result.key_metrics), 3)
 
     def test_api_error_falls_back(self):
         engine = CommentaryEngine.__new__(CommentaryEngine)

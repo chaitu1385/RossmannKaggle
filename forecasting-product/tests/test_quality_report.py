@@ -13,6 +13,8 @@ from src.config.schema import (
 )
 from src.data.quality_report import DataQualityAnalyzer, DataQualityReport
 
+pytestmark = pytest.mark.unit
+
 
 # --------------------------------------------------------------------------- #
 #  Helpers
@@ -297,7 +299,7 @@ class TestPerSeriesDetail:
         df = _make_complete_series(n_series=3, n_weeks=104)
         analyzer = DataQualityAnalyzer(_make_config(include_series_detail=True))
         report = analyzer.analyze(df, "week", "quantity", "series_id")
-        assert report.per_series is not None
+        assert isinstance(report.per_series, pl.DataFrame)
         assert report.per_series.height == 3
         assert "n_weeks" in report.per_series.columns
         assert "mean" in report.per_series.columns
@@ -322,5 +324,6 @@ class TestSeriesBuilderIntegration:
         builder = SeriesBuilder(config)
         df = _make_complete_series(n_series=2, n_weeks=52)
         builder.build(actuals=df)
-        assert builder._last_quality_report is not None
+        from src.data.quality_report import DataQualityReport
+        assert isinstance(builder._last_quality_report, DataQualityReport)
         assert builder._last_quality_report.total_series == 2

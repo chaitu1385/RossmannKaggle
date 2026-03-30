@@ -1,5 +1,4 @@
 """Tests for API security hardening: path traversal prevention and upload size limits."""
-
 import io
 import tempfile
 from datetime import date, timedelta
@@ -13,6 +12,7 @@ from fastapi.testclient import TestClient
 from src.api.app import create_app
 from src.api.deps import MAX_UPLOAD_BYTES, validate_path_param, validate_upload_size
 
+pytestmark = pytest.mark.integration
 
 # --------------------------------------------------------------------------- #
 #  validate_path_param unit tests
@@ -86,6 +86,7 @@ class TestValidateUploadSize:
     def test_oversized_file_rejected(self):
         import asyncio
         from fastapi import HTTPException, UploadFile
+
 
         content = b"x" * 2000
         file = UploadFile(file=io.BytesIO(content), filename="big.csv")
