@@ -5,6 +5,8 @@ import pytest
 
 from src.data.feature_engineering import FeatureEngineer
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture
 def sample_df() -> pl.DataFrame:

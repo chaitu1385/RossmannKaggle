@@ -11,6 +11,8 @@ from src.series.builder import SeriesBuilder
 
 from conftest import make_actuals as _make_actuals
 
+pytestmark = pytest.mark.unit
+
 
 def _make_external_features(
     n_weeks: int = 52, n_series: int = 2, include_future: int = 0
@@ -48,7 +50,7 @@ class TestValidateRegressors:
             features, actuals,
             feature_columns=["promotion_flag", "nonexistent_col"],
         )
-        assert len(issues) > 0
+        assert len(issues) == 1
         assert "nonexistent_col" in issues[0]
 
     def test_future_coverage_warning(self):

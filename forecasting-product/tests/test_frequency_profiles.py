@@ -18,6 +18,9 @@ from src.config.schema import (
     freq_timedelta,
     get_frequency_profile,
 )
+import pytest
+
+pytestmark = pytest.mark.unit
 
 
 class TestFrequencyProfiles(unittest.TestCase):
@@ -39,23 +42,21 @@ class TestFrequencyProfiles(unittest.TestCase):
                     f"Missing keys for {freq}: {required - profile.keys()}"
                 )
 
-    def test_season_lengths(self):
-        self.assertEqual(FREQUENCY_PROFILES["D"]["season_length"], 7)
-        self.assertEqual(FREQUENCY_PROFILES["W"]["season_length"], 52)
-        self.assertEqual(FREQUENCY_PROFILES["M"]["season_length"], 12)
-        self.assertEqual(FREQUENCY_PROFILES["Q"]["season_length"], 4)
-
-    def test_statsforecast_freq_strings(self):
-        self.assertEqual(FREQUENCY_PROFILES["D"]["statsforecast_freq"], "D")
-        self.assertEqual(FREQUENCY_PROFILES["W"]["statsforecast_freq"], "W")
-        self.assertEqual(FREQUENCY_PROFILES["M"]["statsforecast_freq"], "MS")
-        self.assertEqual(FREQUENCY_PROFILES["Q"]["statsforecast_freq"], "QS")
-
     def test_default_lags_are_sorted(self):
         for freq, profile in FREQUENCY_PROFILES.items():
             with self.subTest(freq=freq):
                 lags = profile["default_lags"]
                 self.assertEqual(lags, sorted(lags), f"Lags not sorted for {freq}")
+
+
+@pytest.mark.parametrize("freq,expected", [("D", 7), ("W", 52), ("M", 12), ("Q", 4)])
+def test_season_lengths(freq, expected):
+    assert FREQUENCY_PROFILES[freq]["season_length"] == expected
+
+
+@pytest.mark.parametrize("freq,expected", [("D", "D"), ("W", "W"), ("M", "MS"), ("Q", "QS")])
+def test_statsforecast_freq_strings(freq, expected):
+    assert FREQUENCY_PROFILES[freq]["statsforecast_freq"] == expected
 
 
 class TestGetFrequencyProfile(unittest.TestCase):
@@ -74,24 +75,22 @@ class TestGetFrequencyProfile(unittest.TestCase):
         self.assertIn("'Y'", str(ctx.exception))
 
 
-class TestFreqTimedelta(unittest.TestCase):
-    """Tests for the freq_timedelta() helper."""
+@pytest.mark.parametrize("freq,periods,expected", [
+    ("D", 1, timedelta(days=1)),
+    ("D", 7, timedelta(days=7)),
+    ("W", 1, timedelta(weeks=1)),
+    ("W", 4, timedelta(weeks=4)),
+    ("M", 1, timedelta(days=30)),
+    ("M", 3, timedelta(days=90)),
+    ("Q", 1, timedelta(days=91)),
+    ("Q", 2, timedelta(days=182)),
+])
+def test_freq_timedelta(freq, periods, expected):
+    assert freq_timedelta(freq, periods) == expected
 
-    def test_daily(self):
-        self.assertEqual(freq_timedelta("D"), timedelta(days=1))
-        self.assertEqual(freq_timedelta("D", 7), timedelta(days=7))
 
-    def test_weekly(self):
-        self.assertEqual(freq_timedelta("W"), timedelta(weeks=1))
-        self.assertEqual(freq_timedelta("W", 4), timedelta(weeks=4))
-
-    def test_monthly(self):
-        self.assertEqual(freq_timedelta("M"), timedelta(days=30))
-        self.assertEqual(freq_timedelta("M", 3), timedelta(days=90))
-
-    def test_quarterly(self):
-        self.assertEqual(freq_timedelta("Q"), timedelta(days=91))
-        self.assertEqual(freq_timedelta("Q", 2), timedelta(days=182))
+class TestFreqTimedeltaArithmetic(unittest.TestCase):
+    """Tests for freq_timedelta() date arithmetic."""
 
     def test_date_arithmetic(self):
         """freq_timedelta should work with date addition."""
@@ -100,32 +99,33 @@ class TestFreqTimedelta(unittest.TestCase):
         self.assertEqual(d + freq_timedelta("D", 1), date(2024, 1, 2))
 
 
+@pytest.mark.parametrize("freq,expected_season,expected_sf_freq", [
+    ("W", 52, "W"),
+    ("D", 7, "D"),
+    ("M", 12, "MS"),
+    ("Q", 4, "QS"),
+])
+def test_frequency_config(freq, expected_season, expected_sf_freq):
+    fc = ForecastConfig(frequency=freq)
+    assert fc.season_length == expected_season
+    assert fc.statsforecast_freq == expected_sf_freq
+
+
 class TestForecastConfigProperties(unittest.TestCase):
     """Tests for frequency-derived ForecastConfig properties."""
 
     def test_weekly_defaults(self):
         fc = ForecastConfig()
         self.assertEqual(fc.frequency, "W")
-        self.assertEqual(fc.season_length, 52)
-        self.assertEqual(fc.statsforecast_freq, "W")
         self.assertEqual(fc.horizon_periods, 39)
 
-    def test_daily_frequency(self):
+    def test_daily_lags(self):
         fc = ForecastConfig(frequency="D")
-        self.assertEqual(fc.season_length, 7)
-        self.assertEqual(fc.statsforecast_freq, "D")
         self.assertEqual(fc.default_lags, [1, 2, 3, 7, 14, 21, 28, 56, 91, 182, 364])
 
-    def test_monthly_frequency(self):
+    def test_monthly_lags(self):
         fc = ForecastConfig(frequency="M")
-        self.assertEqual(fc.season_length, 12)
-        self.assertEqual(fc.statsforecast_freq, "MS")
         self.assertEqual(fc.default_lags, [1, 2, 3, 6, 12])
-
-    def test_quarterly_frequency(self):
-        fc = ForecastConfig(frequency="Q")
-        self.assertEqual(fc.season_length, 4)
-        self.assertEqual(fc.statsforecast_freq, "QS")
 
 
 class TestBacktestConfigAliases(unittest.TestCase):

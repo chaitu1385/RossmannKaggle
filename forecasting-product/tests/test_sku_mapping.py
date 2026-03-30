@@ -10,7 +10,6 @@ Coverage:
   - Pipeline end-to-end smoke test
   - Writer output schema
 """
-
 from datetime import date
 
 import polars as pl
@@ -21,6 +20,8 @@ from src.sku_mapping.data.schemas import MappingCandidate
 from src.sku_mapping.fusion.scorer import CandidateFusion, _classify_confidence
 from src.sku_mapping.methods.attribute_matching import AttributeMatchingMethod
 from src.sku_mapping.methods.naming_parsing import (
+
+
     NamingConventionMethod,
     _extract_base_and_marker,
 )
@@ -184,7 +185,7 @@ class TestAttributeMatchingMethod:
             (c for c in candidates if c.old_sku == "OLD" and c.new_sku == "NEW"),
             None,
         )
-        assert pair is not None
+        assert pair is not None, "Expected OLD->NEW pair not found in candidates"
         # base(0.3) + price(0.2) + form(0.2) + category(0.1) + gap_bonus(0.1) = 0.9
         assert pair.method_score >= 0.70
 
@@ -419,7 +420,7 @@ class TestPipelineEndToEnd:
 
         # Should return a non-empty mapping table
         assert isinstance(df, pl.DataFrame)
-        assert len(df) > 0
+        assert len(df) >= 2  # at least the 2 known high-confidence pairs
 
         # Known high-confidence pairs must appear
         pairs = set(zip(df["old_sku"].to_list(), df["new_sku"].to_list()))
@@ -803,6 +804,10 @@ class TestTemporalCovementMethod:
 
 from src.sku_mapping.fusion.bayesian_proportions import BayesianProportionEstimator
 from src.sku_mapping.data.schemas import MappingRecord
+
+pytestmark = pytest.mark.unit
+
+
 
 
 def _make_record(old_sku, new_sku, mapping_type, confidence_score=0.5, proportion=None):

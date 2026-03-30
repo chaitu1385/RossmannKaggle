@@ -13,6 +13,9 @@ Covers:
 import unittest
 
 import polars as pl
+import pytest
+
+pytestmark = pytest.mark.unit
 
 
 class TestDataPreprocessor(unittest.TestCase):

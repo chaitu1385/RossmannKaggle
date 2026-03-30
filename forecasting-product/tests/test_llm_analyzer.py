@@ -12,6 +12,10 @@ import polars as pl
 from src.analytics.analyzer import DataAnalyzer
 from src.analytics.llm_analyzer import LLMAnalyzer, LLMInsight, _parse_bullets
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 # --------------------------------------------------------------------------- #
 #  Factory helpers
@@ -135,11 +139,13 @@ class TestPromptConstruction(unittest.TestCase):
 class TestResponseParsing(unittest.TestCase):
     def test_parses_all_sections(self):
         insight = LLMAnalyzer._parse_response(_MOCK_RESPONSE)
-        self.assertTrue(len(insight.narrative) > 0)
-        self.assertTrue(len(insight.hypotheses) > 0)
-        self.assertTrue(len(insight.model_rationale) > 0)
-        self.assertTrue(len(insight.risk_factors) > 0)
-        self.assertTrue(len(insight.config_adjustments) > 0)
+        self.assertIsInstance(insight.narrative, str)
+        self.assertIn("5 weekly time series", insight.narrative)
+        self.assertEqual(len(insight.hypotheses), 4)
+        self.assertIsInstance(insight.model_rationale, str)
+        self.assertIn("auto_arima", insight.model_rationale)
+        self.assertEqual(len(insight.risk_factors), 3)
+        self.assertEqual(len(insight.config_adjustments), 2)
 
     def test_correct_hypothesis_count(self):
         insight = LLMAnalyzer._parse_response(_MOCK_RESPONSE)
@@ -208,8 +214,9 @@ class TestLLMIntegration(unittest.TestCase):
         self.assertIn("max_tokens", call_kwargs)
 
         # Verify parsed output
-        self.assertTrue(len(insight.narrative) > 0)
-        self.assertTrue(len(insight.hypotheses) > 0)
+        self.assertIsInstance(insight.narrative, str)
+        self.assertIn("5 weekly time series", insight.narrative)
+        self.assertEqual(len(insight.hypotheses), 4)
 
     def test_noop_when_unavailable(self):
         """Returns empty LLMInsight when client is not configured."""

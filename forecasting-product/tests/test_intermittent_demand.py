@@ -18,6 +18,9 @@ from unittest.mock import MagicMock, patch
 
 import polars as pl
 import numpy as np
+import pytest
+
+pytestmark = pytest.mark.unit
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 

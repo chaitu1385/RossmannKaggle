@@ -5,6 +5,10 @@ from unittest.mock import MagicMock
 
 from src.ai.base import AIFeatureBase
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 class TestAIFeatureBaseInit(unittest.TestCase):
     def test_available_with_client(self):

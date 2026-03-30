@@ -22,6 +22,9 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import polars as pl
+import pytest
+
+pytestmark = pytest.mark.unit
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -547,7 +550,7 @@ class TestModelCard(unittest.TestCase):
         bt = self._backtest_df()
         cfg = ForecastConfig()
         card = ModelCard.from_backtest("lgbm_direct", "test", bt, config=cfg)
-        self.assertGreater(len(card.config_hash), 0)
+        self.assertEqual(len(card.config_hash), 8)
 
 
 class TestModelCardRegistry(unittest.TestCase):

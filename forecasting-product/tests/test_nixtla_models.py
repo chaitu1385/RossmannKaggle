@@ -15,6 +15,9 @@ from unittest.mock import MagicMock, patch
 import polars as pl
 
 from conftest import make_weekly_series as _make_weekly_series
+import pytest
+
+pytestmark = pytest.mark.unit
 
 
 # ═════════════════════════════════════════════════════════════════════════════════
@@ -351,15 +354,14 @@ class TestTFTForecaster(unittest.TestCase):
 # Registry integration: all new models
 # ═════════════════════════════════════════════════════════════════════════════════
 
-class TestExpandedRegistry(unittest.TestCase):
-    """Verify all five new models are registered and discoverable."""
+@pytest.mark.parametrize("model_name", ["auto_theta", "mstl", "nbeats", "nhits", "tft"])
+def test_model_registered(model_name):
+    from src.forecasting.registry import registry
+    assert model_name in registry.available
 
-    def test_all_new_models_registered(self):
-        from src.forecasting.registry import registry
-        new_models = ["auto_theta", "mstl", "nbeats", "nhits", "tft"]
-        for name in new_models:
-            with self.subTest(model=name):
-                self.assertIn(name, registry.available)
+
+class TestExpandedRegistry(unittest.TestCase):
+    """Verify registry integration for new models."""
 
     def test_build_from_config_with_new_models(self):
         from src.forecasting.registry import registry

@@ -9,6 +9,10 @@ import polars as pl
 from src.ai.config_tuner import ConfigRecommendation, ConfigTunerEngine, ConfigTuningResult
 from src.config.schema import PlatformConfig
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 # --------------------------------------------------------------------------- #
 #  Factory helpers
@@ -152,7 +156,8 @@ class TestConfigTunerMockRoundtrip(unittest.TestCase):
 
         mock_client.messages.create.assert_called_once()
         self.assertEqual(len(result.recommendations), 2)
-        self.assertTrue(len(result.overall_assessment) > 0)
+        self.assertIsInstance(result.overall_assessment, str)
+        self.assertIn("naive seasonal", result.overall_assessment.lower())
 
     def test_api_error_returns_graceful_result(self):
         engine = ConfigTunerEngine.__new__(ConfigTunerEngine)

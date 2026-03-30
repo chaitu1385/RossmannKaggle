@@ -12,6 +12,8 @@ from src.metrics.fva import (
 )
 from src.analytics.fva_analyzer import FVAAnalyzer
 
+pytestmark = pytest.mark.unit
+
 
 class TestFVAClassification:
     def test_adds_value(self):

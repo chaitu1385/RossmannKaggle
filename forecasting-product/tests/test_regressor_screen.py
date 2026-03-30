@@ -16,6 +16,8 @@ from src.series.builder import SeriesBuilder
 
 from conftest import make_actuals as _make_actuals
 
+pytestmark = pytest.mark.unit
+
 
 def _make_df_with_features(n_rows: int = 100) -> pl.DataFrame:
     """DataFrame with target and several feature columns."""
@@ -73,7 +75,7 @@ class TestCorrelationCheck:
         })
         config = RegressorScreenConfig(enabled=True, correlation_threshold=0.95)
         report = screen_regressors(df, ["feat_a", "feat_b"], "quantity", config)
-        assert len(report.high_correlation_pairs) > 0
+        assert len(report.high_correlation_pairs) == 1
         pair = report.high_correlation_pairs[0]
         assert pair["col_a"] == "feat_a"
         assert pair["col_b"] == "feat_b"
@@ -217,7 +219,8 @@ class TestSeriesBuilderIntegration:
         # Useful column should survive
         assert "useful_promo" in result.columns
         # Report should be available
-        assert builder._last_regressor_screen_report is not None
+        from src.data.regressor_screen import RegressorScreenReport
+        assert isinstance(builder._last_regressor_screen_report, RegressorScreenReport)
         assert "useless_constant" in builder._last_regressor_screen_report.dropped_columns
 
     def test_screening_disabled_keeps_all(self):

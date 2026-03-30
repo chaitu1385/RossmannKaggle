@@ -30,6 +30,9 @@ from src.evaluation.calibration import (
     compute_conformal_residuals,
     compute_interval_coverage,
 )
+import pytest
+
+pytestmark = pytest.mark.unit
 
 
 # --------------------------------------------------------------------------- #

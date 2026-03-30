@@ -8,6 +8,9 @@ import polars as pl
 
 from src.data.file_classifier import FileClassifier
 from src.data.file_merger import MultiFileMerger
+import pytest
+
+pytestmark = pytest.mark.unit
 
 
 # --------------------------------------------------------------------------- #
@@ -170,7 +173,8 @@ class TestJoinKeyDetection(unittest.TestCase):
         )
         spec = self.merger.detect_join_keys(result.primary_file, fake)
         self.assertEqual(len(spec.join_keys), 0)
-        self.assertTrue(len(spec.warnings) > 0)
+        self.assertIsInstance(spec.warnings, list)
+        self.assertGreaterEqual(len(spec.warnings), 1)
 
 
 # --------------------------------------------------------------------------- #
@@ -198,7 +202,8 @@ class TestMergePreview(unittest.TestCase):
         )
         preview = self.merger.preview_merge(result)
         self.assertEqual(preview.total_rows, 0)
-        self.assertTrue(len(preview.warnings) > 0)
+        self.assertIsInstance(preview.warnings, list)
+        self.assertGreaterEqual(len(preview.warnings), 1)
 
     def test_preview_with_dimension(self):
         result = _classify({
@@ -341,7 +346,8 @@ class TestColumnConflicts(unittest.TestCase):
             "stores.csv": _make_dimension_with_conflict(),
         })
         merged = self.merger.merge(result)
-        self.assertTrue(len(merged.preview.column_name_conflicts) > 0)
+        self.assertIsInstance(merged.preview.column_name_conflicts, list)
+        self.assertGreaterEqual(len(merged.preview.column_name_conflicts), 1)
 
 
 if __name__ == "__main__":

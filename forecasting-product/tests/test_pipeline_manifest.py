@@ -29,6 +29,8 @@ from src.pipeline.manifest import (
 
 from conftest import make_actuals as _make_actuals
 
+pytestmark = pytest.mark.unit
+
 
 def _make_forecast(n_series: int = 2, horizon: int = 4) -> pl.DataFrame:
     rows = []
@@ -196,8 +198,8 @@ class TestBuildManifest:
             "run5", config, actuals, builder, "lgbm", forecast, "f.parquet"
         )
 
-        assert manifest.date_range_start is not None
-        assert manifest.date_range_end is not None
+        assert isinstance(manifest.date_range_start, str)
+        assert isinstance(manifest.date_range_end, str)
 
 
 class TestConfigHash:

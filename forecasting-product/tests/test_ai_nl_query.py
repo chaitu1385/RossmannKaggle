@@ -10,6 +10,10 @@ import polars as pl
 
 from src.ai.nl_query import NaturalLanguageQueryEngine, NLQueryResult
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 # --------------------------------------------------------------------------- #
 #  Factory helpers
@@ -212,7 +216,8 @@ class TestNLQueryMockRoundtrip(unittest.TestCase):
         )
 
         mock_client.messages.create.assert_called_once()
-        self.assertTrue(len(result.answer) > 0)
+        self.assertIsInstance(result.answer, str)
+        self.assertIn("Series_0", result.answer)
         self.assertEqual(result.confidence, "high")
 
     def test_api_error_returns_graceful_message(self):

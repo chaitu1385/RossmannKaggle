@@ -7,12 +7,12 @@ Covers:
   - Sequential multi-batch (n_workers=1)
   - ParallelismConfig dataclass defaults
 """
-
 from datetime import date, timedelta
 
 import polars as pl
 import pytest
 
+pytestmark = pytest.mark.integration
 
 def _make_actuals(n_series: int = 3, n_weeks: int = 60) -> pl.DataFrame:
     """Create a synthetic actuals DataFrame for testing."""
@@ -136,6 +136,7 @@ class TestParallelismConfig:
     def test_in_platform_config(self):
         """ParallelismConfig should be accessible from PlatformConfig."""
         from src.config.schema import PlatformConfig
+
         cfg = PlatformConfig()
         assert hasattr(cfg, "parallelism")
         assert cfg.parallelism.backend == "local"

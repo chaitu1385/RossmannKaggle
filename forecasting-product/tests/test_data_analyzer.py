@@ -9,6 +9,10 @@ import polars as pl
 from src.analytics.analyzer import DataAnalyzer, SchemaDetection, HierarchyDetection
 from src.config.schema import PlatformConfig
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 # --------------------------------------------------------------------------- #
 #  Factory helpers
@@ -222,7 +226,8 @@ class TestHierarchyDetection(unittest.TestCase):
         schema = self.analyzer.detect_schema(df)
         hierarchy = self.analyzer.detect_hierarchy(df, schema)
         if len(hierarchy.hierarchies) > 1 or any(len(h.levels) > 1 for h in hierarchy.hierarchies):
-            self.assertTrue(len(hierarchy.reasoning) > 0)
+            self.assertIsInstance(hierarchy.reasoning, list)
+            self.assertGreaterEqual(len(hierarchy.reasoning), 1)
 
 
 # --------------------------------------------------------------------------- #
@@ -296,7 +301,8 @@ class TestHypothesisGeneration(unittest.TestCase):
     def test_produces_hypotheses(self):
         df = _make_flat_data()
         report = self.analyzer.analyze(df)
-        self.assertTrue(len(report.hypotheses) > 0)
+        self.assertIsInstance(report.hypotheses, list)
+        self.assertGreaterEqual(len(report.hypotheses), 1)
 
     def test_mentions_forecastability(self):
         df = _make_flat_data()
@@ -335,8 +341,10 @@ class TestAnalyzerEndToEnd(unittest.TestCase):
         self.assertIsNotNone(report.hierarchy)
         self.assertIsNotNone(report.forecastability)
         self.assertIsNotNone(report.recommended_config)
-        self.assertTrue(len(report.config_reasoning) > 0)
-        self.assertTrue(len(report.hypotheses) > 0)
+        self.assertIsInstance(report.config_reasoning, list)
+        self.assertGreaterEqual(len(report.config_reasoning), 1)
+        self.assertIsInstance(report.hypotheses, list)
+        self.assertGreaterEqual(len(report.hypotheses), 1)
 
     def test_flat_data_works(self):
         df = _make_flat_data()

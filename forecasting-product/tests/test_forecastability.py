@@ -18,6 +18,10 @@ from src.analytics.forecastability import (
     compute_trend_strength,
 )
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 # --------------------------------------------------------------------------- #
 #  Factory helpers

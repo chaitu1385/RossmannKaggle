@@ -2,7 +2,6 @@
 Tests for observability modules: PipelineContext, StructuredLogger,
 MetricsEmitter, AlertDispatcher, CostEstimator, and PipelineScheduler.
 """
-
 import json
 import logging
 import time
@@ -13,6 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.unit
 
 # ── PipelineContext ──────────────────────────────────────────────────────────
 
@@ -461,6 +461,7 @@ class TestObservabilityConfig:
 
     def test_in_platform_config(self):
         from src.config.schema import PlatformConfig
+
         cfg = PlatformConfig()
         assert hasattr(cfg, "observability")
         assert cfg.observability.log_format == "text"

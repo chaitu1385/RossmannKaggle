@@ -17,6 +17,8 @@ import pytest
 from src.backtesting.champion import ChampionSelector
 from src.config.schema import BacktestConfig, HorizonBucket
 
+pytestmark = pytest.mark.unit
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 

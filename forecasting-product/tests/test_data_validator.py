@@ -16,6 +16,8 @@ from src.data.validator import (
     ValidationReport,
 )
 
+pytestmark = pytest.mark.unit
+
 
 # ---------------------------------------------------------------------------
 # Factory helpers
@@ -372,5 +374,6 @@ class TestBuilderIntegration:
         df = _make_weekly_actuals(n_series=2, n_weeks=10)
         builder.build(df)
 
-        assert builder._last_validation_report is not None
+        from src.data.validator import ValidationReport
+        assert isinstance(builder._last_validation_report, ValidationReport)
         assert builder._last_validation_report.passed

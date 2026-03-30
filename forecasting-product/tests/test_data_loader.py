@@ -14,6 +14,9 @@ import unittest
 from pathlib import Path
 
 import polars as pl
+import pytest
+
+pytestmark = pytest.mark.unit
 
 
 def _write_csv(path: Path, content: str):

@@ -1,5 +1,4 @@
 """Tests for src/presentation/: templates.py, deck_builder.py, marp_linter.py, marp_export.py."""
-
 from __future__ import annotations
 
 import textwrap
@@ -8,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.unit
 
 # ===========================================================================
 # templates.py
@@ -607,6 +607,7 @@ class TestLintDeckFileMissing:
 class TestLintDeckFrontmatter:
     def test_missing_frontmatter_key_reported(self, tmp_path):
         from src.presentation.marp_linter import lint_deck
+
         # Omit 'footer' from frontmatter
         content = textwrap.dedent("""\
             ---

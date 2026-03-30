@@ -9,6 +9,8 @@ from src.auth.models import Permission, Role, User, ROLE_PERMISSIONS
 from src.audit.schemas import AuditEvent
 from src.audit.logger import AuditLogger
 
+pytestmark = pytest.mark.unit
+
 
 class TestRolePermissions:
     def test_admin_has_all_permissions(self):

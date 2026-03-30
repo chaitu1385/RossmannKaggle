@@ -15,6 +15,10 @@ from fastapi.testclient import TestClient
 
 from src.api.app import create_app
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
 
 # --------------------------------------------------------------------------- #
 #  Factory helpers
