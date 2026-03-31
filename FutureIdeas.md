@@ -4,7 +4,7 @@ This document captures potential enhancements, features, and workflows that coul
 
 ---
 
-## 1. Key User Scenarios ΓÇö End-to-End "Wow" Workflows
+## 1. Key User Scenarios — End-to-End "Wow" Workflows
 
 Define and validate the highest-impact user journeys that make demand planners and data scientists say "this is game-changing." These scenarios represent the product's core value propositions.
 
@@ -15,8 +15,8 @@ Define and validate the highest-impact user journeys that make demand planners a
 
 **Wow moment:** A planner drops 3 CSV files (sales history, product hierarchy, promotions calendar) onto the data onboarding page. The platform auto-classifies each file's role, detects join keys, merges them, runs quality checks, scores forecastability, and generates a recommended YAML config. They click "Run Forecast" and get a production-quality forecast with prediction intervals.
 
-**Endpoints:** `POST /pipeline/analyze-multi-file` ΓåÆ `POST /analyze` ΓåÆ `POST /pipeline/forecast`
-**Frontend:** `/data-onboarding` ΓåÆ `/forecast`
+**Endpoints:** `POST /pipeline/analyze-multi-file` → `POST /analyze` → `POST /pipeline/forecast`
+**Frontend:** `/data-onboarding` → `/forecast`
 
 #### P2: "Why Did This SKU's Forecast Change?"
 **Pain today:** Planners get a new forecast number with no explanation. They lose trust and override everything.
@@ -24,7 +24,7 @@ Define and validate the highest-impact user journeys that make demand planners a
 **Wow moment:** A planner sees a SKU's forecast jumped 30%. They click on it and see the STL decomposition (trend rising + seasonal peak approaching). They type "Why did this forecast increase?" in the AI panel and get a narrative explanation citing the detected structural break, seasonal peak, and the champion model's use of a promotional regressor.
 
 **Endpoints:** `POST /forecast/decompose`, `POST /ai/explain`, `POST /series/breaks`
-**Frontend:** `/forecast` ΓåÆ AI query panel + decomposition panel
+**Frontend:** `/forecast` → AI query panel + decomposition panel
 
 #### P3: "S&OP Meeting Prep in 5 Minutes"
 **Pain today:** Planners spend 2 days manually building PowerPoint decks with forecast summaries, exception callouts, and accuracy trends.
@@ -37,7 +37,7 @@ Define and validate the highest-impact user journeys that make demand planners a
 #### P4: "Managing a Product Transition Without Losing History"
 **Pain today:** When an old SKU is replaced by a new one, the new product has zero history. Planners manually estimate demand in spreadsheets for months.
 
-**Wow moment:** A planner creates an override mapping old ΓåÆ new SKU with a linear ramp over 8 weeks. The platform automatically detects the transition scenario, stitches historical demand, applies the ramp-down/ramp-up curve, and produces a blended forecast. The override is tracked with approval status for audit.
+**Wow moment:** A planner creates an override mapping old → new SKU with a linear ramp over 8 weeks. The platform automatically detects the transition scenario, stitches historical demand, applies the ramp-down/ramp-up curve, and produces a blended forecast. The override is tracked with approval status for audit.
 
 **Endpoints:** `POST /overrides`, `POST /sku-mapping/phase1`, `POST /sku-mapping/phase2`
 **Frontend:** `/sku-transitions`
@@ -48,11 +48,11 @@ Define and validate the highest-impact user journeys that make demand planners a
 **Wow moment:** A planner applies a max capacity constraint across their region and per-SKU minimums. The platform redistributes the excess proportionally across SKUs while respecting the aggregate cap, showing a before/after comparison.
 
 **Endpoints:** `POST /forecast/constrain`
-**Frontend:** `/forecast` ΓåÆ constrained forecast panel
+**Frontend:** `/forecast` → constrained forecast panel
 
 ### Data Scientist Scenarios
 
-#### DS1: "Backtest ΓåÆ Champion Selection ΓåÆ Production in One Session"
+#### DS1: "Backtest → Champion Selection → Production in One Session"
 **Pain today:** Model comparison requires custom notebooks, manual metric aggregation, and a separate deployment process.
 
 **Wow moment:** A data scientist configures 8 models in YAML, runs a 5-fold walk-forward backtest. The platform automatically routes sparse/intermittent series to specialized models and normal series to the full model pool. They see a leaderboard (WMAPE), FVA cascade, calibration plots, and SHAP importance. The champion is auto-selected and immediately available for production.
@@ -66,7 +66,7 @@ Define and validate the highest-impact user journeys that make demand planners a
 **Wow moment:** After a backtest, Claude analyzes the leaderboard, FVA results, and data characteristics, then returns specific YAML config changes with the exact field path, current value, suggested value, expected impact, and risk level.
 
 **Endpoints:** `POST /ai/recommend-config`
-**Frontend:** `/backtest` ΓåÆ AI config tuner panel
+**Frontend:** `/backtest` → AI config tuner panel
 
 #### DS3: "Multi-Frequency Forecasting Across Business Units"
 **Pain today:** Different BUs need daily vs weekly vs monthly forecasts, requiring separate codebases.
@@ -78,7 +78,7 @@ Define and validate the highest-impact user journeys that make demand planners a
 #### DS4: "Hierarchical Reconciliation That Actually Works"
 **Pain today:** Bottom-up forecasts don't add up to top-down targets. Planners lose trust.
 
-**Wow moment:** A 4-level hierarchy (National ΓåÆ Region ΓåÆ Category ΓåÆ SKU) is built from data. After SKU-level forecasting, MinT reconciliation adjusts all levels simultaneously so they're mathematically coherent. Side-by-side comparison of bottom-up vs MinT vs WLS with before/after totals.
+**Wow moment:** A 4-level hierarchy (National → Region → Category → SKU) is built from data. After SKU-level forecasting, MinT reconciliation adjusts all levels simultaneously so they're mathematically coherent. Side-by-side comparison of bottom-up vs MinT vs WLS with before/after totals.
 
 **Endpoints:** `POST /hierarchy/build`, `POST /hierarchy/reconcile`
 **Frontend:** `/hierarchy` with sunburst visualization
@@ -89,14 +89,14 @@ Define and validate the highest-impact user journeys that make demand planners a
 **Wow moment:** The platform continuously compares live WMAPE against backtest baselines. When a SKU-group drifts above 1.5x baseline, an alert fires to Slack. The AI triage engine ranks all active alerts by business impact and suggests remediation actions.
 
 **Endpoints:** `GET /metrics/drift/{lob}`, `POST /ai/triage`
-**Frontend:** `/health` ΓåÆ drift histogram + AI triage panel
+**Frontend:** `/health` → drift histogram + AI triage panel
 
 #### DS6: "Causal Analytics for Pricing & Promotions"
 **Pain today:** Forecasts don't account for price changes or promotional cannibalization. Separate econometric models are needed.
 
 **Wow moment:** The causal analytics module estimates price elasticity per SKU, detects cannibalization between products (post-detrending correlation), and estimates promotional lift. These insights feed directly into the ML models as validated regressors.
 
-**Code:** `src/analytics/causal.py` ΓÇö `PriceElasticityEstimator`, `CannibalizationDetector`, `PromotionalLiftEstimator`
+**Code:** `src/analytics/causal.py` — `PriceElasticityEstimator`, `CannibalizationDetector`, `PromotionalLiftEstimator`
 
 ### Cross-Persona Scenarios
 
@@ -109,7 +109,7 @@ Define and validate the highest-impact user journeys that make demand planners a
 **Wow moment:** The platform tracks compute cost per model per series. A data scientist sees that neural models cost 15x more than statistical ones but only improve WMAPE by 0.3pp. They remove the expensive model from config and cut pipeline runtime by 60%.
 
 **Endpoints:** `GET /pipeline/costs`
-**Frontend:** `/health` ΓåÆ cost tracking panel
+**Frontend:** `/health` → cost tracking panel
 
 ### Implementation Approach
 To validate these scenarios:
@@ -131,28 +131,28 @@ The common thread: **the industry is moving from AI-assisted forecasting to agen
 
 ## Phase 1: Agentic Supply Chain Copilot (Highest Impact)
 
-**Why**: Every competitor (o9, Anaplan, AWS) now has a conversational planning copilot. Our NL Query engine only answers questions about individual series. A copilot that can reason across the entire platform ΓÇö running analyses, comparing scenarios, triggering pipelines ΓÇö is table stakes.
+**Why**: Every competitor (o9, Anaplan, AWS) now has a conversational planning copilot. Our NL Query engine only answers questions about individual series. A copilot that can reason across the entire platform — running analyses, comparing scenarios, triggering pipelines — is table stakes.
 
 ### 1A. Multi-Turn Planning Copilot
 
 **What**: An agentic Claude-powered copilot that can hold multi-turn conversations, call platform APIs as tools, and execute multi-step analytical workflows autonomously.
 
 **Key Components**:
-- `src/ai/copilot.py` ΓÇö `PlanningCopilot` class with:
+- `src/ai/copilot.py` — `PlanningCopilot` class with:
   - Tool registry mapping natural language intents to platform API calls
   - Conversation memory (multi-turn context)
-  - Plan-then-execute pattern: Claude creates a plan ΓåÆ user approves ΓåÆ copilot executes steps
+  - Plan-then-execute pattern: Claude creates a plan → user approves → copilot executes steps
   - Tools available to Claude: run_backtest, get_forecast, compare_models, explain_series, get_drift_alerts, triage_anomalies, get_fva, apply_override, get_hierarchy, run_decomposition
-- `src/ai/tools.py` ΓÇö Tool definitions formatted for Claude tool_use (wrapping existing API logic from `src/api/routers/`)
+- `src/ai/tools.py` — Tool definitions formatted for Claude tool_use (wrapping existing API logic from `src/api/routers/`)
 - Streaming responses via SSE for real-time feedback
 
 **API Endpoints**:
-- `POST /ai/copilot/chat` ΓÇö Send message, get streaming response with tool calls
-- `GET /ai/copilot/sessions` ΓÇö List active sessions
-- `DELETE /ai/copilot/sessions/{id}` ΓÇö End session
+- `POST /ai/copilot/chat` — Send message, get streaming response with tool calls
+- `GET /ai/copilot/sessions` — List active sessions
+- `DELETE /ai/copilot/sessions/{id}` — End session
 
 **Frontend**:
-- `CopilotPanel` ΓÇö Persistent side panel with chat interface, tool execution visibility, approval prompts
+- `CopilotPanel` — Persistent side panel with chat interface, tool execution visibility, approval prompts
 - Inline references to charts/data that copilot is discussing
 
 **Extends**: `src/ai/base.py` (AIFeatureBase), reuses all existing AI engines as callable tools
@@ -169,26 +169,26 @@ The common thread: **the industry is moving from AI-assisted forecasting to agen
 | Data Scientist | Admin | Model performance, config tuning, backtests | All tools including config + backtest |
 | Supply Planner | Analyst | Constrained forecasts, capacity, inventory | Constrained, hierarchy, overrides |
 
-**Implementation**: Persona config in `src/ai/personas.py` ΓÇö system prompt templates + tool allowlists per role, integrates with existing RBAC in `src/auth/`
+**Implementation**: Persona config in `src/ai/personas.py` — system prompt templates + tool allowlists per role, integrates with existing RBAC in `src/auth/`
 
 ---
 
 ## Phase 2: Scenario Planning & What-If Engine
 
-**Why**: Google Cloud Supply Chain Twin, o9, and Coupa/LLamasoft all offer what-if simulation. This is the #1 gap ΓÇö planners need to model "what happens if demand drops 20%" or "what if we lose supplier X" before it happens.
+**Why**: Google Cloud Supply Chain Twin, o9, and Coupa/LLamasoft all offer what-if simulation. This is the #1 gap — planners need to model "what happens if demand drops 20%" or "what if we lose supplier X" before it happens.
 
 ### 2A. Scenario Engine
 
 **What**: Create, compare, and manage named forecast scenarios with parameter overrides.
 
 **Key Components**:
-- `src/scenarios/engine.py` ΓÇö `ScenarioEngine` class:
+- `src/scenarios/engine.py` — `ScenarioEngine` class:
   - Create scenario from base config with parameter overrides (demand shocks, model changes, constraint changes)
   - Run scenario (triggers backtest/forecast pipeline with modified config)
   - Compare scenarios side-by-side (metrics, forecasts, costs)
   - Persist scenarios to Parquet (reusable, shareable)
-- `src/scenarios/types.py` ΓÇö `Scenario` dataclass: name, description, base_config, overrides (dict of config path ΓåÆ value), demand_adjustments (series-level multipliers/offsets), constraint_overrides
-- `src/scenarios/comparator.py` ΓÇö `ScenarioComparator`: diff two scenario outputs (forecast deltas, metric deltas, cost impact)
+- `src/scenarios/types.py` — `Scenario` dataclass: name, description, base_config, overrides (dict of config path → value), demand_adjustments (series-level multipliers/offsets), constraint_overrides
+- `src/scenarios/comparator.py` — `ScenarioComparator`: diff two scenario outputs (forecast deltas, metric deltas, cost impact)
 
 **Scenario Types**:
 1. **Demand shock**: Apply multiplier/offset to specific series/categories/regions
@@ -198,47 +198,47 @@ The common thread: **the industry is moving from AI-assisted forecasting to agen
 5. **Hierarchy change**: Add/remove nodes, test different aggregation levels
 
 **API Endpoints**:
-- `POST /scenarios` ΓÇö Create scenario
-- `POST /scenarios/{id}/run` ΓÇö Execute scenario
-- `GET /scenarios/{id}/results` ΓÇö Get results
-- `POST /scenarios/compare` ΓÇö Compare 2+ scenarios
-- `GET /scenarios` ΓÇö List all scenarios
+- `POST /scenarios` — Create scenario
+- `POST /scenarios/{id}/run` — Execute scenario
+- `GET /scenarios/{id}/results` — Get results
+- `POST /scenarios/compare` — Compare 2+ scenarios
+- `GET /scenarios` — List all scenarios
 
 **Frontend**:
-- `ScenarioBuilder` ΓÇö Visual scenario configuration with parameter sliders
-- `ScenarioComparison` ΓÇö Side-by-side charts and metric tables
-- `ScenarioLibrary` ΓÇö Browse/clone/share saved scenarios
+- `ScenarioBuilder` — Visual scenario configuration with parameter sliders
+- `ScenarioComparison` — Side-by-side charts and metric tables
+- `ScenarioLibrary` — Browse/clone/share saved scenarios
 
 **AI Integration**: Copilot can create and compare scenarios via natural language: "What if holiday demand is 15% higher than last year?"
 
 ### 2B. Impact Simulation (inspired by Google Supply Chain Twin)
 
-**What**: Cascading impact analysis ΓÇö when one variable changes, show the ripple effects through the hierarchy.
+**What**: Cascading impact analysis — when one variable changes, show the ripple effects through the hierarchy.
 
-- `src/scenarios/impact.py` ΓÇö `ImpactSimulator`: Given a demand change at leaf level, propagate through hierarchy using reconciliation, show effects on parent nodes, constrained plans, and cost estimates
+- `src/scenarios/impact.py` — `ImpactSimulator`: Given a demand change at leaf level, propagate through hierarchy using reconciliation, show effects on parent nodes, constrained plans, and cost estimates
 - Visualized as a Sankey diagram or hierarchy diff in frontend
 
 ---
 
 ## Phase 3: Autonomous Planning Agents
 
-**Why**: Auger's core value prop is "autonomous execution in seconds." Blue Yonder has 5 specialized agents. This is the frontier ΓÇö agents that monitor, detect, decide, and act within guardrails.
+**Why**: Auger's core value prop is "autonomous execution in seconds." Blue Yonder has 5 specialized agents. This is the frontier — agents that monitor, detect, decide, and act within guardrails.
 
 ### 3A. Agent Framework
 
 **What**: A lightweight agent framework where specialized agents continuously monitor metrics and take autonomous actions within configurable guardrails.
 
 **Key Components**:
-- `src/agents/base.py` ΓÇö `SupplyChainAgent` ABC:
-  - `monitor()` ΓÇö Check conditions (called on schedule)
-  - `evaluate()` ΓÇö Decide if action needed (returns ActionProposal)
-  - `execute()` ΓÇö Take action (with guardrail checks)
-  - `report()` ΓÇö Log what happened to audit trail
-- `src/agents/guardrails.py` ΓÇö `GuardrailEngine`:
+- `src/agents/base.py` — `SupplyChainAgent` ABC:
+  - `monitor()` — Check conditions (called on schedule)
+  - `evaluate()` — Decide if action needed (returns ActionProposal)
+  - `execute()` — Take action (with guardrail checks)
+  - `report()` — Log what happened to audit trail
+- `src/agents/guardrails.py` — `GuardrailEngine`:
   - Configurable thresholds per agent (max forecast change %, max overrides per day, etc.)
   - Approval routing: auto-approve within guardrails, escalate to human outside
   - Full audit trail of all agent decisions via existing `src/audit/`
-- `src/agents/scheduler.py` ΓÇö Extends existing `PipelineScheduler` for agent loops
+- `src/agents/scheduler.py` — Extends existing `PipelineScheduler` for agent loops
 
 ### 3B. Specialized Agents
 
@@ -251,18 +251,18 @@ The common thread: **the industry is moving from AI-assisted forecasting to agen
 | **NewProductAgent** | `src/sku_mapping/` transitions | Auto-maps new SKUs using similarity, bootstraps initial forecasts | Requires human approval for high-revenue SKUs |
 
 **API Endpoints**:
-- `GET /agents` ΓÇö List agents and their status
+- `GET /agents` — List agents and their status
 - `POST /agents/{id}/enable` / `POST /agents/{id}/disable`
-- `GET /agents/{id}/history` ΓÇö Action history
-- `PUT /agents/{id}/guardrails` ΓÇö Configure guardrails
-- `POST /agents/{id}/approve/{action_id}` ΓÇö Approve pending action
+- `GET /agents/{id}/history` — Action history
+- `PUT /agents/{id}/guardrails` — Configure guardrails
+- `POST /agents/{id}/approve/{action_id}` — Approve pending action
 
 **Frontend**:
-- `AgentDashboard` ΓÇö Agent status, recent actions, pending approvals
-- `GuardrailConfig` ΓÇö Visual guardrail editor per agent
-- `AgentTimeline` ΓÇö Chronological view of all agent actions with audit trail
+- `AgentDashboard` — Agent status, recent actions, pending approvals
+- `GuardrailConfig` — Visual guardrail editor per agent
+- `AgentTimeline` — Chronological view of all agent actions with audit trail
 
-**AI Integration**: Each agent uses Claude for reasoning about edge cases ΓÇö e.g., DriftResponseAgent asks Claude "Should I swap this model given the recent holiday period?" before acting
+**AI Integration**: Each agent uses Claude for reasoning about edge cases — e.g., DriftResponseAgent asks Claude "Should I swap this model given the recent holiday period?" before acting
 
 ---
 
@@ -275,12 +275,12 @@ The common thread: **the industry is moving from AI-assisted forecasting to agen
 **What**: A lightweight knowledge graph built on NetworkX (no heavy graph DB dependency) that connects platform entities.
 
 **Key Components**:
-- `src/knowledge/graph.py` ΓÇö `SupplyChainGraph`:
+- `src/knowledge/graph.py` — `SupplyChainGraph`:
   - Nodes: Series, Products, Categories, Regions, Suppliers, Customers, Events, Models, Forecasts
   - Edges: belongs_to, supplied_by, sold_to, affected_by, forecasted_by, similar_to
   - Auto-populated from hierarchy tree, SKU mappings, regressor metadata
   - Queryable: "What series are affected by Supplier X?" "What products share demand patterns?"
-- `src/knowledge/builder.py` ΓÇö `GraphBuilder`: Constructs graph from existing data sources
+- `src/knowledge/builder.py` — `GraphBuilder`: Constructs graph from existing data sources
   - Ingests hierarchy from `src/hierarchy/`
   - Ingests SKU relationships from `src/sku_mapping/`
   - Ingests regressor associations from `src/data/regressors.py`
@@ -290,20 +290,20 @@ The common thread: **the industry is moving from AI-assisted forecasting to agen
 
 **What**: Extend the existing `CausalAnalyzer` with graph-powered causal inference.
 
-- `src/knowledge/causal.py` ΓÇö `CausalReasoningEngine`:
-  - "Why did forecast change?" ΓåÆ Trace graph edges to find upstream causes (regressor shifts, supplier changes, seasonal events)
-  - "What will be affected?" ΓåÆ Forward propagation through graph
+- `src/knowledge/causal.py` — `CausalReasoningEngine`:
+  - "Why did forecast change?" → Trace graph edges to find upstream causes (regressor shifts, supplier changes, seasonal events)
+  - "What will be affected?" → Forward propagation through graph
   - Claude interprets causal chains into natural language narratives
 
 **API Endpoints**:
-- `GET /knowledge/graph/{lob}` ΓÇö Get graph structure
-- `POST /knowledge/query` ΓÇö Natural language graph query
-- `POST /knowledge/impact` ΓÇö "What-if" through graph (e.g., "What if Supplier X delays 2 weeks?")
-- `GET /knowledge/similar/{series_id}` ΓÇö Find similar series via graph proximity
+- `GET /knowledge/graph/{lob}` — Get graph structure
+- `POST /knowledge/query` — Natural language graph query
+- `POST /knowledge/impact` — "What-if" through graph (e.g., "What if Supplier X delays 2 weeks?")
+- `GET /knowledge/similar/{series_id}` — Find similar series via graph proximity
 
 **Frontend**:
-- `KnowledgeGraph` ΓÇö Interactive graph visualization (force-directed or hierarchical)
-- `CausalChain` ΓÇö Visual cause-effect chain for forecast explanations
+- `KnowledgeGraph` — Interactive graph visualization (force-directed or hierarchical)
+- `CausalChain` — Visual cause-effect chain for forecast explanations
 - Integrated into copilot: "Show me everything connected to SKU-1234"
 
 ---
@@ -316,22 +316,22 @@ The common thread: **the industry is moving from AI-assisted forecasting to agen
 
 **What**: A pluggable registry for external data signals that feed into demand sensing.
 
-- `src/signals/registry.py` ΓÇö `SignalRegistry`:
+- `src/signals/registry.py` — `SignalRegistry`:
   - Register signal sources with metadata (name, frequency, latency, coverage)
   - Built-in connectors: weather APIs, Google Trends, economic indicators (FRED), news sentiment
-  - Each signal implements `SignalSource` ABC: `fetch(date_range, entities)` ΓåÆ Polars DataFrame
-- `src/signals/connectors/` ΓÇö Individual connector modules:
-  - `weather.py` ΓÇö OpenWeatherMap / Visual Crossing
-  - `trends.py` ΓÇö Google Trends via pytrends
-  - `economic.py` ΓÇö FRED API (CPI, unemployment, consumer sentiment)
-  - `news.py` ΓÇö News API + Claude-powered sentiment scoring
-  - `custom.py` ΓÇö User-uploaded signal files
+  - Each signal implements `SignalSource` ABC: `fetch(date_range, entities)` → Polars DataFrame
+- `src/signals/connectors/` — Individual connector modules:
+  - `weather.py` — OpenWeatherMap / Visual Crossing
+  - `trends.py` — Google Trends via pytrends
+  - `economic.py` — FRED API (CPI, unemployment, consumer sentiment)
+  - `news.py` — News API + Claude-powered sentiment scoring
+  - `custom.py` — User-uploaded signal files
 
 ### 5B. Demand Sensing Engine
 
 **What**: Short-horizon demand adjustment using leading indicators.
 
-- `src/signals/sensing.py` ΓÇö `DemandSensingEngine`:
+- `src/signals/sensing.py` — `DemandSensingEngine`:
   - Ingests latest signals from registry
   - Trains lightweight gradient-boosted adjustment model (extends `src/forecasting/ml.py`)
   - Outputs adjustment factors applied to base statistical/ML forecast
@@ -340,34 +340,34 @@ The common thread: **the industry is moving from AI-assisted forecasting to agen
 ### 5C. AI-Powered Signal Interpretation
 
 - Claude analyzes incoming signals and explains their demand implications
-- "Breaking news about port strikes ΓåÆ Claude explains expected impact on Category X supply"
+- "Breaking news about port strikes → Claude explains expected impact on Category X supply"
 - Integrated with copilot and alert system
 
 **API Endpoints**:
-- `GET /signals` ΓÇö List registered signals
-- `POST /signals/register` ΓÇö Register new signal source
-- `POST /signals/sense` ΓÇö Run demand sensing for LOB
-- `GET /signals/impact/{lob}` ΓÇö Signal attribution (which signals moved the forecast)
+- `GET /signals` — List registered signals
+- `POST /signals/register` — Register new signal source
+- `POST /signals/sense` — Run demand sensing for LOB
+- `GET /signals/impact/{lob}` — Signal attribution (which signals moved the forecast)
 
 **Frontend**:
-- `SignalDashboard` ΓÇö Signal health, latency, coverage
-- `DemandSensing` ΓÇö Overlay base forecast with signal-adjusted forecast
-- `SignalAttribution` ΓÇö Which external signals are driving adjustments
+- `SignalDashboard` — Signal health, latency, coverage
+- `DemandSensing` — Overlay base forecast with signal-adjusted forecast
+- `SignalAttribution` — Which external signals are driving adjustments
 
 ---
 
 ## Implementation Priority & Dependencies
 
 ```
-Phase 1 (Copilot)          ΓåÉ Builds on existing src/ai/, highest ROI
-  Γåô
-Phase 2 (Scenarios)        ΓåÉ Builds on existing pipeline, config system
-  Γåô
-Phase 3 (Agents)           ΓåÉ Requires Phases 1+2 for full value
-  Γåô
-Phase 4 (Knowledge Graph)  ΓåÉ Requires hierarchy, SKU mapping, regressors
-  Γåô
-Phase 5 (Demand Sensing)   ΓåÉ Requires signal infrastructure, can start independently
+Phase 1 (Copilot)          → Builds on existing src/ai/, highest ROI
+  ↓
+Phase 2 (Scenarios)        → Builds on existing pipeline, config system
+  ↓
+Phase 3 (Agents)           → Requires Phases 1+2 for full value
+  ↓
+Phase 4 (Knowledge Graph)  → Requires hierarchy, SKU mapping, regressors
+  ↓
+Phase 5 (Demand Sensing)   → Requires signal infrastructure, can start independently
 ```
 
 Phases 1 and 2 can be built in parallel. Phase 5 signal connectors can start independently.
@@ -422,11 +422,11 @@ Phases 1 and 2 can be built in parallel. Phase 5 signal connectors can start ind
 | Open/Self-hosted | No | No | No | No | **Yes (differentiator)** |
 
 **Unique differentiators vs. competitors**:
-1. **Open/self-hosted** ΓÇö Every competitor is SaaS-only. This platform can be deployed on-prem or in customer's cloud
-2. **Foundation model integration** ΓÇö Only platform with Chronos + TimeGPT zero-shot forecasting
-3. **Deep explainability** ΓÇö SHAP + STL + FVA + Claude narratives is deeper than any competitor
-4. **Multi-frequency native** ΓÇö D/W/M/Q from a single codebase with frequency profiles
-5. **Claude-native AI** ΓÇö Deepest LLM integration (not just a chatbot layer) with domain-specific reasoning
+1. **Open/self-hosted** — Every competitor is SaaS-only. This platform can be deployed on-prem or in customer's cloud
+2. **Foundation model integration** — Only platform with Chronos + TimeGPT zero-shot forecasting
+3. **Deep explainability** — SHAP + STL + FVA + Claude narratives is deeper than any competitor
+4. **Multi-frequency native** — D/W/M/Q from a single codebase with frequency profiles
+5. **Claude-native AI** — Deepest LLM integration (not just a chatbot layer) with domain-specific reasoning
 
 ## Competitive Research Sources
 
@@ -443,7 +443,7 @@ Phases 1 and 2 can be built in parallel. Phase 5 signal connectors can start ind
 
 ---
 
-# Future Ideas
+## Knowledge Graph Deep Dive
 
 ## 1. Knowledge Graph for Supply Chain Forecasting
 
@@ -451,14 +451,14 @@ Phases 1 and 2 can be built in parallel. Phase 5 signal connectors can start ind
 
 The platform currently models supply chain entities (products, geographies, channels, SKUs) as **isolated hierarchical trees** and **Polars join-based relationships**. There is no unified graph representation connecting products to their regressors, transitions, channels, geographies, pipeline runs, or similar series. This limits the platform in several ways:
 
-1. **Forecasting models treat each series independently** ΓÇö no cross-series information flow (e.g., sibling products, cannibalization, transitions)
-2. **AI engines lack structural context** ΓÇö Claude answers questions about a series without knowing its graph neighborhood (what it transitions to, what drives it, what competes with it)
-3. **No impact analysis** ΓÇö cannot answer "if we discontinue SKU-X, what series are affected?" without manual investigation
-4. **No what-if scenarios** ΓÇö cannot propagate a demand change through the supply chain network
+1. **Forecasting models treat each series independently** — no cross-series information flow (e.g., sibling products, cannibalization, transitions)
+2. **AI engines lack structural context** — Claude answers questions about a series without knowing its graph neighborhood (what it transitions to, what drives it, what competes with it)
+3. **No impact analysis** — cannot answer "if we discontinue SKU-X, what series are affected?" without manual investigation
+4. **No what-if scenarios** — cannot propagate a demand change through the supply chain network
 
 ### Industry Research
 
-- **o9 Solutions**: Enterprise Knowledge Graph (EKG) with Graph-Cube technology ΓÇö a graph-based digital twin connecting products, customers, suppliers, facilities across supply chain, finance, and commercial domains. Powers AI agents that traverse the graph for cross-functional queries. (Sense -> Model -> Simulate -> Decide -> Execute -> Learn cycle)
+- **o9 Solutions**: Enterprise Knowledge Graph (EKG) with Graph-Cube technology — a graph-based digital twin connecting products, customers, suppliers, facilities across supply chain, finance, and commercial domains. Powers AI agents that traverse the graph for cross-functional queries. (Sense -> Model -> Simulate -> Decide -> Execute -> Learn cycle)
 - **Auger** (Dave Clark, ex-Amazon): "Augentic ontology" that encodes constraints, rules, and relationships, normalizing disparate data sources into a single executable source of truth. Deep integration with Microsoft Fabric for analytics.
 - **Academic research**: KG-GCN-LSTM models show ~50% of forecast accuracy improvement comes from the knowledge graph alone. GraphSAGE demonstrates that cross-series information flow improves forecasts without additional business rules.
 
@@ -504,28 +504,28 @@ All new code under `forecasting-product/src/knowledge_graph/`:
 src/knowledge_graph/
     __init__.py          # Public API: KnowledgeGraph, build_graph
     ontology.py          # GraphNode, GraphEdge dataclasses, EntityType/RelationType enums
-    graph.py             # KnowledgeGraph ΓÇö wraps NetworkX MultiDiGraph
-    builder.py           # KnowledgeGraphBuilder ΓÇö populates from HierarchyTree, MappingRecords, etc.
-    temporal.py          # TemporalEdgeStore ΓÇö edge validity intervals, point-in-time snapshots
-    features.py          # GraphFeatureExtractor ΓÇö derives numeric features for forecasting models
-    traversal.py         # GraphTraversal ΓÇö path finding, impact radius, neighbor queries
-    similarity.py        # SeriesSimilarity ΓÇö correlation/DTW, builds similar_to edges
-    scenarios.py         # ScenarioEngine ΓÇö what-if impact propagation
-    ai_context.py        # GraphContextProvider ΓÇö structured context for AI engines
+    graph.py             # KnowledgeGraph — wraps NetworkX MultiDiGraph
+    builder.py           # KnowledgeGraphBuilder — populates from HierarchyTree, MappingRecords, etc.
+    temporal.py          # TemporalEdgeStore — edge validity intervals, point-in-time snapshots
+    features.py          # GraphFeatureExtractor — derives numeric features for forecasting models
+    traversal.py         # GraphTraversal — path finding, impact radius, neighbor queries
+    similarity.py        # SeriesSimilarity — correlation/DTW, builds similar_to edges
+    scenarios.py         # ScenarioEngine — what-if impact propagation
+    ai_context.py        # GraphContextProvider — structured context for AI engines
     config.py            # KnowledgeGraphConfig dataclass
 ```
 
 ### Key Design Decisions
 
-1. **NetworkX (not Neo4j)** ΓÇö keeps the platform self-contained. Suitable for graphs up to ~100K nodes. The `graph.py` wrapper abstracts the backend so it can be swapped later if needed.
+1. **NetworkX (not Neo4j)** — keeps the platform self-contained. Suitable for graphs up to ~100K nodes. The `graph.py` wrapper abstracts the backend so it can be swapped later if needed.
 
-2. **Graph features injected via existing regressor path** ΓÇö `GraphFeatureExtractor` returns a Polars DataFrame with `series_id` column. This joins into `SeriesBuilder.build()` using the same mechanism as external regressors. LightGBM, XGBoost, and neural models all benefit with zero model code changes.
+2. **Graph features injected via existing regressor path** — `GraphFeatureExtractor` returns a Polars DataFrame with `series_id` column. This joins into `SeriesBuilder.build()` using the same mechanism as external regressors. LightGBM, XGBoost, and neural models all benefit with zero model code changes.
 
-3. **Opt-in via config** ΓÇö `knowledge_graph.enabled = False` by default. Each sub-feature (feature extraction, similarity, temporal snapshots) has its own toggle.
+3. **Opt-in via config** — `knowledge_graph.enabled = False` by default. Each sub-feature (feature extraction, similarity, temporal snapshots) has its own toggle.
 
-4. **AI grounding before GNN training** ΓÇö immediate value comes from providing structured graph context to Claude via `AIFeatureBase` pattern (lower risk, faster value). GNN embeddings are Phase 4.
+4. **AI grounding before GNN training** — immediate value comes from providing structured graph context to Claude via `AIFeatureBase` pattern (lower risk, faster value). GNN embeddings are Phase 4.
 
-5. **Temporal edges via Polars** ΓÇö edge versions stored in a Polars DataFrame for efficient time-range filtering, consistent with the platform's Polars-native approach.
+5. **Temporal edges via Polars** — edge versions stored in a Polars DataFrame for efficient time-range filtering, consistent with the platform's Polars-native approach.
 
 ### Graph Features for Forecasting (the "KG-GCN-LSTM" approach)
 
@@ -574,10 +574,10 @@ New router: `src/api/routers/knowledge_graph.py`
 
 ### Frontend Concepts
 
-1. **Graph Explorer Page** ΓÇö Force-directed visualization (react-force-graph-2d or d3-force). Nodes colored by entity type, edges styled by relationship type. Click-to-inspect, search, filter by type.
-2. **Series Context Panel** ΓÇö New tab on forecast detail page showing 2-hop neighborhood as mini-graph + table of graph features.
-3. **Impact Analysis Widget** ΓÇö Select a node, specify a change (e.g., discontinue SKU-123), see affected series highlighted with estimated demand impact.
-4. **Temporal Slider** ΓÇö Date slider on graph explorer showing how the graph evolves (transitions appearing/completing, new products launching).
+1. **Graph Explorer Page** — Force-directed visualization (react-force-graph-2d or d3-force). Nodes colored by entity type, edges styled by relationship type. Click-to-inspect, search, filter by type.
+2. **Series Context Panel** — New tab on forecast detail page showing 2-hop neighborhood as mini-graph + table of graph features.
+3. **Impact Analysis Widget** — Select a node, specify a change (e.g., discontinue SKU-123), see affected series highlighted with estimated demand impact.
+4. **Temporal Slider** — Date slider on graph explorer showing how the graph evolves (transitions appearing/completing, new products launching).
 
 ### Phased Implementation
 
@@ -590,17 +590,17 @@ New router: `src/api/routers/knowledge_graph.py`
 - Unit tests: `test_knowledge_graph.py`
 
 #### Phase 2: Feature Extraction + AI Integration (2-3 weeks)
-- `features.py` ΓÇö structural graph features
+- `features.py` — structural graph features
 - Integrate into `SeriesBuilder.build()` as additional features
-- `ai_context.py` ΓÇö graph context for NL query engine
-- `traversal.py` ΓÇö path finding, impact radius
+- `ai_context.py` — graph context for NL query engine
+- `traversal.py` — path finding, impact radius
 - API: `/graph/features/{lob}`, `/graph/series/{id}/context`
 - Backtest comparison: with vs. without graph features
 
 #### Phase 3: Temporal + Scenarios (2-3 weeks)
-- `temporal.py` ΓÇö edge versioning, point-in-time snapshots
-- `scenarios.py` ΓÇö what-if propagation
-- `similarity.py` ΓÇö correlation-based `similar_to` edges
+- `temporal.py` — edge versioning, point-in-time snapshots
+- `scenarios.py` — what-if propagation
+- `similarity.py` — correlation-based `similar_to` edges
 - API: `/graph/impact`, `/graph/scenario`, `/graph/path`
 - Integrate into `AnomalyTriageEngine` and `CommentaryEngine`
 
@@ -620,12 +620,12 @@ No external database required. Graph persists as JSON/Parquet files.
 
 ### Testing
 
-- `tests/test_knowledge_graph.py` ΓÇö ontology, graph CRUD, builder
-- `tests/test_graph_features.py` ΓÇö feature extraction correctness
-- `tests/test_graph_traversal.py` ΓÇö path finding, impact analysis
-- `tests/test_graph_scenarios.py` ΓÇö what-if propagation
-- `tests/test_graph_ai_context.py` ΓÇö AI context generation
-- `tests/test_graph_api.py` ΓÇö API endpoint integration
+- `tests/test_knowledge_graph.py` — ontology, graph CRUD, builder
+- `tests/test_graph_features.py` — feature extraction correctness
+- `tests/test_graph_traversal.py` — path finding, impact analysis
+- `tests/test_graph_scenarios.py` — what-if propagation
+- `tests/test_graph_ai_context.py` — AI context generation
+- `tests/test_graph_api.py` — API endpoint integration
 
 Fixture: `make_knowledge_graph()` factory using existing `_make_weekly_actuals()` and hierarchy fixtures.
 
