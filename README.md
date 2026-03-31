@@ -15,6 +15,12 @@ A production-grade, modular multi-frequency sales forecasting product (daily, we
 | [User Guide](docs/USER_GUIDE.md) | Model selection, backtest interpretation, AI features |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Common errors, FAQ, debugging tips |
 | [Frontend](docs/FRONTEND.md) | Frontend architecture, components, API client, auth flow |
+| [API Reference](docs/API_REFERENCE.md) | REST API endpoints, authentication, request/response schemas |
+| [Python API](docs/PYTHON_API.md) | Python library usage — pipelines, metrics, validation |
+| [Production Deployment](docs/PRODUCTION_DEPLOYMENT.md) | Kubernetes, orchestration (Airflow/Dagster), monitoring |
+| [AI Features](docs/AI_FEATURES.md) | Claude-powered NLQ, triage, config tuning, commentary |
+| [Adding Models](docs/ADDING_MODELS.md) | How to add custom forecasting models |
+| [Foundation Models](docs/FOUNDATION_MODELS.md) | Zero-shot models: Amazon Chronos, Nixtla TimeGPT |
 
 ---
 

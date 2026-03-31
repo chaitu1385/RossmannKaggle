@@ -300,6 +300,97 @@ if len(failures) > 0:
 
 ---
 
+## Interpreting Data Quality Reports
+
+The `DataValidator` and `SeriesBuilder` produce quality reports at each pipeline run. Here's how to interpret them.
+
+### Validation Report
+
+The 5-layer validation runs automatically on every dataset:
+
+| Check | What It Catches | Action When Failed |
+|-------|----------------|-------------------|
+| **Schema** | Missing/wrong-type columns | Fix column names or update config mapping |
+| **Duplicates** | Repeated `(series_id, week)` pairs | Deduplicate source data — duplicates cause double-counting |
+| **Frequency** | Inconsistent time gaps (e.g., missing weeks) | Enable `fill_gaps: true` in data quality config, or investigate source gaps |
+| **Value Range** | Negative demand, extreme outliers | Enable cleansing (`cleansing.enabled: true`) or fix source data |
+| **Completeness** | Too many missing weeks per series, too few series | Lower `min_series_length_weeks` or provide more data |
+
+**Severity levels:**
+- `error` — Blocks the pipeline if `strict: true`; otherwise logged as warning
+- `warning` — Non-blocking; captured in manifest for review
+
+### Cleansing Report
+
+When `cleansing.enabled: true`, the report includes:
+
+```python
+# Access after pipeline run
+report = builder._last_cleansing_report
+# {
+#   "outliers_detected": 42,
+#   "outliers_clipped": 38,
+#   "stockouts_detected": 15,
+#   "stockouts_imputed": 15,
+#   "series_affected": ["sku_001", "sku_042", ...]
+# }
+```
+
+| Field | What It Means |
+|-------|--------------|
+| `outliers_detected` | Values outside IQR/z-score bounds |
+| `outliers_clipped` | Values actually modified (clipped to fence) |
+| `stockouts_detected` | Zero-runs identified as stockouts (not real zero demand) |
+| `stockouts_imputed` | Stockout periods replaced with seasonal average |
+
+**If outliers_clipped is very high (>5% of rows):** Your data may have structural issues — check for unit changes, returns, or data entry errors before relying on automatic cleansing.
+
+### Structural Break Report
+
+When `structural_breaks.enabled: true`:
+
+| Field | What It Means |
+|-------|--------------|
+| `series_with_breaks` | Number of series with detected structural breaks |
+| `total_breaks` | Total breakpoints found across all series |
+| `truncated_series` | If `truncate_to_last_break: true`, series cut to post-break data only |
+
+**When to truncate:** If a product was reformulated, repackaged, or repriced, pre-break history may hurt forecasts. Set `truncate_to_last_break: true` for these cases.
+
+### Data Quality Analyzer Report
+
+The overall quality assessment (when `report.enabled: true`):
+
+```python
+report = builder._last_quality_report
+# {
+#   "n_series": 150,
+#   "n_short": 12,
+#   "n_zero": 3,
+#   "n_sparse": 28,
+#   "demand_classes": {"smooth": 80, "erratic": 28, "intermittent": 22, "lumpy": 20},
+#   "overall_quality": "good"     # good / fair / poor
+# }
+```
+
+| Quality Rating | Meaning |
+|---------------|---------|
+| `good` | <5% short series, <10% zero series, <10% missing data |
+| `fair` | 5–15% short/zero series, 10–25% missing |
+| `poor` | >15% short/zero, >25% missing — results may be unreliable |
+
+### Common Data Quality Patterns
+
+| Pattern | Symptom | Fix |
+|---------|---------|-----|
+| New product launches | Many short series | Lower `min_series_length_weeks` or use foundation models |
+| Seasonal stockouts | Zero-runs in peak periods | Enable stockout imputation |
+| Price changes | Structural breaks in volume | Enable break detection + truncation |
+| Mixed frequencies | Frequency check failures | Separate daily/weekly/monthly into distinct LOBs |
+| Hierarchy mismatches | Orphan series in aggregation | Check product master completeness |
+
+---
+
 ## Performance Issues
 
 ### Backtests are slow

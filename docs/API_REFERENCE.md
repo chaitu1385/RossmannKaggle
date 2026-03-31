@@ -1,0 +1,558 @@
+# API Reference
+
+The Forecasting Platform exposes a REST API built with FastAPI. Interactive docs are available at `/docs` (Swagger UI) and `/redoc` (ReDoc) when the server is running.
+
+**Base URL:** `http://localhost:8000`
+
+---
+
+## System
+
+### `GET /health`
+
+Readiness probe — returns dependency health checks.
+
+**Response:**
+
+```json
+{
+  "status": "ok",
+  "version": "1.0.0",
+  "checks": {
+    "data_dir": true,
+    "metrics_dir": true
+  }
+}
+```
+
+### `POST /auth/token` *(dev mode only)*
+
+Issue a JWT token for development/testing. Only available when `API_DEV_MODE=1`.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `username` | query, required | Username |
+| `role` | query, default `"viewer"` | Role: `admin`, `manager`, `planner`, `data_scientist`, `viewer` |
+
+**Response:**
+
+```json
+{
+  "access_token": "eyJ...",
+  "token_type": "bearer"
+}
+```
+
+### `GET /audit`
+
+Query the audit log. **Requires** `VIEW_AUDIT_LOG` permission.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `action` | query, optional | Filter by action type |
+| `resource_type` | query, optional | Filter by resource type |
+| `limit` | query, default `100` | Max results (1–1000) |
+
+---
+
+## Forecasts
+
+### `GET /forecast/{lob}`
+
+Return the latest forecast for a LOB. Reads the most recent `forecast_*.parquet` file.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `lob` | path, required | Line of business name |
+| `series_id` | query, optional | Filter to a single series |
+| `horizon` | query, optional | Limit output to first N weeks |
+
+**Response:** `ForecastResponse`
+
+```json
+{
+  "lob": "retail",
+  "series_count": 150,
+  "forecast_origin": "2026-03-15",
+  "points": [
+    {
+      "series_id": "sku_001",
+      "week": "2026-03-22",
+      "forecast": 1250.5,
+      "model": "lgbm_direct",
+      "forecast_p10": 980.0,
+      "forecast_p50": 1250.5,
+      "forecast_p90": 1520.0
+    }
+  ]
+}
+```
+
+### `GET /forecast/{lob}/{series_id}`
+
+Return the latest forecast for a single series within a LOB.
+
+---
+
+## Metrics
+
+### `GET /metrics/leaderboard/{lob}`
+
+Model leaderboard from the metric store, ranked by WMAPE (ascending).
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `lob` | path, required | LOB name |
+| `run_type` | query, default `"backtest"` | `"backtest"` or `"live"` |
+
+**Response:** `LeaderboardResponse`
+
+```json
+{
+  "lob": "retail",
+  "run_type": "backtest",
+  "entries": [
+    {
+      "model": "lgbm_direct",
+      "wmape": 0.142,
+      "normalized_bias": -0.003,
+      "rank": 1,
+      "n_series": 150
+    }
+  ]
+}
+```
+
+### `GET /metrics/drift/{lob}`
+
+Drift alerts for all series in a LOB. Runs `ForecastDriftDetector` on accuracy, bias, and volume signals.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `lob` | path, required | LOB name |
+| `run_type` | query, default `"backtest"` | `"backtest"` or `"live"` |
+| `baseline_weeks` | query, default `26` | Baseline window (≥4) |
+| `recent_weeks` | query, default `8` | Recent window (≥2) |
+
+**Response:** `DriftResponse`
+
+```json
+{
+  "lob": "retail",
+  "n_critical": 2,
+  "n_warning": 8,
+  "alerts": [
+    {
+      "series_id": "sku_001",
+      "metric": "accuracy",
+      "severity": "critical",
+      "current_value": 0.35,
+      "baseline_value": 0.15,
+      "message": "WMAPE increased by 133%"
+    }
+  ]
+}
+```
+
+---
+
+## Analytics
+
+### `POST /analyze`
+
+Upload a CSV/Parquet file for automated schema detection, forecastability scoring, hierarchy detection, and config recommendation. **Requires** `RUN_PIPELINE` permission.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `file` | body, required | CSV or Parquet upload |
+| `lob_name` | query, default `"analyzed"` | Name for this analysis |
+| `llm_enabled` | query, default `false` | Use Claude for narrative interpretation |
+
+**Response:** `AnalysisResponse` — includes `recommended_config_yaml`, `forecastability_distribution`, `demand_classes`, `detected_hierarchies`, and optionally `llm_narrative`.
+
+### `GET /metrics/{lob}/fva`
+
+Compute Forecast Value Add (FVA) cascade — shows which model layer adds or destroys value. **Requires** `VIEW_METRICS` permission.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `lob` | path, required | LOB name |
+| `run_type` | query, default `"backtest"` | `"backtest"` or `"live"` |
+
+### `GET /metrics/{lob}/calibration`
+
+Compute prediction interval calibration report — compares nominal vs. empirical coverage at 50% and 80% intervals. **Requires** `VIEW_METRICS` permission.
+
+### `POST /metrics/{lob}/shap`
+
+Compute SHAP feature attribution for tree-based models. Accepts an optional file upload; otherwise loads from data directory. **Requires** `VIEW_METRICS` permission.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `lob` | path, required | LOB name |
+| `file` | body, optional | Actuals CSV/Parquet |
+| `model_name` | query, default `"lgbm_direct"` | Model to explain |
+| `season_length` | query, default `52` | Season length |
+| `top_k` | query, default `10` | Number of top features |
+
+### `POST /forecast/decompose`
+
+Run STL decomposition on historical + forecast data. Returns trend, seasonal, and residual components plus per-series narratives.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `history_file` | body, required | Historical actuals |
+| `forecast_file` | body, required | Forecast data |
+| `id_col` | query, default `"series_id"` | Series ID column |
+| `time_col` | query, default `"week"` | Time column |
+| `target_col` | query, default `"quantity"` | Target column (actuals) |
+| `value_col` | query, default `"forecast"` | Value column (forecast) |
+| `season_length` | query, default `52` | Season length |
+
+### `POST /forecast/compare`
+
+Compare model forecast against an external/uploaded forecast. Returns per-series deltas and summary statistics.
+
+### `POST /forecast/constrain`
+
+Apply capacity and budget constraints to forecast. Supports per-series caps, aggregate caps, and proportional redistribution. **Requires** `RUN_PIPELINE` permission.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `file` | body, required | Forecast CSV/Parquet |
+| `min_demand` | query, default `0.0` | Floor (non-negativity) |
+| `max_capacity` | query, optional | Per-series-per-period cap |
+| `aggregate_max` | query, optional | Total cap across all series |
+| `proportional` | query, default `true` | Use proportional redistribution |
+
+---
+
+## Series
+
+### `GET /series/{lob}`
+
+List all series with SBC demand classification — ADI (Average Demand Interval), CV² (coefficient of variation squared), demand class (smooth/erratic/intermittent/lumpy), and observation count.
+
+### `GET /series/{lob}/{series_id}/history`
+
+Return raw time series data points for a single series.
+
+### `POST /series/breaks`
+
+Detect structural breaks in uploaded or server-side time series data.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `file` | body, optional | CSV/Parquet upload |
+| `lob` | query, optional | LOB name (loads from data directory) |
+| `method` | query, default `"cusum"` | `"cusum"` or `"pelt"` |
+| `penalty` | query, default `3.0` | PELT penalty (higher = fewer breaks) |
+| `min_segment_length` | query, default `13` | Minimum periods between breaks |
+| `max_breakpoints` | query, default `5` | Maximum breakpoints to detect |
+
+### `POST /series/cleansing-audit`
+
+Run outlier detection and stockout imputation audit on uploaded data.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `file` | body, optional | CSV/Parquet upload |
+| `lob` | query, optional | LOB name |
+| `outlier_method` | query, default `"iqr"` | `"iqr"` or `"zscore"` |
+| `iqr_multiplier` | query, default `1.5` | IQR fence multiplier |
+| `zscore_threshold` | query, default `3.0` | Z-score threshold |
+
+### `POST /series/regressor-screen`
+
+Screen external regressors for quality (variance, correlation, mutual information).
+
+---
+
+## Pipeline
+
+### `POST /pipeline/backtest`
+
+Run the backtest pipeline on uploaded data. Returns champion model and leaderboard. **Requires** `RUN_BACKTEST` permission.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `file` | body, required | Actuals CSV/Parquet |
+| `config_file` | body, optional | YAML config file |
+| `lob` | query, default `"default"` | LOB name |
+
+### `POST /pipeline/forecast`
+
+Run the forecast pipeline. Fits the champion model on full history and generates horizon forecasts. **Requires** `RUN_PIPELINE` permission.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `file` | body, required | Actuals CSV/Parquet |
+| `config_file` | body, optional | YAML config file |
+| `lob` | query, default `"default"` | LOB name |
+| `model_id` | query, optional | Specific model to use |
+| `horizon` | query, default `12` | Forecast horizon in periods |
+
+### `POST /pipeline/analyze-multi-file`
+
+Upload multiple files for auto-classification (actuals, dimensions, regressors) and merging. **Requires** `RUN_PIPELINE` permission.
+
+### `GET /pipeline/manifests`
+
+List recent pipeline run manifests with metadata (series counts, champion model, WMAPE, validation status). **Requires** `VIEW_METRICS` permission.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `lob` | query, optional | Filter by LOB |
+| `limit` | query, default `20` | Max results (1–100) |
+
+### `GET /pipeline/costs`
+
+Get cost tracking data from pipeline manifests (timing, seconds per series). **Requires** `VIEW_METRICS` permission.
+
+---
+
+## Hierarchy
+
+### `POST /hierarchy/build`
+
+Build a hierarchy tree from uploaded data. Returns level stats, node counts, summing matrix sample, and full tree structure for visualization.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `file` | body, required | CSV/Parquet with hierarchy columns |
+| `levels` | query, required | Comma-separated hierarchy levels, root to leaf |
+| `id_column` | query, default `"series_id"` | Leaf-level ID column |
+| `name` | query, default `"product"` | Hierarchy name |
+
+### `POST /hierarchy/aggregate`
+
+Aggregate leaf-level data to a target hierarchy level.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `file` | body, required | CSV/Parquet |
+| `levels` | query, required | Comma-separated hierarchy levels |
+| `target_level` | query, required | Level to aggregate to |
+| `value_columns` | query, default `"quantity"` | Columns to aggregate |
+| `agg` | query, default `"sum"` | `"sum"` or `"mean"` |
+| `top_n` | query, default `10` | Return top N nodes by total value |
+
+### `POST /hierarchy/reconcile`
+
+Run hierarchical reconciliation and return before/after comparison. **Requires** `RUN_PIPELINE` permission.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `file` | body, required | Forecast CSV/Parquet |
+| `levels` | query, required | Comma-separated hierarchy levels |
+| `method` | query, default `"bottom_up"` | `bottom_up`, `top_down`, `ols`, `wls`, `mint` |
+| `value_columns` | query, default `"forecast"` | Columns to reconcile |
+
+---
+
+## SKU Mapping
+
+### `POST /sku-mapping/phase1`
+
+Run Phase 1 SKU mapping — attribute + naming matching to find predecessor products. **Requires** `RUN_PIPELINE` permission.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `product_master` | body, required | Product master CSV |
+| `launch_window_days` | query, default `180` | Window for new product candidates |
+| `min_base_similarity` | query, default `0.70` | Minimum similarity threshold |
+| `min_confidence` | query, default `"Low"` | `"Low"`, `"Medium"`, or `"High"` |
+
+### `POST /sku-mapping/phase2`
+
+Run Phase 2 SKU mapping — attribute + naming + demand curve fitting. **Requires** `RUN_PIPELINE` permission.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `product_master` | body, required | Product master CSV |
+| `sales_history` | body, optional | Sales history CSV for curve fitting |
+| `window_weeks` | query, default `13` | Curve fitting window |
+
+---
+
+## Overrides
+
+### `GET /overrides`
+
+List all planner overrides, optionally filtered by SKU. **Requires** `VIEW_FORECASTS` permission.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `old_sku` | query, optional | Filter by predecessor SKU |
+| `new_sku` | query, optional | Filter by successor SKU |
+
+### `POST /overrides`
+
+Create a new planner override. **Requires** `CREATE_OVERRIDE` permission.
+
+**Request body:**
+
+```json
+{
+  "old_sku": "SKU_OLD_001",
+  "new_sku": "SKU_NEW_001",
+  "proportion": 0.8,
+  "scenario": "manual",
+  "ramp_shape": "linear",
+  "effective_date": "2026-04-01",
+  "notes": "Product transition approved"
+}
+```
+
+### `PUT /overrides/{override_id}`
+
+Update an existing override. **Requires** `CREATE_OVERRIDE` permission.
+
+### `DELETE /overrides/{override_id}`
+
+Delete an override. **Requires** `CREATE_OVERRIDE` permission.
+
+---
+
+## Governance
+
+### `GET /governance/model-cards`
+
+List all registered model cards.
+
+### `GET /governance/model-cards/{model_name}`
+
+Get a specific model card by name.
+
+### `GET /governance/lineage`
+
+Get forecast lineage history.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `lob` | query, optional | Filter by LOB |
+| `model_id` | query, optional | Filter by model |
+
+### `POST /governance/export/{report_type}`
+
+Export BI report as Parquet. **Requires** `VIEW_METRICS` permission.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `report_type` | path, required | `"forecast-actual"`, `"leaderboard"`, or `"bias-report"` |
+| `lob` | query, required | LOB name |
+| `run_type` | query, default `"backtest"` | `"backtest"` or `"live"` |
+| `model_id` | query, optional | Filter by model (for bias report) |
+
+---
+
+## AI Features
+
+All AI endpoints require `ANTHROPIC_API_KEY` environment variable. If not set, Claude features return graceful fallback responses.
+
+### `POST /ai/explain`
+
+Answer a natural-language question about a specific series forecast. **Requires** `VIEW_FORECASTS` permission.
+
+**Request body:**
+
+```json
+{
+  "series_id": "sku_001",
+  "question": "Why did this forecast increase 30%?",
+  "lob": "retail"
+}
+```
+
+**Response:** `NLQueryResponse`
+
+```json
+{
+  "answer": "The forecast for sku_001 increased due to...",
+  "supporting_data": {"trend_direction": "increasing", "seasonal_peak": true},
+  "confidence": "medium",
+  "sources_used": ["history_stats", "forecast_summary", "decomposition"]
+}
+```
+
+### `POST /ai/triage`
+
+Triage drift alerts by business impact with suggested actions. **Requires** `VIEW_METRICS` permission.
+
+**Request body:**
+
+```json
+{
+  "lob": "retail",
+  "run_type": "backtest",
+  "severity_filter": "critical",
+  "max_alerts": 50
+}
+```
+
+**Response:** `TriageResponse` — ranked alerts with `business_impact_score`, `suggested_action`, and `reasoning`.
+
+### `POST /ai/recommend-config`
+
+Recommend configuration changes based on backtest performance. **Requires** `RUN_PIPELINE` permission.
+
+**Request body:**
+
+```json
+{
+  "lob": "retail",
+  "run_type": "backtest"
+}
+```
+
+**Response:** `ConfigTuneResponse` — list of recommendations, each with `field_path`, `current_value`, `recommended_value`, `reasoning`, `expected_impact`, and `risk`.
+
+### `POST /ai/commentary`
+
+Generate executive forecast commentary for S&OP meetings. **Requires** `VIEW_METRICS` permission.
+
+**Request body:**
+
+```json
+{
+  "lob": "retail",
+  "run_type": "backtest",
+  "period_start": "2026-01-01",
+  "period_end": "2026-03-31"
+}
+```
+
+**Response:** `CommentaryResponse` — `executive_summary`, `key_metrics[]`, `exceptions[]`, `action_items[]`.
+
+---
+
+## Authentication & RBAC
+
+All endpoints require authentication when `auth_enabled=True`. Pass a JWT token via the `Authorization: Bearer <token>` header.
+
+### Roles and Permissions
+
+| Role | Permissions |
+|------|-------------|
+| `admin` | All permissions |
+| `manager` | VIEW_FORECASTS, VIEW_METRICS, RUN_BACKTEST, RUN_PIPELINE, CREATE_OVERRIDE, APPROVE_OVERRIDE, VIEW_AUDIT_LOG |
+| `data_scientist` | VIEW_FORECASTS, VIEW_METRICS, RUN_BACKTEST, RUN_PIPELINE |
+| `planner` | VIEW_FORECASTS, VIEW_METRICS, CREATE_OVERRIDE |
+| `viewer` | VIEW_FORECASTS, VIEW_METRICS |
+
+### Rate Limiting
+
+100 requests per 60 seconds per client IP (configurable via `API_RATE_LIMIT` env var). Returns HTTP 429 when exceeded.
+
+---
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `API_DATA_DIR` | Root data directory | `data/` |
+| `API_METRICS_DIR` | Metrics store directory | `data/metrics/` |
+| `API_VERSION` | Version in `/health` | `1.0.0` |
+| `API_RATE_LIMIT` | Requests per minute per IP | `100` |
+| `API_DEV_MODE` | Enable dev token endpoint | `1` (if auth disabled) |
+| `ANTHROPIC_API_KEY` | Claude API key for AI features | *(optional)* |
