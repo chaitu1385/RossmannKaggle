@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:e2e": "vitest run --reporter=verbose"
+    "test:e2e": "vitest run --reporter=verbose",
+    "test:pw": "npx playwright test --project=chromium",
+    "test:pw:headed": "npx playwright test --project=chromium --headed",
+    "test:pw:all": "npx playwright test",
+    "test:pw:integration": "npx playwright test --project=chromium --grep @integration"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.2",
