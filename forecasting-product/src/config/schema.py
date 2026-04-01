@@ -422,6 +422,26 @@ class AlertConfig:
 
 
 @dataclass
+class PostValidationConfig:
+    """Post-pipeline 4-layer validation settings.
+
+    Controls the validation that runs after backtest/forecast to assess
+    forecast quality and produce an A-F confidence grade.
+    """
+    enabled: bool = True                             # on by default
+    structural_checks: bool = True                   # Layer 1: schema, PKs, completeness
+    logical_checks: bool = True                      # Layer 2: aggregation consistency, trends
+    business_rules_checks: bool = True               # Layer 3: value ranges, plausibility
+    simpsons_paradox_checks: bool = True             # Layer 4: segment-level reversals
+    max_yoy_change_pct: float = 500.0                # max acceptable YoY change (%)
+    max_period_change_pct: float = 500.0             # max period-over-period change (%)
+    custom_range_rules: List[Dict[str, Any]] = field(default_factory=list)
+    simpsons_segment_columns: List[str] = field(default_factory=list)  # auto-detect if empty
+    halt_on_blocker: bool = False                    # if True, raise on BLOCKER severity
+    min_grade: str = "D"                             # minimum acceptable grade
+
+
+@dataclass
 class ObservabilityConfig:
     """Pipeline observability and monitoring settings."""
     log_format: str = "text"            # "text" | "json"
@@ -461,6 +481,9 @@ class PlatformConfig:
     parallelism: ParallelismConfig = field(default_factory=ParallelismConfig)
     observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
     ai: AIConfig = field(default_factory=AIConfig)
+    post_validation: PostValidationConfig = field(
+        default_factory=PostValidationConfig
+    )
     metrics: List[str] = field(
         default_factory=lambda: ["wmape", "normalized_bias"]
     )

@@ -80,6 +80,10 @@ class PipelineManifest:
     forecast_row_count: int = 0
     forecast_file: str = ""
 
+    # Post-pipeline validation (4-layer framework)
+    post_validation_grade: Optional[str] = None
+    post_validation_score: Optional[int] = None
+
 
 def build_manifest(
     run_id: str,
@@ -90,6 +94,7 @@ def build_manifest(
     forecast: pl.DataFrame,
     forecast_file: str,
     backtest_wmape: Optional[float] = None,
+    post_validation_result: Optional[Dict[str, Any]] = None,
 ) -> PipelineManifest:
     """
     Collect provenance from existing pipeline components into a manifest.
@@ -112,6 +117,8 @@ def build_manifest(
         Filename of the forecast Parquet file.
     backtest_wmape:
         Optional backtest WMAPE of the champion model.
+    post_validation_result:
+        Optional dict from run_post_validation() with grade/score keys.
     """
     manifest = PipelineManifest(
         run_id=run_id,
@@ -165,6 +172,11 @@ def build_manifest(
         manifest.regressor_screen_applied = True
         manifest.regressors_dropped = list(getattr(screen, "dropped_columns", []))
         manifest.regressor_warnings = list(getattr(screen, "warnings", []))
+
+    # Post-pipeline validation (4-layer framework)
+    if post_validation_result and not post_validation_result.get("skipped"):
+        manifest.post_validation_grade = post_validation_result.get("grade")
+        manifest.post_validation_score = post_validation_result.get("score")
 
     return manifest
 

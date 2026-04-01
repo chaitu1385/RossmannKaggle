@@ -1,0 +1,288 @@
+"""
+Post-pipeline validation step.
+
+Runs the 4-layer validation framework against backtest results or forecast
+output and produces an A-F confidence grade.
+
+This module bridges the PlatformConfig's PostValidationConfig with the
+validation package's ``run_full_validation()`` orchestrator, adapting
+forecasting-specific inputs into the config format expected by each layer.
+"""
+
+import logging
+from typing import Any, Dict, List, Optional
+
+import polars as pl
+
+from ..config.schema import PostValidationConfig
+from ..validation import (
+    run_structural_checks,
+    run_logical_checks,
+    validate_business_rules,
+    check_simpsons_multi_segment,
+    suggest_segments_to_check,
+    score_confidence,
+    format_confidence_badge,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class ValidationError(Exception):
+    """Raised when post-validation encounters a BLOCKER and halt_on_blocker is True."""
+
+
+def run_post_validation(
+    results_df: pl.DataFrame,
+    config: PostValidationConfig,
+    lob: str,
+    forecast_df: Optional[pl.DataFrame] = None,
+) -> dict:
+    """Run 4-layer validation on pipeline output.
+
+    Parameters
+    ----------
+    results_df
+        Backtest results DataFrame (with columns like wmape, forecast,
+        actual, series_id, model_id, etc.) or forecast output DataFrame.
+    config
+        PostValidationConfig controlling which layers run and thresholds.
+    lob
+        Line of business name (for logging).
+    forecast_df
+        Optional separate forecast DataFrame to validate (e.g., from
+        ForecastPipeline). If None, results_df is used.
+
+    Returns
+    -------
+    dict with ``grade``, ``score``, ``badge``, ``layers``, ``confidence``.
+    """
+    if not config.enabled:
+        logger.info("[%s] Post-validation disabled, skipping.", lob)
+        return {
+            "grade": "N/A",
+            "score": -1,
+            "badge": "[N/A] Post-validation disabled",
+            "layers": {},
+            "confidence": {},
+            "skipped": True,
+        }
+
+    df = results_df
+    target_df = forecast_df if forecast_df is not None else df
+
+    logger.info("[%s] Running post-pipeline validation (%d rows)...", lob, len(df))
+
+    # --- Layer 1: Structural checks ---
+    structural_result = None
+    if config.structural_checks:
+        structural_config = _build_structural_config(df)
+        structural_result = run_structural_checks(df, config=structural_config)
+        logger.info(
+            "[%s] Structural: %d/%d checks passed",
+            lob,
+            structural_result.get("checks_passed", 0),
+            structural_result.get("checks_run", 0),
+        )
+
+    # --- Layer 2: Logical checks ---
+    logical_result = None
+    if config.logical_checks:
+        logical_config = _build_logical_config(df)
+        logical_result = run_logical_checks(df, config=logical_config)
+        logger.info(
+            "[%s] Logical: %d/%d checks passed",
+            lob,
+            logical_result.get("checks_passed", 0),
+            logical_result.get("checks_run", 0),
+        )
+
+    # --- Layer 3: Business rules ---
+    business_result = None
+    if config.business_rules_checks:
+        business_config = _build_business_config(target_df, config)
+        business_result = validate_business_rules(target_df, config=business_config)
+        logger.info(
+            "[%s] Business rules: %d/%d checks passed",
+            lob,
+            business_result.get("checks_passed", 0),
+            business_result.get("checks_run", 0),
+        )
+
+    # --- Layer 4: Simpson's Paradox ---
+    paradox_result = None
+    if config.simpsons_paradox_checks:
+        paradox_result = _run_simpsons_check(df, config)
+        if paradox_result:
+            any_paradox = paradox_result.get("any_paradox", False)
+            logger.info(
+                "[%s] Simpson's Paradox: %s",
+                lob,
+                "DETECTED" if any_paradox else "not detected",
+            )
+
+    # --- Confidence scoring ---
+    confidence = score_confidence(
+        structural=structural_result,
+        logical=logical_result,
+        business=business_result,
+        paradox=paradox_result,
+    )
+    badge = format_confidence_badge(confidence)
+
+    grade = confidence["grade"]
+    score = confidence["score"]
+    logger.info("[%s] Validation grade: %s (%d/100)", lob, grade, score)
+
+    result = {
+        "grade": grade,
+        "score": score,
+        "badge": badge,
+        "layers": {
+            "structural": structural_result,
+            "logical": logical_result,
+            "business": business_result,
+            "paradox": paradox_result,
+        },
+        "confidence": confidence,
+        "skipped": False,
+    }
+
+    # --- Halt on blocker ---
+    if config.halt_on_blocker:
+        caps = confidence.get("caps_applied", {})
+        if caps.get("blocker_cap"):
+            raise ValidationError(
+                f"[{lob}] Post-validation BLOCKER detected (grade={grade}, "
+                f"score={score}). Pipeline halted. "
+                f"Details: {confidence.get('recommendations', [])}"
+            )
+
+    # --- Grade check ---
+    _GRADE_RANK = {"A": 0, "B": 1, "C": 2, "D": 3, "F": 4}
+    if _GRADE_RANK.get(grade, 4) > _GRADE_RANK.get(config.min_grade, 3):
+        logger.warning(
+            "[%s] Validation grade %s is below minimum %s. "
+            "Recommendations: %s",
+            lob, grade, config.min_grade,
+            confidence.get("recommendations", []),
+        )
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Config builders — adapt PostValidationConfig to per-layer config dicts
+# ---------------------------------------------------------------------------
+
+def _build_structural_config(df: pl.DataFrame) -> dict:
+    """Build structural check config from available columns."""
+    config: Dict[str, Any] = {"min_rows": 1}
+
+    # Detect primary key columns
+    pk_candidates = []
+    for col in ["series_id", "model_id", "fold", "target_week"]:
+        if col in df.columns:
+            pk_candidates.append(col)
+    if pk_candidates:
+        config["primary_key"] = pk_candidates
+
+    return config
+
+
+def _build_logical_config(df: pl.DataFrame) -> dict:
+    """Build logical check config from available columns."""
+    config: Dict[str, Any] = {}
+
+    # Date column detection
+    for col in ["target_week", "week", "date"]:
+        if col in df.columns:
+            config["date_column"] = col
+            break
+
+    # Value column detection
+    for col in ["forecast", "quantity", "actual"]:
+        if col in df.columns:
+            config["value_column"] = col
+            break
+
+    # Group column for aggregation checks
+    if "model_id" in df.columns:
+        config["group_col"] = "model_id"
+
+    return config
+
+
+def _build_business_config(
+    df: pl.DataFrame,
+    pv_config: PostValidationConfig,
+) -> dict:
+    """Build business rules config from PostValidationConfig."""
+    config: Dict[str, Any] = {}
+
+    # Non-negative columns
+    non_neg = [c for c in ["forecast", "quantity", "actual"] if c in df.columns]
+    if non_neg:
+        config["non_negative_columns"] = non_neg
+
+    # Temporal consistency
+    date_col = None
+    for col in ["target_week", "week", "date"]:
+        if col in df.columns:
+            date_col = col
+            break
+    value_cols = [c for c in ["forecast", "quantity"] if c in df.columns]
+    if date_col and value_cols:
+        config["temporal"] = {
+            "date_column": date_col,
+            "value_columns": value_cols,
+            "max_period_change_pct": pv_config.max_period_change_pct,
+        }
+
+    # Custom range rules from config
+    if pv_config.custom_range_rules:
+        config["range_rules"] = pv_config.custom_range_rules
+
+    return config
+
+
+def _run_simpsons_check(
+    df: pl.DataFrame,
+    config: PostValidationConfig,
+) -> Optional[dict]:
+    """Run Simpson's Paradox detection."""
+    # Determine value column for paradox checking
+    value_col = None
+    for col in ["wmape", "mape", "forecast", "quantity"]:
+        if col in df.columns:
+            value_col = col
+            break
+    if value_col is None:
+        logger.debug("No suitable value column for Simpson's Paradox check.")
+        return None
+
+    # Determine segment columns
+    segment_cols: List[str] = list(config.simpsons_segment_columns)
+    if not segment_cols:
+        # Auto-detect categorical/low-cardinality columns
+        candidates = []
+        for col in ["model_id", "series_id", "channel", "grain_level"]:
+            if col in df.columns:
+                n_unique = df[col].n_unique()
+                if 2 <= n_unique <= 50:
+                    candidates.append(col)
+        segment_cols = candidates[:5]
+
+    if not segment_cols:
+        logger.debug("No segment columns available for Simpson's Paradox check.")
+        return None
+
+    try:
+        return check_simpsons_multi_segment(
+            df,
+            segment_columns=segment_cols,
+            value_col=value_col,
+        )
+    except Exception as e:
+        logger.warning("Simpson's Paradox check failed: %s", e)
+        return None
