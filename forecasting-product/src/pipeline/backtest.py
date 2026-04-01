@@ -24,6 +24,7 @@ from ..metrics.store import MetricStore
 from ..observability.context import PipelineContext
 from ..observability.metrics import MetricsEmitter
 from ..series.builder import SeriesBuilder
+from .validation_step import run_post_validation, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +198,27 @@ class BacktestPipeline:
                     id_col=fc.series_id_column,
                 )
 
+        # Step 6: Post-pipeline validation (4-layer + confidence grade)
+        validation_result = None
+        if self.config.post_validation.enabled and not results.is_empty():
+            try:
+                with self._emitter.timer("post_validation"):
+                    validation_result = run_post_validation(
+                        results_df=results,
+                        config=self.config.post_validation,
+                        lob=self.config.lob,
+                    )
+                self._emitter.gauge(
+                    "validation_score",
+                    float(validation_result.get("score", -1)),
+                )
+            except ValidationError:
+                raise
+            except Exception:
+                logger.warning(
+                    "Post-validation failed (non-fatal)", exc_info=True
+                )
+
         logger.info("[%s] Backtest pipeline complete.", run_id)
         return {
             "backtest_results": results,
@@ -207,4 +229,5 @@ class BacktestPipeline:
             "calibration_report": calibration_report,
             "conformal_residuals": conformal_residuals,
             "data_quality_report": self._series_builder._last_quality_report,
+            "validation": validation_result,
         }

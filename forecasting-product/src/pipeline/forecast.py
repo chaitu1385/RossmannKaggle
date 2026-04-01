@@ -25,6 +25,7 @@ from ..forecasting.registry import registry
 from ..observability.context import PipelineContext
 from ..observability.metrics import MetricsEmitter
 from ..series.builder import SeriesBuilder
+from .validation_step import run_post_validation
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,7 @@ class ForecastPipeline:
         self._series_builder = SeriesBuilder(config)
         self._conformal_residuals: Optional[pl.DataFrame] = None
         self._last_forecast_path: Optional[str] = None
+        self._last_validation_result: Optional[dict] = None
 
     def set_conformal_residuals(self, residuals: pl.DataFrame) -> None:
         """Set conformal residuals from backtest for interval correction."""
@@ -189,6 +191,22 @@ class ForecastPipeline:
                 model_id=forecaster.name if isinstance(champion_model, str) else None,
             )
             logger.info("Applied conformal prediction correction to intervals")
+
+        # Step 4d: Post-pipeline validation on forecast
+        self._last_validation_result = None
+        if self.config.post_validation.enabled:
+            try:
+                with self._emitter.timer("post_validation"):
+                    self._last_validation_result = run_post_validation(
+                        results_df=forecast,
+                        config=self.config.post_validation,
+                        lob=self.config.lob,
+                        forecast_df=forecast,
+                    )
+            except Exception:
+                logger.warning(
+                    "Post-validation failed (non-fatal)", exc_info=True
+                )
 
         # Step 5: Write to output
         forecast = self._write_forecast(forecast, forecast_origin)

@@ -21,6 +21,7 @@ from .schema import (
     OutputConfig,
     ParallelismConfig,
     PlatformConfig,
+    PostValidationConfig,
     ReconciliationConfig,
     TransitionConfig,
 )
@@ -141,6 +142,22 @@ def _dict_to_config(d: Dict[str, Any]) -> PlatformConfig:
         ),
     )
 
+    # ── Post-validation config ─────────────────────────────────────────
+    pv_raw = d.get("post_validation", {})
+    post_validation = PostValidationConfig(
+        enabled=pv_raw.get("enabled", True),
+        structural_checks=pv_raw.get("structural_checks", True),
+        logical_checks=pv_raw.get("logical_checks", True),
+        business_rules_checks=pv_raw.get("business_rules_checks", True),
+        simpsons_paradox_checks=pv_raw.get("simpsons_paradox_checks", True),
+        max_yoy_change_pct=pv_raw.get("max_yoy_change_pct", 500.0),
+        max_period_change_pct=pv_raw.get("max_period_change_pct", 500.0),
+        custom_range_rules=pv_raw.get("custom_range_rules", []),
+        simpsons_segment_columns=pv_raw.get("simpsons_segment_columns", []),
+        halt_on_blocker=pv_raw.get("halt_on_blocker", False),
+        min_grade=pv_raw.get("min_grade", "D"),
+    )
+
     return PlatformConfig(
         lob=d.get("lob", "default"),
         description=d.get("description", ""),
@@ -152,6 +169,7 @@ def _dict_to_config(d: Dict[str, Any]) -> PlatformConfig:
         output=output,
         parallelism=parallelism,
         observability=observability,
+        post_validation=post_validation,
         metrics=d.get("metrics", ["wmape", "normalized_bias"]),
     )
 
