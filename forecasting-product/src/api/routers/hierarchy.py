@@ -156,6 +156,7 @@ async def reconcile_hierarchy(
     method: str = Query("bottom_up", description="Reconciliation method: bottom_up, top_down, ols, wls, mint"),
     value_columns: str = Query("forecast", description="Comma-separated value columns"),
     time_column: str = Query("week"),
+    validate: bool = Query(False, description="Run 4-layer post-reconciliation validation"),
     user: User = Depends(require_permission(Permission.RUN_PIPELINE)),
 ):
     """Run hierarchical reconciliation and return before/after comparison."""
@@ -205,4 +206,26 @@ async def reconcile_hierarchy(
         "after_total": round(after_total, 2),
         "rows": reconciled.height,
         "reconciled_preview": reconciled.head(200).to_dicts(),
+        "validation": _run_reconciliation_validation(reconciled, validate),
     }
+
+
+def _run_reconciliation_validation(
+    reconciled: pl.DataFrame, enabled: bool
+) -> Optional[dict]:
+    """Run optional post-reconciliation validation."""
+    if not enabled:
+        return None
+    try:
+        from ...config.schema import PostValidationConfig
+        from ...pipeline.validation_step import run_post_validation
+
+        config = PostValidationConfig(
+            # Reconciled data is forecast output — disable Simpson's check
+            # (no segment columns in reconciled output)
+            simpsons_paradox_checks=False,
+        )
+        return run_post_validation(reconciled, config, lob="reconciliation")
+    except Exception as exc:
+        logger.warning("Post-reconciliation validation failed: %s", exc)
+        return {"error": str(exc), "skipped": True}
