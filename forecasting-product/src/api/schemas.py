@@ -42,12 +42,32 @@ class LeaderboardEntry(BaseModel):
     normalized_bias: float
     rank: int
     n_series: int
+    validation_grade: Optional[str] = Field(None, description="Post-validation confidence grade (A-F)")
+    validation_score: Optional[int] = Field(None, description="Post-validation confidence score (0-100)")
 
 
 class LeaderboardResponse(BaseModel):
     lob: str
     run_type: str
     entries: List[LeaderboardEntry]
+
+
+class ValidationLayerResult(BaseModel):
+    """Summary of one validation layer's results."""
+    checks_run: int = 0
+    checks_passed: int = 0
+    issues: List[Dict[str, Any]] = []
+
+
+class ValidationResponse(BaseModel):
+    """Response from GET /metrics/{lob}/validation."""
+    lob: str
+    grade: str = Field(description="Confidence grade: A, B, C, D, or F")
+    score: int = Field(description="Confidence score 0-100")
+    badge: str = Field(description="Formatted confidence badge")
+    layers: Dict[str, Any] = Field(description="Per-layer validation results")
+    confidence: Dict[str, Any] = Field(description="Scoring breakdown")
+    skipped: bool = False
 
 
 class DriftAlertItem(BaseModel):

@@ -76,6 +76,13 @@ async def run_backtest(
     if hasattr(results, "wmape"):
         summary["best_wmape"] = float(results.wmape) if results.wmape else None
 
+    # Include validation grade from dict-style return
+    if isinstance(results, dict):
+        val = results.get("validation")
+        if val and not val.get("skipped"):
+            summary["validation_grade"] = val.get("grade")
+            summary["validation_score"] = val.get("score")
+
     return summary
 
 
@@ -184,6 +191,8 @@ def list_manifests(
                 "validation_warnings": manifest.validation_warnings,
                 "cleansing_applied": manifest.cleansing_applied,
                 "outliers_clipped": manifest.outliers_clipped,
+                "post_validation_grade": getattr(manifest, "post_validation_grade", None),
+                "post_validation_score": getattr(manifest, "post_validation_score", None),
             })
         except (FileNotFoundError, json.JSONDecodeError, ValueError, OSError) as exc:
             logger.warning(f"Failed to read manifest {mf}: {exc}")

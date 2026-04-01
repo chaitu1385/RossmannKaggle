@@ -361,3 +361,52 @@ async def constrain_forecast(
         },
         "constrained_preview": constrained.head(200).to_dicts(),
     }
+
+
+# ── Post-pipeline validation ────────────────────────────────────────────────
+
+
+@router.get("/metrics/{lob}/validation")
+def get_validation(
+    lob: str,
+    request: Request,
+    run_type: str = Query("backtest"),
+    user: User = Depends(require_permission(Permission.VIEW_METRICS)),
+):
+    """Run 4-layer post-pipeline validation on the latest metrics for a LOB.
+
+    Returns confidence grade (A-F), score (0-100), and per-layer details.
+    """
+    from ...config.schema import PostValidationConfig
+    from ...metrics.store import MetricStore
+    from ...pipeline.validation_step import run_post_validation
+
+    validate_path_param(lob, "lob")
+    store = MetricStore(str(request.app.state.metrics_dir))
+    try:
+        df = store.read(lob=lob, run_type=run_type)
+    except (FileNotFoundError, OSError) as exc:
+        raise HTTPException(status_code=404, detail=f"Metric data not found for LOB '{lob}': {exc}")
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to read metrics: {exc}")
+
+    if df is None or df.is_empty():
+        raise HTTPException(status_code=404, detail=f"No metric data for LOB '{lob}'.")
+
+    # Use default validation config (could be extended to read from stored config)
+    config = PostValidationConfig()
+
+    try:
+        result = run_post_validation(df, config, lob=lob)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Validation failed: {exc}")
+
+    return {
+        "lob": lob,
+        "grade": result["grade"],
+        "score": result["score"],
+        "badge": result["badge"],
+        "layers": result["layers"],
+        "confidence": result["confidence"],
+        "skipped": result.get("skipped", False),
+    }
