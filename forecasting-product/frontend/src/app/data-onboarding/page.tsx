@@ -18,10 +18,12 @@ import type { AnalysisResponse } from "@/lib/types";
 export default function DataOnboardingPage() {
   const [lobName, setLobName] = useState("retail");
   const [llmEnabled, setLlmEnabled] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const analyzeMutation = useAnalyze();
   const result: AnalysisResponse | undefined = analyzeMutation.data;
 
   const handleFileSelect = (file: File) => {
+    setUploadedFile(file);
     analyzeMutation.mutate({ file, lobName, llmEnabled });
   };
 
@@ -207,7 +209,7 @@ export default function DataOnboardingPage() {
           <MultiFilePanel lobName={lobName} />
 
           {/* Pipeline Execution */}
-          <PipelineExecutionPanel lobName={lobName} />
+          <PipelineExecutionPanel lobName={lobName} initialFile={uploadedFile} configYaml={result.recommended_config_yaml} />
         </>
       )}
 

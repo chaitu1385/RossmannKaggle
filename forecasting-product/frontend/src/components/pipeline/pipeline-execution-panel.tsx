@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FileUpload } from "@/components/data/file-upload";
 import { DataTable } from "@/components/data/data-table";
 import { MetricCard } from "@/components/shared/metric-card";
@@ -10,16 +10,26 @@ import { useAsyncOperation } from "@/hooks/use-async-operation";
 import { api } from "@/lib/api-client";
 import type { PipelineRunResponse } from "@/lib/types";
 
-export function PipelineExecutionPanel({ lobName }: { lobName: string }) {
-  const [pipelineFile, setPipelineFile] = useState<File | null>(null);
+export function PipelineExecutionPanel({ lobName, initialFile, configYaml }: { lobName: string; initialFile?: File | null; configYaml?: string }) {
+  const [pipelineFile, setPipelineFile] = useState<File | null>(initialFile ?? null);
+
+  // Sync with the initialFile prop when it changes (e.g., user uploaded a file in the parent section)
+  useEffect(() => {
+    if (initialFile) setPipelineFile(initialFile);
+  }, [initialFile]);
   const backtest = useAsyncOperation<PipelineRunResponse>();
   const forecast = useAsyncOperation<PipelineRunResponse>();
   const [error, setError] = useState<string | null>(null);
 
+  const makeConfigFile = (): File | undefined => {
+    if (!configYaml) return undefined;
+    return new File([configYaml], "config.yaml", { type: "text/yaml" });
+  };
+
   const handleRunBacktest = () => {
     if (!pipelineFile) return;
     setError(null);
-    backtest.run(() => api.runBacktest(pipelineFile, lobName)).catch((err) =>
+    backtest.run(() => api.runBacktest(pipelineFile, lobName, makeConfigFile())).catch((err) =>
       setError(err instanceof Error ? err.message : "Backtest failed")
     );
   };
@@ -27,7 +37,8 @@ export function PipelineExecutionPanel({ lobName }: { lobName: string }) {
   const handleRunForecast = () => {
     if (!pipelineFile) return;
     setError(null);
-    forecast.run(() => api.runForecast(pipelineFile, lobName)).catch((err) =>
+    const configFile = makeConfigFile();
+    forecast.run(() => api.runForecast(pipelineFile, lobName, { configFile })).catch((err) =>
       setError(err instanceof Error ? err.message : "Forecast failed")
     );
   };
@@ -45,6 +56,11 @@ export function PipelineExecutionPanel({ lobName }: { lobName: string }) {
         onFileSelect={(file) => setPipelineFile(file)}
         label="Pipeline Data File"
       />
+      {pipelineFile && (
+        <p className="text-xs text-muted-foreground">
+          Using: <span className="font-medium">{pipelineFile.name}</span> ({(pipelineFile.size / 1024).toFixed(1)} KB)
+        </p>
+      )}
       <div className="flex flex-wrap gap-3">
         <button
           onClick={handleRunBacktest}
