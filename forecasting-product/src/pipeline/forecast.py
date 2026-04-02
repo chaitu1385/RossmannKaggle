@@ -161,6 +161,9 @@ class ForecastPipeline:
                 id_col=fc.series_id_column,
                 time_col=fc.time_column,
             )
+        # Tag forecast rows with the model name
+        if "model" not in forecast.columns:
+            forecast = forecast.with_columns(pl.lit(forecaster.name).alias("model"))
         self._emitter.gauge("forecast_rows", float(len(forecast)))
 
         # Step 4b: Quantile forecasts (if configured)
@@ -333,7 +336,7 @@ class ForecastPipeline:
         self, forecast: pl.DataFrame, forecast_origin: Optional[date]
     ) -> pl.DataFrame:
         """Write forecast to output path."""
-        output_path = Path(self.config.output.forecast_path)
+        output_path = Path(self.config.output.forecast_path) / self.config.lob
         output_path.mkdir(parents=True, exist_ok=True)
 
         origin_str = (

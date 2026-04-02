@@ -1,0 +1,35 @@
+# Weekly retail demo config — fast E2E testing
+# 5 series, 3 models, 12-week horizon, 2 backtest folds
+
+lob: "weekly_retail"
+
+forecast:
+  frequency: "W"
+  horizon_weeks: 12
+  target_column: "quantity"
+  time_column: "week"
+  series_id_column: "series_id"
+  forecasters:
+    - "naive_seasonal"
+    - "auto_ets"
+    - "lgbm_direct"
+  quantiles: [0.1, 0.5, 0.9]
+  sparse_detection: false
+
+backtest:
+  n_folds: 2
+  val_periods: 4
+  primary_metric: "wmape"
+  secondary_metric: "normalized_bias"
+  selection_strategy: "best_metric"
+
+data_quality:
+  validation:
+    enabled: true
+  cleansing:
+    enabled: true
+    outlier_method: "iqr"
+
+output:
+  metrics_path: "data/metrics"
+  forecast_path: "data/forecasts"
