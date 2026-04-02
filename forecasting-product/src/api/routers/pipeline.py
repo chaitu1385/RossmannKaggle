@@ -46,11 +46,13 @@ async def run_backtest(
     config = None
     if config_file:
         import yaml
+        from ...config.loader import _dict_to_config
         from ...config.schema import PlatformConfig
         config_content = await validate_upload_size(config_file)
         try:
             config_dict = yaml.safe_load(config_content.decode("utf-8"))
-            config = PlatformConfig(**config_dict) if config_dict else PlatformConfig(lob=lob)
+            config = _dict_to_config(config_dict) if config_dict else PlatformConfig(lob=lob)
+            config.lob = lob
         except (yaml.YAMLError, ValueError, TypeError, UnicodeDecodeError):
             logging.getLogger(__name__).warning("Invalid config file, using defaults for lob=%s", lob, exc_info=True)
             config = PlatformConfig(lob=lob)
@@ -59,7 +61,11 @@ async def run_backtest(
         config = PlatformConfig(lob=lob)
 
     try:
-        pipeline = BacktestPipeline(config=config, data_dir=str(request.app.state.data_dir))
+        # Point output paths at the API's data directory
+        data_dir = str(request.app.state.data_dir)
+        config.output.metrics_path = str(Path(data_dir) / "metrics")
+        config.output.forecast_path = str(Path(data_dir) / "forecasts")
+        pipeline = BacktestPipeline(config=config)
         results = pipeline.run(actuals=df)
     except (ValueError, RuntimeError, KeyError) as exc:
         raise HTTPException(status_code=500, detail=f"Backtest failed: {exc}")
@@ -69,19 +75,41 @@ async def run_backtest(
         "lob": lob,
         "status": "completed",
     }
-    if hasattr(results, "leaderboard") and results.leaderboard is not None:
-        summary["leaderboard"] = results.leaderboard.to_dicts()
-    if hasattr(results, "champion_model_id"):
-        summary["champion_model"] = results.champion_model_id
-    if hasattr(results, "wmape"):
-        summary["best_wmape"] = float(results.wmape) if results.wmape else None
 
-    # Include validation grade from dict-style return
     if isinstance(results, dict):
+        # Pipeline returns a dict with: leaderboard, champions, validation, etc.
+        leaderboard = results.get("leaderboard")
+        if leaderboard is not None and hasattr(leaderboard, "to_dicts") and not leaderboard.is_empty():
+            # Sanitize inf/nan values for JSON serialization
+            import math
+            rows = leaderboard.to_dicts()
+            for row in rows:
+                for k, v in row.items():
+                    if isinstance(v, float) and (math.isinf(v) or math.isnan(v)):
+                        row[k] = None
+            summary["leaderboard"] = rows
+            # Best WMAPE from first leaderboard entry (sorted ascending)
+            if "wmape" in leaderboard.columns:
+                best = float(leaderboard["wmape"].min())
+                summary["best_wmape"] = best if math.isfinite(best) else None
+
+        champions = results.get("champions")
+        if champions is not None and hasattr(champions, "to_dicts") and not champions.is_empty():
+            if "model_id" in champions.columns:
+                summary["champion_model"] = champions["model_id"][0]
+
         val = results.get("validation")
         if val and not val.get("skipped"):
             summary["validation_grade"] = val.get("grade")
             summary["validation_score"] = val.get("score")
+    else:
+        # Legacy: object-style return
+        if hasattr(results, "leaderboard") and results.leaderboard is not None:
+            summary["leaderboard"] = results.leaderboard.to_dicts()
+        if hasattr(results, "champion_model_id"):
+            summary["champion_model"] = results.champion_model_id
+        if hasattr(results, "wmape"):
+            summary["best_wmape"] = float(results.wmape) if results.wmape else None
 
     return summary
 
@@ -113,11 +141,13 @@ async def run_forecast(
     config = None
     if config_file:
         import yaml
+        from ...config.loader import _dict_to_config
         from ...config.schema import PlatformConfig
         config_content = await validate_upload_size(config_file)
         try:
             config_dict = yaml.safe_load(config_content.decode("utf-8"))
-            config = PlatformConfig(**config_dict) if config_dict else PlatformConfig(lob=lob)
+            config = _dict_to_config(config_dict) if config_dict else PlatformConfig(lob=lob)
+            config.lob = lob
         except (yaml.YAMLError, ValueError, TypeError, UnicodeDecodeError):
             logging.getLogger(__name__).warning("Invalid config file, using defaults for lob=%s", lob, exc_info=True)
             config = PlatformConfig(lob=lob)
@@ -126,11 +156,17 @@ async def run_forecast(
         config = PlatformConfig(lob=lob)
 
     try:
-        pipeline = ForecastPipeline(config=config, data_dir=str(request.app.state.data_dir))
+        # Point output paths at the API's data directory
+        data_dir = str(request.app.state.data_dir)
+        config.output.metrics_path = str(Path(data_dir) / "metrics")
+        config.output.forecast_path = str(Path(data_dir) / "forecasts")
+        pipeline = ForecastPipeline(config=config)
+        # Override horizon in config if passed via query param
+        if horizon:
+            config.forecast.horizon_weeks = horizon
         result = pipeline.run(
             actuals=df,
-            model_id=model_id,
-            horizon=horizon,
+            champion_model=model_id or "naive_seasonal",
         )
     except (ValueError, RuntimeError, KeyError) as exc:
         raise HTTPException(status_code=500, detail=f"Forecast pipeline failed: {exc}")
@@ -138,13 +174,25 @@ async def run_forecast(
     summary = {
         "lob": lob,
         "status": "completed",
-        "model_id": model_id,
+        "model_id": model_id or "naive_seasonal",
         "horizon": horizon,
     }
-    if hasattr(result, "forecast") and result.forecast is not None:
-        summary["forecast_rows"] = result.forecast.height
-        summary["series_count"] = result.forecast["series_id"].n_unique() if "series_id" in result.forecast.columns else 0
-        summary["forecast_preview"] = result.forecast.head(100).to_dicts()
+
+    # result is a pl.DataFrame (or dict with "forecast" key for legacy callers)
+    forecast_df = None
+    if isinstance(result, pl.DataFrame):
+        forecast_df = result
+    elif isinstance(result, dict) and "forecast" in result:
+        forecast_df = result["forecast"]
+    elif hasattr(result, "forecast"):
+        forecast_df = result.forecast
+
+    if forecast_df is not None and not forecast_df.is_empty():
+        fc_cfg = config.forecast
+        summary["forecast_rows"] = forecast_df.height
+        id_col = fc_cfg.series_id_column if fc_cfg.series_id_column in forecast_df.columns else "series_id"
+        summary["series_count"] = forecast_df[id_col].n_unique() if id_col in forecast_df.columns else 0
+        summary["forecast_preview"] = forecast_df.head(100).to_dicts()
 
     return summary
 

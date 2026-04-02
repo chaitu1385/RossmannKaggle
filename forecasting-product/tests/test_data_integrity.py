@@ -132,6 +132,60 @@ class TestFillWeeklyGaps(unittest.TestCase):
             self.assertAlmostEqual(orig, fil, places=6)
 
 
+class TestFillGaps(unittest.TestCase):
+    """Tests for the new frequency-aware fill_gaps static method."""
+
+    def test_fill_gaps_weekly_matches_legacy(self):
+        """fill_gaps(freq='W') should produce the same result as fill_weekly_gaps."""
+        import warnings
+        from src.forecasting.base import BaseForecaster
+
+        gapped = _make_gapped_series()
+        new_result = BaseForecaster.fill_gaps(gapped, strategy="forward_fill", freq="W")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            legacy_result = BaseForecaster.fill_weekly_gaps(gapped, strategy="forward_fill")
+        self.assertEqual(new_result.shape, legacy_result.shape)
+        self.assertEqual(
+            new_result["quantity"].to_list(),
+            legacy_result["quantity"].to_list(),
+        )
+
+    def test_fill_gaps_daily(self):
+        """fill_gaps(freq='D') should fill daily gaps correctly."""
+        from src.forecasting.base import BaseForecaster
+
+        # Create daily series with a 3-day gap
+        rows = []
+        for d in range(14):
+            day = date(2024, 1, 1) + timedelta(days=d)
+            if d in (5, 6, 7):  # skip days 5-7
+                continue
+            rows.append({"series_id": "D1", "date": day, "quantity": 10.0 + d})
+        gapped = pl.DataFrame(rows).with_columns(pl.col("quantity").cast(pl.Float64))
+
+        filled = BaseForecaster.fill_gaps(
+            gapped, time_col="date", strategy="forward_fill", freq="D",
+        )
+        self.assertEqual(filled.shape[0], 14)  # all 14 days present
+        # Day 5 should be forward-filled from day 4 (value 14.0)
+        day5 = filled.filter(pl.col("date") == date(2024, 1, 6))
+        self.assertAlmostEqual(day5["quantity"][0], 14.0)
+
+    def test_fill_weekly_gaps_emits_deprecation_warning(self):
+        """fill_weekly_gaps should emit a DeprecationWarning."""
+        import warnings
+        from src.forecasting.base import BaseForecaster
+
+        gapped = _make_gapped_series()
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            BaseForecaster.fill_weekly_gaps(gapped, strategy="zero")
+            deprecations = [x for x in w if issubclass(x.category, DeprecationWarning)]
+            self.assertEqual(len(deprecations), 1)
+            self.assertIn("fill_gaps", str(deprecations[0].message))
+
+
 # --------------------------------------------------------------------------- #
 #  Regressor validation tests
 # --------------------------------------------------------------------------- #

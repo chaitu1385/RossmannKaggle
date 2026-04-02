@@ -32,8 +32,8 @@ class TestFrequencyProfiles(unittest.TestCase):
     def test_each_profile_has_required_keys(self):
         required = {
             "season_length", "secondary_season", "default_lags",
-            "min_series_length", "default_val_periods", "default_horizon",
-            "statsforecast_freq", "timedelta_kwargs",
+            "min_series_length", "min_ml_series_length", "default_val_periods",
+            "default_horizon", "statsforecast_freq", "timedelta_kwargs",
         }
         for freq, profile in FREQUENCY_PROFILES.items():
             with self.subTest(freq=freq):

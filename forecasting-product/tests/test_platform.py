@@ -774,6 +774,45 @@ class TestWalkForwardCV:
             val_min = val["week"].min()
             assert train_max < val_min, "Train data leaked into validation"
 
+    def test_warns_when_ml_data_too_short(self, caplog):
+        """BacktestEngine should warn when training data is shorter than ML max lag."""
+        from src.backtesting.engine import BacktestEngine
+        from src.config.schema import PlatformConfig, ForecastConfig, BacktestConfig, OutputConfig
+        from src.forecasting.ml import LGBMDirectForecaster
+
+        # Create daily data with only 100 days — far too short for lag-364
+        rows = []
+        for d in range(100):
+            day = date(2024, 1, 1) + timedelta(days=d)
+            rows.append({"series_id": "S1", "date": day, "quantity": float(10 + d)})
+        short_df = pl.DataFrame(rows)
+
+        config = PlatformConfig(
+            lob="test",
+            forecast=ForecastConfig(
+                frequency="D",
+                time_column="date",
+                horizon_weeks=28,
+                forecasters=["lgbm_direct"],
+            ),
+            backtest=BacktestConfig(n_folds=2, val_weeks=28),
+            output=OutputConfig(),
+        )
+        engine = BacktestEngine(config)
+        forecasters = [LGBMDirectForecaster(frequency="D")]
+
+        # Call the warning method directly (avoids running the full backtest)
+        splits = engine._cv.split_data(short_df, "date")
+        if not splits:
+            pytest.skip("No CV folds produced (data too short for any fold)")
+
+        import logging
+        with caplog.at_level(logging.WARNING, logger="src.backtesting.engine"):
+            engine._warn_insufficient_data(splits, forecasters, "date")
+
+        assert any("max lag" in r.message and "lgbm_direct" in r.message for r in caplog.records), \
+            f"Expected insufficient-data warning, got: {[r.message for r in caplog.records]}"
+
 
 class TestChampionSelector:
     def test_select_champion(self):
