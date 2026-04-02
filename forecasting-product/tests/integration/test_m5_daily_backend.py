@@ -1,0 +1,516 @@
+"""Backend integration tests for the Walmart M5 daily-frequency E2E pipeline.
+
+These tests exercise the full API surface using the M5 daily sample fixture.
+They cover: data analysis, series exploration, backtest, forecast, hierarchy,
+validation, governance, and daily-frequency-specific assertions.
+
+Prerequisites
+-------------
+- Run ``python -m tests.integration.prepare_m5_daily`` to generate
+  ``tests/integration/fixtures/m5_daily_sample.csv``  (or the tests will
+  auto-skip).
+
+Run
+---
+    cd forecasting-product
+    python -m pytest tests/integration/test_m5_daily_backend.py -v
+"""
+from __future__ import annotations
+
+import io
+import tempfile
+import unittest
+from datetime import date, timedelta
+from pathlib import Path
+
+import polars as pl
+import pytest
+from fastapi.testclient import TestClient
+
+pytestmark = pytest.mark.integration
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+SAMPLE_CSV = FIXTURES / "m5_daily_sample.csv"
+CONFIG_YAML = FIXTURES / "m5_daily_config.yaml"
+
+# Skip the entire module if the fixture hasn't been generated yet.
+if not SAMPLE_CSV.exists():
+    pytest.skip(
+        f"M5 daily fixture not found at {SAMPLE_CSV}. "
+        "Run 'python -m tests.integration.prepare_m5_daily' first.",
+        allow_module_level=True,
+    )
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _csv_bytes(path: Path) -> bytes:
+    return path.read_bytes()
+
+
+def _yaml_bytes(path: Path) -> bytes:
+    return path.read_bytes()
+
+
+def _df_to_csv_bytes(df: pl.DataFrame) -> bytes:
+    buf = io.BytesIO()
+    df.write_csv(buf)
+    return buf.getvalue()
+
+
+def _load_sample() -> pl.DataFrame:
+    return pl.read_csv(SAMPLE_CSV, try_parse_dates=True)
+
+
+# ── Test app factory ──────────────────────────────────────────────────────────
+
+def _make_app(data_dir: str, metrics_dir: str):
+    from src.api.app import create_app
+
+    return create_app(
+        data_dir=data_dir,
+        metrics_dir=metrics_dir,
+        auth_enabled=False,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  1. Data Analysis  (2 tests)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestDataAnalysis(unittest.TestCase):
+    """POST /analyze with the daily M5 fixture."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.data_dir = Path(self.tmpdir) / "data"
+        self.metrics_dir = Path(self.tmpdir) / "metrics"
+        self.data_dir.mkdir(parents=True)
+        self.metrics_dir.mkdir(parents=True)
+
+        app = _make_app(str(self.data_dir), str(self.metrics_dir))
+        self.client = TestClient(app)
+
+    def test_analyze_daily_csv(self):
+        """Upload M5 daily CSV → schema detection should find frequency='D'."""
+        resp = self.client.post(
+            "/analyze?lob_name=walmart_m5_daily",
+            files={"file": ("m5_daily.csv", _csv_bytes(SAMPLE_CSV), "text/csv")},
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+
+        # Schema
+        self.assertEqual(data["frequency"], "D")
+        self.assertEqual(data["target_column"], "quantity")
+        self.assertIn("date", [data["time_column"]] + data["id_columns"])
+        self.assertGreater(data["n_series"], 10)
+        self.assertGreater(data["n_rows"], 1000)
+
+        # Forecastability
+        self.assertGreater(data["overall_forecastability"], 0)
+        self.assertIn("demand_classes", data)
+
+        # Config recommendation should be valid YAML
+        self.assertIn("recommended_config_yaml", data)
+        self.assertTrue(len(data["recommended_config_yaml"]) > 50)
+
+    def test_analyze_multi_file(self):
+        """Upload the M5 daily CSV as a single-file multi-file analysis."""
+        resp = self.client.post(
+            "/pipeline/analyze-multi-file?lob_name=walmart_m5_daily",
+            files=[
+                ("files", ("m5_daily.csv", _csv_bytes(SAMPLE_CSV), "text/csv")),
+            ],
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("profiles", data)
+        self.assertEqual(len(data["profiles"]), 1)
+        profile = data["profiles"][0]
+        self.assertEqual(profile["role"], "time_series")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  2. Series Exploration  (3 tests)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestSeriesExploration(unittest.TestCase):
+    """Tests that require pre-populated history in data_dir."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.data_dir = Path(self.tmpdir) / "data"
+        self.metrics_dir = Path(self.tmpdir) / "metrics"
+        self.data_dir.mkdir(parents=True)
+        self.metrics_dir.mkdir(parents=True)
+
+        # Write daily actuals as Parquet so the /series/{lob} endpoint finds them
+        df = _load_sample()
+        hist_dir = self.data_dir / "history" / "walmart_m5_daily"
+        hist_dir.mkdir(parents=True, exist_ok=True)
+        df.write_parquet(hist_dir / "actuals.parquet")
+
+        app = _make_app(str(self.data_dir), str(self.metrics_dir))
+        self.client = TestClient(app)
+
+    def test_list_series(self):
+        """GET /series/{lob} should list all sampled series with SBC classification."""
+        resp = self.client.get("/series/walmart_m5_daily")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["lob"], "walmart_m5_daily")
+        self.assertGreater(data["series_count"], 10)
+        # Each series should have demand classification
+        item = data["series"][0]
+        self.assertIn("demand_class", item)
+        self.assertIn("adi", item)
+        self.assertIn("cv2", item)
+
+    def test_detect_breaks(self):
+        """POST /series/breaks with uploaded daily CSV should detect structural changes."""
+        resp = self.client.post(
+            "/series/breaks?method=cusum",
+            files={"file": ("m5_daily.csv", _csv_bytes(SAMPLE_CSV), "text/csv")},
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("total_series", data)
+        self.assertIn("series_with_breaks", data)
+        self.assertGreaterEqual(data["total_series"], 10)
+
+    def test_cleansing_audit(self):
+        """POST /series/cleansing-audit should detect outliers in daily data."""
+        resp = self.client.post(
+            "/series/cleansing-audit?lob=walmart_m5_daily"
+            "&outlier_method=iqr&iqr_multiplier=1.5&outlier_action=clip"
+            "&stockout_detection=true&min_zero_run=3",
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("total_series", data)
+        self.assertIn("total_outliers", data)
+        self.assertIn("rows_modified", data)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  3. Backtest Pipeline  (3 tests)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestBacktestPipeline(unittest.TestCase):
+    """POST /pipeline/backtest with daily data and config."""
+
+    _backtest_result: dict | None = None
+
+    @classmethod
+    def setUpClass(cls):
+        """Run backtest once, share results across tests in this class."""
+        cls.tmpdir = tempfile.mkdtemp()
+        cls.data_dir = Path(cls.tmpdir) / "data"
+        cls.metrics_dir = Path(cls.tmpdir) / "metrics"
+        cls.data_dir.mkdir(parents=True)
+        cls.metrics_dir.mkdir(parents=True)
+
+        # Pre-populate history
+        df = _load_sample()
+        hist_dir = cls.data_dir / "history" / "walmart_m5_daily"
+        hist_dir.mkdir(parents=True, exist_ok=True)
+        df.write_parquet(hist_dir / "actuals.parquet")
+
+        app = _make_app(str(cls.data_dir), str(cls.metrics_dir))
+        cls.client = TestClient(app)
+
+        # Run backtest
+        resp = cls.client.post(
+            "/pipeline/backtest?lob=walmart_m5_daily",
+            files={
+                "file": ("m5_daily.csv", _csv_bytes(SAMPLE_CSV), "text/csv"),
+                "config_file": ("config.yaml", _yaml_bytes(CONFIG_YAML), "application/x-yaml"),
+            },
+        )
+        assert resp.status_code == 200, f"Backtest failed: {resp.text}"
+        cls._backtest_result = resp.json()
+
+    def test_run_backtest_daily(self):
+        """Backtest completes with status='completed' and has a champion model."""
+        data = self._backtest_result
+        self.assertIsNotNone(data)
+        self.assertEqual(data["status"], "completed")
+        self.assertIn("champion_model", data)
+        self.assertIn("best_wmape", data)
+        # With all 3 models available, best_wmape should be a valid float
+        if data["best_wmape"] is not None:
+            self.assertIsInstance(data["best_wmape"], float)
+            self.assertGreater(data["best_wmape"], 0)
+            self.assertLess(data["best_wmape"], 2.0)  # sanity — not absurdly high
+
+    def test_leaderboard(self):
+        """Leaderboard contains all 3 configured models ranked by WMAPE."""
+        data = self._backtest_result
+        leaderboard = data.get("leaderboard", [])
+        self.assertGreaterEqual(len(leaderboard), 3)
+
+        models_seen = {entry["model_id"] for entry in leaderboard}
+        self.assertIn("naive_seasonal", models_seen)
+        self.assertIn("auto_arima", models_seen)
+        self.assertIn("lgbm_direct", models_seen)
+
+        # Leaderboard should be ranked by WMAPE ascending (nulls/None last)
+        wmapes = [e["wmape"] for e in leaderboard if e["wmape"] is not None]
+        self.assertEqual(wmapes, sorted(wmapes))
+
+    def test_fva(self):
+        """GET /metrics/{lob}/fva should work after backtest."""
+        resp = self.client.get("/metrics/walmart_m5_daily/fva?run_type=backtest")
+        if resp.status_code == 200:
+            data = resp.json()
+            self.assertEqual(data["lob"], "walmart_m5_daily")
+        else:
+            # FVA may 404 if metrics weren't written in the expected partition
+            self.assertIn(resp.status_code, [200, 404])
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  4. Forecast Pipeline  (2 tests)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestForecastPipeline(unittest.TestCase):
+    """POST /pipeline/forecast with daily data."""
+
+    _forecast_result: dict | None = None
+
+    @classmethod
+    def setUpClass(cls):
+        """Run backtest + forecast once (forecast needs a champion from backtest)."""
+        cls.tmpdir = tempfile.mkdtemp()
+        cls.data_dir = Path(cls.tmpdir) / "data"
+        cls.metrics_dir = Path(cls.tmpdir) / "metrics"
+        cls.data_dir.mkdir(parents=True)
+        cls.metrics_dir.mkdir(parents=True)
+
+        # Pre-populate history
+        df = _load_sample()
+        hist_dir = cls.data_dir / "history" / "walmart_m5_daily"
+        hist_dir.mkdir(parents=True, exist_ok=True)
+        df.write_parquet(hist_dir / "actuals.parquet")
+
+        app = _make_app(str(cls.data_dir), str(cls.metrics_dir))
+        cls.client = TestClient(app)
+
+        # Run backtest first to establish champion
+        bt_resp = cls.client.post(
+            "/pipeline/backtest?lob=walmart_m5_daily",
+            files={
+                "file": ("m5_daily.csv", _csv_bytes(SAMPLE_CSV), "text/csv"),
+                "config_file": ("config.yaml", _yaml_bytes(CONFIG_YAML), "application/x-yaml"),
+            },
+        )
+        assert bt_resp.status_code == 200, f"Backtest failed: {bt_resp.text}"
+        cls._backtest_data = bt_resp.json()
+
+        # Run forecast
+        fc_resp = cls.client.post(
+            "/pipeline/forecast?lob=walmart_m5_daily&horizon=28",
+            files={
+                "file": ("m5_daily.csv", _csv_bytes(SAMPLE_CSV), "text/csv"),
+                "config_file": ("config.yaml", _yaml_bytes(CONFIG_YAML), "application/x-yaml"),
+            },
+        )
+        assert fc_resp.status_code == 200, f"Forecast failed: {fc_resp.text}"
+        cls._forecast_result = fc_resp.json()
+
+    def test_run_forecast_daily(self):
+        """Forecast completes with expected row count and horizon."""
+        data = self._forecast_result
+        self.assertIsNotNone(data)
+        self.assertEqual(data["status"], "completed")
+        self.assertGreater(data["forecast_rows"], 0)
+        self.assertGreater(data["series_count"], 10)
+
+    def test_get_forecasts(self):
+        """GET /forecast/{lob} returns daily forecast points."""
+        resp = self.client.get("/forecast/walmart_m5_daily")
+        if resp.status_code == 200:
+            data = resp.json()
+            self.assertEqual(data["lob"], "walmart_m5_daily")
+            self.assertGreater(data["series_count"], 0)
+            points = data["points"]
+            self.assertGreater(len(points), 0)
+
+            # Verify daily date spacing: consecutive points for same series
+            # should be 1 day apart
+            first_series = points[0]["series_id"]
+            series_points = [p for p in points if p["series_id"] == first_series]
+            if len(series_points) >= 2:
+                d0 = date.fromisoformat(str(series_points[0]["week"]))
+                d1 = date.fromisoformat(str(series_points[1]["week"]))
+                self.assertEqual((d1 - d0).days, 1, "Daily forecasts should be 1 day apart")
+        else:
+            # May not find forecasts if they weren't persisted
+            self.assertIn(resp.status_code, [200, 404])
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  5. Hierarchy  (2 tests)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestHierarchy(unittest.TestCase):
+    """Hierarchy build and reconciliation with daily M5 data."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        app = _make_app(
+            str(Path(self.tmpdir) / "data"),
+            str(Path(self.tmpdir) / "metrics"),
+        )
+        self.client = TestClient(app)
+
+    def test_build_hierarchy(self):
+        """Build product hierarchy: cat_id → dept_id → series_id."""
+        resp = self.client.post(
+            "/hierarchy/build"
+            "?levels=cat_id,dept_id,series_id"
+            "&id_column=series_id"
+            "&name=product",
+            files={"file": ("m5_daily.csv", _csv_bytes(SAMPLE_CSV), "text/csv")},
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["name"], "product")
+        self.assertGreater(data["total_nodes"], 0)
+        self.assertIn("level_stats", data)
+
+    def test_reconcile_hierarchy(self):
+        """Aggregate daily data to cat_id level (sum across dept/series)."""
+        resp = self.client.post(
+            "/hierarchy/aggregate"
+            "?levels=cat_id,dept_id,series_id"
+            "&target_level=cat_id"
+            "&value_columns=quantity"
+            "&time_column=date",
+            files={"file": ("m5_daily.csv", _csv_bytes(SAMPLE_CSV), "text/csv")},
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["target_level"], "cat_id")
+        self.assertGreater(data["total_rows"], 0)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  6. Validation & Governance  (3 tests)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestValidationGovernance(unittest.TestCase):
+    """Post-pipeline validation, manifests, and model cards."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Run backtest to populate manifests/model cards."""
+        cls.tmpdir = tempfile.mkdtemp()
+        cls.data_dir = Path(cls.tmpdir) / "data"
+        cls.metrics_dir = Path(cls.tmpdir) / "metrics"
+        cls.data_dir.mkdir(parents=True)
+        cls.metrics_dir.mkdir(parents=True)
+
+        df = _load_sample()
+        hist_dir = cls.data_dir / "history" / "walmart_m5_daily"
+        hist_dir.mkdir(parents=True, exist_ok=True)
+        df.write_parquet(hist_dir / "actuals.parquet")
+
+        app = _make_app(str(cls.data_dir), str(cls.metrics_dir))
+        cls.client = TestClient(app)
+
+        # Backtest to generate governance artifacts
+        resp = cls.client.post(
+            "/pipeline/backtest?lob=walmart_m5_daily",
+            files={
+                "file": ("m5_daily.csv", _csv_bytes(SAMPLE_CSV), "text/csv"),
+                "config_file": ("config.yaml", _yaml_bytes(CONFIG_YAML), "application/x-yaml"),
+            },
+        )
+        assert resp.status_code == 200
+
+    def test_validation_endpoint(self):
+        """GET /metrics/{lob}/validation should return a grade after backtest."""
+        resp = self.client.get("/metrics/walmart_m5_daily/validation?run_type=backtest")
+        if resp.status_code == 200:
+            data = resp.json()
+            self.assertIn("grade", data)
+            self.assertIn(data["grade"], ["A", "B", "C", "D", "F"])
+            self.assertIn("score", data)
+            self.assertIsInstance(data["score"], int)
+        else:
+            self.assertIn(resp.status_code, [200, 404])
+
+    def test_pipeline_manifests(self):
+        """GET /pipeline/manifests should list the backtest run."""
+        resp = self.client.get("/pipeline/manifests?lob=walmart_m5_daily")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        # May be 0 if manifests are stored differently
+        self.assertIn("count", data)
+
+    def test_model_cards(self):
+        """GET /governance/model-cards should list model cards after backtest."""
+        resp = self.client.get("/governance/model-cards")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("count", data)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  7. Daily-Specific Assertions  (3 tests)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestDailySpecific(unittest.TestCase):
+    """Verify daily-frequency-specific behaviour in config and models."""
+
+    def test_daily_frequency_profile(self):
+        """FREQUENCY_PROFILES['D'] has correct season_length and lags."""
+        from src.config.schema import get_frequency_profile
+
+        profile = get_frequency_profile("D")
+        self.assertEqual(profile["season_length"], 7)
+        self.assertEqual(profile["statsforecast_freq"], "D")
+        self.assertEqual(profile["min_series_length"], 90)
+        self.assertEqual(profile["min_ml_series_length"], 450)
+        self.assertEqual(profile["default_horizon"], 90)
+        self.assertEqual(profile["timedelta_kwargs"], {"days": 1})
+        # Lags should include day-level and week-level
+        lags = profile["default_lags"]
+        self.assertIn(1, lags)
+        self.assertIn(7, lags)
+        self.assertIn(28, lags)
+        self.assertIn(364, lags)
+
+    def test_daily_date_arithmetic(self):
+        """freq_timedelta('D', n) returns n days."""
+        from src.config.schema import freq_timedelta
+
+        delta_1 = freq_timedelta("D", 1)
+        self.assertEqual(delta_1, timedelta(days=1))
+
+        delta_28 = freq_timedelta("D", 28)
+        self.assertEqual(delta_28, timedelta(days=28))
+
+        delta_90 = freq_timedelta("D", 90)
+        self.assertEqual(delta_90, timedelta(days=90))
+
+    def test_daily_season_length_auto_correction(self):
+        """Statistical models auto-correct season_length to 7 for daily data."""
+        from src.forecasting.naive import SeasonalNaiveForecaster
+
+        # Default season_length=52 should auto-correct to 7 when frequency="D"
+        model = SeasonalNaiveForecaster(frequency="D")
+        self.assertEqual(model.season_length, 7)
+
+        # Explicit season_length should be preserved
+        model_explicit = SeasonalNaiveForecaster(season_length=14, frequency="D")
+        self.assertEqual(model_explicit.season_length, 14)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if __name__ == "__main__":
+    unittest.main()

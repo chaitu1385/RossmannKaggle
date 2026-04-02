@@ -51,15 +51,32 @@ class MLForecastFeatureManager:
     def detect_features(
         self, df: pl.DataFrame, id_col: str, time_col: str, target_col: str
     ) -> List[str]:
-        """Detect external feature columns (anything beyond id, time, target)."""
+        """Detect external feature columns (anything beyond id, time, target).
+
+        Only numeric columns are kept as external features; string/categorical
+        columns (e.g. hierarchy identifiers) are silently excluded because
+        tree-based learners cannot consume them without explicit encoding.
+        """
         core_cols = {id_col, time_col, target_col}
         all_extra = [c for c in df.columns if c not in core_cols]
+
+        # Only keep numeric columns — string/categorical columns would cause
+        # errors in LightGBM/XGBoost and produce NaN lags in mlforecast.
+        numeric_extra = [
+            c for c in all_extra if df[c].dtype.is_numeric()
+        ]
+        dropped = set(all_extra) - set(numeric_extra)
+        if dropped:
+            logger.debug(
+                "Excluding non-numeric columns from ML features: %s",
+                sorted(dropped),
+            )
 
         # Strip contemporaneous features that have no future values —
         # training on features unavailable at prediction time hurts accuracy.
         if self._future_features is None:
             usable = []
-            for col in all_extra:
+            for col in numeric_extra:
                 if self._get_feature_type(col) == "contemporaneous":
                     logger.warning(
                         "Dropping contemporaneous feature '%s' from training: "
@@ -72,7 +89,7 @@ class MLForecastFeatureManager:
                     usable.append(col)
             self._feature_cols = usable
         else:
-            self._feature_cols = all_extra
+            self._feature_cols = numeric_extra
 
         return self._feature_cols
 

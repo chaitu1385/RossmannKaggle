@@ -105,9 +105,11 @@ class _DirectMLBase(BaseForecaster):
         time_col: str = "week",
         id_col: str = "series_id",
     ) -> pl.DataFrame:
-        """Fill weekly gaps with forward-fill — avoids zero-contamination for tree models."""
-        return self.fill_weekly_gaps(
-            df, time_col, id_col, target_col, strategy="forward_fill"
+        """Fill gaps with forward-fill using the correct frequency — avoids zero-contamination for tree models."""
+        from ..utils.gap_fill import fill_gaps
+        return fill_gaps(
+            df, time_col=time_col, id_col=id_col, target_col=target_col,
+            strategy="forward_fill", freq=self.frequency,
         )
 
     def fit(

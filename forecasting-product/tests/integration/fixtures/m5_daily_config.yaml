@@ -1,0 +1,57 @@
+# M5 Daily Frequency E2E Test Configuration
+# ------------------------------------------
+# Walmart M5 dataset at daily granularity.
+# 50 sampled series, 3 stores, 28-day forecast horizon (matches M5 competition).
+
+lob: walmart_m5_daily
+
+forecast:
+  frequency: "D"
+  horizon_weeks: 28           # 28 periods = 28 days at daily frequency
+  target_column: "quantity"
+  time_column: "date"
+  series_id_column: "series_id"
+  forecasters:
+    - naive_seasonal           # baseline — season_length auto-set to 7 (weekly repeat)
+    - auto_arima               # statistical — handles daily seasonality
+    - lgbm_direct              # ML — adds day_of_week feature for daily data
+  quantiles: [0.1, 0.5, 0.9]
+  sparse_detection: true
+  sparse_adi_threshold: 1.32
+  sparse_cv2_threshold: 0.49
+
+backtest:
+  n_folds: 2
+  val_weeks: 28               # 28-day validation windows
+  gap_weeks: 0
+  primary_metric: "wmape"
+
+metrics:
+  - wmape
+  - normalized_bias
+  - mae
+
+data_quality:
+  validation:
+    min_history_periods: 90    # daily profile min_series_length
+    max_missing_pct: 0.15
+    max_zero_pct: 0.50
+  cleansing:
+    outlier_method: "iqr"
+    iqr_multiplier: 1.5
+    outlier_action: "clip"
+    stockout_detection: true
+    min_zero_run: 3
+
+hierarchies:
+  - name: "product"
+    levels: ["cat_id", "dept_id", "series_id"]
+    id_column: "series_id"
+    fixed: false
+  - name: "geography"
+    levels: ["state_id", "store_id", "series_id"]
+    id_column: "series_id"
+    fixed: false
+
+reconciliation:
+  method: "bottom_up"

@@ -6,6 +6,7 @@ The interface is designed to work with Polars DataFrames in a multi-series
 (panel) setting where multiple time series are stacked vertically.
 """
 
+import warnings
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
@@ -56,6 +57,40 @@ class BaseForecaster(ABC):
         return df
 
     @staticmethod
+    def fill_gaps(
+        df: pl.DataFrame,
+        time_col: str = "week",
+        id_col: str = "series_id",
+        target_col: str = "quantity",
+        strategy: str = "zero",
+        freq: str = "W",
+    ) -> pl.DataFrame:
+        """
+        Fill missing periods for each series to ensure contiguous dates.
+
+        Delegates to :func:`src.utils.gap_fill.fill_gaps`.
+
+        Parameters
+        ----------
+        strategy:
+            ``"zero"`` — fill gaps with 0.0 (good for statistical models
+            where zero demand is meaningful).
+            ``"forward_fill"`` — propagate last known value forward, then
+            back-fill any leading nulls with the first known value.  Better
+            for tree-based models where artificial zeros contaminate splits.
+        freq:
+            Frequency code: ``"D"`` | ``"W"`` | ``"M"`` | ``"Q"``.
+        """
+        return _shared_fill_gaps(
+            df,
+            time_col=time_col,
+            id_col=id_col,
+            target_col=target_col,
+            strategy=strategy,  # type: ignore[arg-type]
+            freq=freq,
+        )
+
+    @staticmethod
     def fill_weekly_gaps(
         df: pl.DataFrame,
         time_col: str = "week",
@@ -66,17 +101,14 @@ class BaseForecaster(ABC):
         """
         Fill missing weeks for each series to ensure contiguous weekly dates.
 
-        Delegates to :func:`src.utils.gap_fill.fill_gaps`.
-
-        Parameters
-        ----------
-        strategy:
-            ``"zero"`` — fill gaps with 0.0 (original behaviour, good for
-            statistical models where zero demand is meaningful).
-            ``"forward_fill"`` — propagate last known value forward, then
-            back-fill any leading nulls with the first known value.  Better
-            for tree-based models where artificial zeros contaminate splits.
+        .. deprecated::
+            Use :meth:`fill_gaps` with ``freq="W"`` instead.
         """
+        warnings.warn(
+            "fill_weekly_gaps is deprecated; use fill_gaps(freq=...) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return _shared_fill_gaps(
             df,
             time_col=time_col,

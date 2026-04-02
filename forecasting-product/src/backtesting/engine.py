@@ -202,6 +202,10 @@ class BacktestEngine:
             logger.warning("No valid CV folds. Check data date range.")
             return pl.DataFrame()
 
+        # Warn early if ML models are unlikely to have enough training data
+        # for their lag features (they'll fail silently otherwise).
+        self._warn_insufficient_data(splits, forecasters, time_col)
+
         run_id = f"backtest-{uuid.uuid4().hex[:8]}"
         run_date = date.today()
         all_results: List[pl.DataFrame] = []
@@ -341,6 +345,29 @@ class BacktestEngine:
                 "error_message": pl.Utf8,
             })
         return pl.DataFrame(self._failures)
+
+    def _warn_insufficient_data(
+        self,
+        splits: list,
+        forecasters: List[BaseForecaster],
+        time_col: str,
+    ) -> None:
+        """Emit a warning when ML models' max lag exceeds the shortest training fold."""
+        from ..forecasting.ml import _DirectMLBase
+
+        min_train_periods = min(len(train) for _fold, train, _val in splits)
+        for forecaster in forecasters:
+            if not isinstance(forecaster, _DirectMLBase):
+                continue
+            max_lag = max(forecaster.lags) if forecaster.lags else 0
+            if max_lag > 0 and min_train_periods <= max_lag:
+                logger.warning(
+                    "ML model '%s' has max lag %d but the shortest training "
+                    "fold has only %d periods. The model will likely fail or "
+                    "produce empty results. Increase data history or reduce "
+                    "n_folds/val_periods.",
+                    forecaster.name, max_lag, min_train_periods,
+                )
 
     def _run_fold_parallel(
         self,
