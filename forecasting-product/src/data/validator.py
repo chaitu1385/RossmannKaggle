@@ -12,9 +12,21 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import polars as pl
 
-from ..config.schema import ValidationConfig, freq_timedelta
+from ..config.schema import FREQUENCY_PROFILES, ValidationConfig, freq_timedelta
 
 logger = logging.getLogger(__name__)
+
+# Acceptable gap ranges for variable-length calendar periods.
+# Monthly gaps span 28–31 days; quarterly gaps span 89–92 days.
+_VARIABLE_GAP_RANGES = {
+    "M": (timedelta(days=28), timedelta(days=31)),
+    "Q": (timedelta(days=89), timedelta(days=92)),
+}
+
+
+def _frequency_gap_range(freq: str) -> Optional[Tuple[timedelta, timedelta]]:
+    """Return (min_gap, max_gap) for variable-length frequencies, else None."""
+    return _VARIABLE_GAP_RANGES.get(freq)
 
 
 @dataclass
@@ -61,10 +73,16 @@ class DataValidator:
     ----------
     config : ValidationConfig
         Toggles for individual checks and thresholds.
+    frequency : str
+        Expected data frequency (``"D"``, ``"W"``, ``"M"``, ``"Q"``).
+        Used by :meth:`check_frequency` to determine the expected gap
+        between observations.  Defaults to ``"W"`` for backward
+        compatibility, but callers should pass the configured frequency.
     """
 
-    def __init__(self, config: ValidationConfig):
+    def __init__(self, config: ValidationConfig, frequency: str = "W"):
         self.config = config
+        self.frequency = frequency
 
     def validate(
         self,
@@ -101,7 +119,7 @@ class DataValidator:
             # 3. Frequency
             if self.config.check_frequency:
                 freq_issues, freq_violations = self.check_frequency(
-                    df, time_col, id_col
+                    df, time_col, id_col, frequency=self.frequency
                 )
                 issues.extend(freq_issues)
 
@@ -239,20 +257,36 @@ class DataValidator:
         if gaps.is_empty():
             return issues, 0
 
-        expected_gap = freq_timedelta(frequency)
-        non_matching = gaps.filter(pl.col("_gap") != expected_gap)
+        # For monthly/quarterly data, calendar periods have variable lengths
+        # (28-31 days per month, 89-92 days per quarter), so we use a
+        # tolerance range instead of an exact timedelta match.
+        gap_range = _frequency_gap_range(frequency)
+        if gap_range is not None:
+            min_gap, max_gap = gap_range
+            non_matching = gaps.filter(
+                (pl.col("_gap") < min_gap) | (pl.col("_gap") > max_gap)
+            )
+        else:
+            expected_gap = freq_timedelta(frequency)
+            non_matching = gaps.filter(pl.col("_gap") != expected_gap)
+
         if non_matching.is_empty():
             return issues, 0
 
         violating_series = non_matching[id_col].unique()
         violation_count = violating_series.len()
 
+        expected_label = (
+            f"{gap_range[0].days}–{gap_range[1].days} days"
+            if gap_range
+            else str(freq_timedelta(frequency))
+        )
         issues.append(ValidationIssue(
             level="warning",
             check="frequency",
             message=(
                 f"{violation_count} series have inconsistent gaps "
-                f"(expected {expected_gap} intervals for frequency={frequency!r})"
+                f"(expected {expected_label} intervals for frequency={frequency!r})"
             ),
             details={
                 "violation_count": violation_count,
