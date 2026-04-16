@@ -390,6 +390,8 @@ class AIConfig:
     api_key_env_var: str = "ANTHROPIC_API_KEY"
     model: str = "claude-sonnet-4-20250514"
     max_tokens: int = 2000
+    timeout: float = 60.0                    # HTTP timeout for Claude API calls (seconds)
+    max_retries: int = 3                     # retries on transient failures (429, 5xx)
 
 
 @dataclass

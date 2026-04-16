@@ -1,7 +1,7 @@
 """Tests for AIFeatureBase — shared Claude client wrapper."""
 
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.ai.base import AIFeatureBase
 
@@ -10,34 +10,35 @@ import pytest
 pytestmark = pytest.mark.unit
 
 
+def _make_base(client=None, max_retries=3):
+    """Create an AIFeatureBase instance with a mock or no client."""
+    base = AIFeatureBase.__new__(AIFeatureBase)
+    base._client = client
+    base._model = "claude-sonnet-4-20250514"
+    base._max_tokens = 2000
+    base._timeout = 60.0
+    base._max_retries = max_retries
+    return base
+
+
 class TestAIFeatureBaseInit(unittest.TestCase):
     def test_available_with_client(self):
-        base = AIFeatureBase.__new__(AIFeatureBase)
-        base._client = MagicMock()
-        base._model = "claude-sonnet-4-20250514"
-        base._max_tokens = 2000
+        base = _make_base(client=MagicMock())
         self.assertTrue(base.available)
 
     def test_unavailable_without_client(self):
-        base = AIFeatureBase.__new__(AIFeatureBase)
-        base._client = None
-        base._model = "claude-sonnet-4-20250514"
-        base._max_tokens = 2000
+        base = _make_base()
         self.assertFalse(base.available)
 
     def test_custom_model(self):
-        base = AIFeatureBase.__new__(AIFeatureBase)
-        base._client = None
+        base = _make_base()
         base._model = "claude-opus-4-20250514"
-        base._max_tokens = 2000
         self.assertEqual(base._model, "claude-opus-4-20250514")
 
 
 class TestCallClaude(unittest.TestCase):
     def setUp(self):
-        self.base = AIFeatureBase.__new__(AIFeatureBase)
-        self.base._model = "claude-sonnet-4-20250514"
-        self.base._max_tokens = 2000
+        self.base = _make_base()
 
     def test_call_claude_success(self):
         mock_message = MagicMock()
@@ -66,13 +67,131 @@ class TestCallClaude(unittest.TestCase):
         call_kwargs = mock_client.messages.create.call_args.kwargs
         self.assertEqual(call_kwargs["max_tokens"], 500)
 
-    def test_call_claude_propagates_exception(self):
+    def test_call_claude_propagates_non_retryable_exception(self):
+        """Auth errors and bad requests are raised immediately."""
+        import anthropic
+
         mock_client = MagicMock()
-        mock_client.messages.create.side_effect = Exception("Rate limited")
+        mock_client.messages.create.side_effect = anthropic.AuthenticationError(
+            message="Invalid key",
+            response=MagicMock(status_code=401),
+            body=None,
+        )
         self.base._client = mock_client
 
-        with self.assertRaises(Exception, msg="Rate limited"):
+        with self.assertRaises(anthropic.AuthenticationError):
             self.base._call_claude("system", "user")
+        # Should not retry — only 1 call
+        self.assertEqual(mock_client.messages.create.call_count, 1)
+
+
+class TestCallClaudeRetry(unittest.TestCase):
+    """Tests for retry and timeout behavior."""
+
+    @patch("src.ai.base.time.sleep")
+    def test_retries_on_rate_limit(self, mock_sleep):
+        """Rate limit errors trigger retries with backoff."""
+        import anthropic
+
+        mock_message = MagicMock()
+        mock_message.content = [MagicMock(text="success")]
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = [
+            anthropic.RateLimitError(
+                message="Rate limited",
+                response=MagicMock(status_code=429),
+                body=None,
+            ),
+            anthropic.RateLimitError(
+                message="Rate limited",
+                response=MagicMock(status_code=429),
+                body=None,
+            ),
+            mock_message,  # succeeds on 3rd attempt
+        ]
+
+        base = _make_base(client=mock_client, max_retries=3)
+        result = base._call_claude("system", "user")
+
+        self.assertEqual(result, "success")
+        self.assertEqual(mock_client.messages.create.call_count, 3)
+        self.assertEqual(mock_sleep.call_count, 2)
+
+    @patch("src.ai.base.time.sleep")
+    def test_retries_on_server_error(self, mock_sleep):
+        """5xx server errors trigger retries."""
+        import anthropic
+
+        mock_message = MagicMock()
+        mock_message.content = [MagicMock(text="success")]
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = [
+            anthropic.InternalServerError(
+                message="Server error",
+                response=MagicMock(status_code=500),
+                body=None,
+            ),
+            mock_message,
+        ]
+
+        base = _make_base(client=mock_client, max_retries=2)
+        result = base._call_claude("system", "user")
+
+        self.assertEqual(result, "success")
+        self.assertEqual(mock_client.messages.create.call_count, 2)
+
+    @patch("src.ai.base.time.sleep")
+    def test_retries_on_connection_error(self, mock_sleep):
+        """Connection errors trigger retries."""
+        import anthropic
+
+        mock_message = MagicMock()
+        mock_message.content = [MagicMock(text="success")]
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = [
+            anthropic.APIConnectionError(request=MagicMock()),
+            mock_message,
+        ]
+
+        base = _make_base(client=mock_client, max_retries=2)
+        result = base._call_claude("system", "user")
+
+        self.assertEqual(result, "success")
+        self.assertEqual(mock_client.messages.create.call_count, 2)
+
+    @patch("src.ai.base.time.sleep")
+    def test_raises_after_exhausting_retries(self, mock_sleep):
+        """Raises the last exception after all retries are exhausted."""
+        import anthropic
+
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = anthropic.RateLimitError(
+            message="Rate limited",
+            response=MagicMock(status_code=429),
+            body=None,
+        )
+
+        base = _make_base(client=mock_client, max_retries=2)
+        with self.assertRaises(anthropic.RateLimitError):
+            base._call_claude("system", "user")
+        # 1 initial + 2 retries = 3 calls
+        self.assertEqual(mock_client.messages.create.call_count, 3)
+
+    def test_no_retry_on_zero_max_retries(self):
+        """With max_retries=0, failures are raised immediately."""
+        import anthropic
+
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = anthropic.RateLimitError(
+            message="Rate limited",
+            response=MagicMock(status_code=429),
+            body=None,
+        )
+
+        base = _make_base(client=mock_client, max_retries=0)
+        with self.assertRaises(anthropic.RateLimitError):
+            base._call_claude("system", "user")
+        self.assertEqual(mock_client.messages.create.call_count, 1)
 
 
 class TestParseSections(unittest.TestCase):

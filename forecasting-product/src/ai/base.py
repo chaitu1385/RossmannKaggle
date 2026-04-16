@@ -8,6 +8,7 @@ classes inherit.
 import json
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -38,6 +39,10 @@ class AIFeatureBase:
         Claude model to use.
     max_tokens : int
         Default max tokens for API responses.
+    timeout : float
+        HTTP timeout in seconds for Claude API calls.
+    max_retries : int
+        Number of retries on transient failures (rate limits, server errors).
     """
 
     def __init__(
@@ -45,16 +50,23 @@ class AIFeatureBase:
         api_key: Optional[str] = None,
         model: str = "claude-sonnet-4-20250514",
         max_tokens: int = 2000,
+        timeout: float = 60.0,
+        max_retries: int = 3,
     ):
         self._client = None
         self._model = model
         self._max_tokens = max_tokens
+        self._timeout = timeout
+        self._max_retries = max_retries
         try:
             import anthropic
 
             key = api_key or os.environ.get("ANTHROPIC_API_KEY")
             if key:
-                self._client = anthropic.Anthropic(api_key=key)
+                self._client = anthropic.Anthropic(
+                    api_key=key,
+                    timeout=timeout,
+                )
             else:
                 logger.info("%s: no API key provided, AI features disabled", self.__class__.__name__)
         except ImportError:
@@ -72,6 +84,10 @@ class AIFeatureBase:
         max_tokens: Optional[int] = None,
     ) -> str:
         """Send a single prompt to Claude and return the response text.
+
+        Retries on transient failures (rate limits, server errors,
+        connection issues) with exponential backoff.  Non-retryable
+        errors (auth failures, invalid requests) are raised immediately.
 
         Parameters
         ----------
@@ -92,18 +108,61 @@ class AIFeatureBase:
         RuntimeError
             If the client is not available.
         Exception
-            Propagates API errors to the caller for handling.
+            Propagates non-retryable API errors or exhausted retries.
         """
         if not self.available:
             raise RuntimeError("Claude client not available")
 
-        response = self._client.messages.create(
-            model=self._model,
-            max_tokens=max_tokens or self._max_tokens,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        return response.content[0].text
+        import anthropic
+
+        last_exc: Optional[Exception] = None
+        for attempt in range(self._max_retries + 1):
+            try:
+                response = self._client.messages.create(
+                    model=self._model,
+                    max_tokens=max_tokens or self._max_tokens,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_prompt}],
+                )
+                return response.content[0].text
+            except anthropic.RateLimitError as e:
+                last_exc = e
+                wait = min(2 ** attempt, 30)
+                logger.warning(
+                    "Claude rate limited (attempt %d/%d), retrying in %.1fs",
+                    attempt + 1, self._max_retries + 1, wait,
+                )
+            except anthropic.InternalServerError as e:
+                last_exc = e
+                wait = min(2 ** attempt, 30)
+                logger.warning(
+                    "Claude server error (attempt %d/%d), retrying in %.1fs: %s",
+                    attempt + 1, self._max_retries + 1, wait, e,
+                )
+            except anthropic.APIConnectionError as e:
+                last_exc = e
+                wait = min(2 ** attempt, 30)
+                logger.warning(
+                    "Claude connection error (attempt %d/%d), retrying in %.1fs: %s",
+                    attempt + 1, self._max_retries + 1, wait, e,
+                )
+            except (anthropic.AuthenticationError, anthropic.BadRequestError):
+                raise  # non-retryable
+            except anthropic.APIStatusError as e:
+                if e.status_code >= 500:
+                    last_exc = e
+                    wait = min(2 ** attempt, 30)
+                    logger.warning(
+                        "Claude API error %d (attempt %d/%d), retrying in %.1fs",
+                        e.status_code, attempt + 1, self._max_retries + 1, wait,
+                    )
+                else:
+                    raise  # 4xx other than rate limit — non-retryable
+
+            if attempt < self._max_retries:
+                time.sleep(wait)
+
+        raise last_exc  # type: ignore[misc]
 
     @staticmethod
     def _parse_sections(text: str, section_names: List[str]) -> Dict[str, str]:
