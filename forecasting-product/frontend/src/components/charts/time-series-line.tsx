@@ -28,6 +28,7 @@ interface Props {
 
 export function TimeSeriesLine({ data, xKey, lines, height = 300 }: Props) {
   return (
+    <div style={{ width: '100%', height }}>
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
         <CartesianGrid strokeDasharray="3 3" />
@@ -49,5 +50,6 @@ export function TimeSeriesLine({ data, xKey, lines, height = 300 }: Props) {
         ))}
       </LineChart>
     </ResponsiveContainer>
+    </div>
   );
 }

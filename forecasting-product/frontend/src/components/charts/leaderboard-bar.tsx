@@ -37,6 +37,7 @@ export function LeaderboardBar({ entries }: Props) {
     }));
 
   return (
+    <div style={{ width: '100%', height: 300 }}>
     <ResponsiveContainer width="100%" height={300}>
       <BarChart data={data} layout="vertical" margin={{ left: 100, right: 20, top: 5, bottom: 5 }}>
         <CartesianGrid strokeDasharray="3 3" horizontal={false} />
@@ -57,5 +58,6 @@ export function LeaderboardBar({ entries }: Props) {
         </Bar>
       </BarChart>
     </ResponsiveContainer>
+    </div>
   );
 }

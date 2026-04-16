@@ -25,6 +25,7 @@ interface Props {
 
 export function CalibrationPlot({ data }: Props) {
   return (
+    <div style={{ width: '100%', height: 300 }}>
     <ResponsiveContainer width="100%" height={300}>
       <ScatterChart margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
         <CartesianGrid strokeDasharray="3 3" />
@@ -53,5 +54,6 @@ export function CalibrationPlot({ data }: Props) {
         <Scatter data={data} fill={COLORS.primary} />
       </ScatterChart>
     </ResponsiveContainer>
+    </div>
   );
 }

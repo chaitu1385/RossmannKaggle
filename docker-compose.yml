@@ -10,13 +10,15 @@ services:
     environment:
       - API_DATA_DIR=forecasting-product/data/
       - API_METRICS_DIR=forecasting-product/data/metrics/
+      - DEMO_LOB=walmart_m5_weekly
     volumes:
-      - ./forecasting-product/data:/app/forecasting-product/data
+      - api-data:/app/forecasting-product/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 180s
     deploy:
       resources:
         limits:
@@ -43,3 +45,6 @@ services:
           memory: 512M
         reservations:
           memory: 128M
+
+volumes:
+  api-data:

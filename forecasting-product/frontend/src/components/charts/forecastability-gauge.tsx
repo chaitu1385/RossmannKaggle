@@ -24,6 +24,7 @@ export function ForecastabilityGauge({ value }: Props) {
 
   return (
     <div className="flex flex-col items-center">
+      <div style={{ width: 200, height: 160 }}>
       <ResponsiveContainer width={200} height={160}>
         <RadialBarChart
           cx="50%"
@@ -42,6 +43,7 @@ export function ForecastabilityGauge({ value }: Props) {
           />
         </RadialBarChart>
       </ResponsiveContainer>
+      </div>
       <div className="mt-[-2rem] text-center">
         <p className="text-2xl font-bold" style={{ color }}>
           {(value * 100).toFixed(0)}%

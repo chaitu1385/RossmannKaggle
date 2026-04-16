@@ -6,9 +6,9 @@ import { api } from "@/lib/api-client";
 import type { BIExportResponse } from "@/lib/types";
 
 const EXPORT_TYPES = [
-  { type: "forecast_vs_actual", label: "Export Forecast vs Actual" },
+  { type: "forecast-actual", label: "Export Forecast vs Actual" },
   { type: "leaderboard", label: "Export Leaderboard" },
-  { type: "bias_report", label: "Export Bias Report" },
+  { type: "bias-report", label: "Export Bias Report" },
 ] as const;
 
 export function BIExportPanel({ lob }: { lob: string }) {
