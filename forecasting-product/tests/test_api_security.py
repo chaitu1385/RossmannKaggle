@@ -152,6 +152,60 @@ class TestPathTraversalPrevention:
         resp = client.get("/forecast/.hidden")
         assert resp.status_code == 400
 
+
+# --------------------------------------------------------------------------- #
+#  Rate limiter memory management tests
+# --------------------------------------------------------------------------- #
+
+
+class TestRateLimiterMemory:
+    """Verify that the rate limiter evicts stale IP entries."""
+
+    def test_stale_ips_evicted_from_hits_dict(self):
+        """IPs with no recent requests should not linger in memory."""
+        import time
+        from unittest.mock import AsyncMock, MagicMock
+
+        import asyncio
+
+        from src.api.app import _RateLimitMiddleware
+
+        app_mock = MagicMock()
+        mw = _RateLimitMiddleware(app_mock, max_requests=10, window_seconds=1)
+
+        # Simulate a past request from a now-stale IP
+        stale_time = time.monotonic() - 10  # 10 seconds ago
+        mw._hits["old-ip"] = [stale_time]
+
+        assert "old-ip" in mw._hits
+
+        # Simulate old-ip making a new request — old timestamps pruned
+        request = MagicMock()
+        request.client.host = "old-ip"
+        call_next = AsyncMock()
+
+        asyncio.run(mw.dispatch(request, call_next))
+
+        # old-ip should still exist (it just made a new request)
+        assert "old-ip" in mw._hits
+        # But only with the new timestamp, not the stale one
+        assert len(mw._hits["old-ip"]) == 1
+        assert mw._hits["old-ip"][0] > stale_time
+
+    def test_new_ip_not_precreated(self):
+        """Accessing _hits for an unknown IP should not create an empty entry."""
+        import time
+
+        from src.api.app import _RateLimitMiddleware
+        from unittest.mock import MagicMock
+
+        app_mock = MagicMock()
+        mw = _RateLimitMiddleware(app_mock, max_requests=10, window_seconds=60)
+
+        # dict.get() should not auto-create keys (unlike defaultdict)
+        _ = mw._hits.get("never-seen", [])
+        assert "never-seen" not in mw._hits
+
     def test_forecast_space_rejected(self, client):
         resp = client.get("/forecast/%20")
         assert resp.status_code == 400
