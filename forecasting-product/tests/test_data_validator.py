@@ -140,7 +140,7 @@ class TestDuplicateCheck:
 
 
 class TestFrequencyCheck:
-    """Validates weekly frequency enforcement."""
+    """Validates frequency enforcement across D/W/M/Q."""
 
     def test_weekly_data_passes(self):
         df = _make_weekly_actuals(n_series=2, n_weeks=10)
@@ -180,6 +180,69 @@ class TestFrequencyCheck:
         v = DataValidator(ValidationConfig(enabled=True))
         report = v.validate(df)
         assert report.frequency_violations == 1
+
+    # --- Multi-frequency tests ---
+
+    def test_daily_frequency_passes_daily_data(self):
+        """Daily data validated with frequency='D' should pass."""
+        rows = [
+            {"series_id": "a", "week": date(2023, 1, 1) + timedelta(days=d), "quantity": float(d)}
+            for d in range(30)
+        ]
+        df = pl.DataFrame(rows).with_columns(
+            pl.col("week").cast(pl.Date),
+            pl.col("quantity").cast(pl.Float64),
+        )
+        v = DataValidator(ValidationConfig(enabled=True), frequency="D")
+        report = v.validate(df)
+        assert report.frequency_violations == 0
+
+    def test_daily_frequency_flags_weekly_data(self):
+        """Weekly data validated with frequency='D' should flag violations."""
+        df = _make_weekly_actuals(n_series=1, n_weeks=5)
+        v = DataValidator(ValidationConfig(enabled=True), frequency="D")
+        report = v.validate(df)
+        assert report.frequency_violations == 1
+
+    def test_monthly_frequency_passes_monthly_data(self):
+        """Monthly data validated with frequency='M' should pass."""
+        rows = [
+            {"series_id": "a", "week": date(2023, m, 1), "quantity": float(m)}
+            for m in range(1, 13)
+        ]
+        df = pl.DataFrame(rows).with_columns(
+            pl.col("week").cast(pl.Date),
+            pl.col("quantity").cast(pl.Float64),
+        )
+        v = DataValidator(ValidationConfig(enabled=True), frequency="M")
+        report = v.validate(df)
+        assert report.frequency_violations == 0
+
+    def test_monthly_frequency_flags_weekly_data(self):
+        """Weekly data validated with frequency='M' should flag violations."""
+        df = _make_weekly_actuals(n_series=1, n_weeks=10)
+        v = DataValidator(ValidationConfig(enabled=True), frequency="M")
+        report = v.validate(df)
+        assert report.frequency_violations == 1
+
+    def test_quarterly_frequency_passes_quarterly_data(self):
+        """Quarterly data validated with frequency='Q' should pass."""
+        rows = [
+            {"series_id": "a", "week": date(2023, m, 1), "quantity": float(m)}
+            for m in [1, 4, 7, 10]
+        ]
+        df = pl.DataFrame(rows).with_columns(
+            pl.col("week").cast(pl.Date),
+            pl.col("quantity").cast(pl.Float64),
+        )
+        v = DataValidator(ValidationConfig(enabled=True), frequency="Q")
+        report = v.validate(df)
+        assert report.frequency_violations == 0
+
+    def test_default_frequency_is_weekly(self):
+        """Backward compat: DataValidator without explicit frequency defaults to 'W'."""
+        v = DataValidator(ValidationConfig(enabled=True))
+        assert v.frequency == "W"
 
 
 # ===========================================================================
@@ -377,3 +440,27 @@ class TestBuilderIntegration:
         from src.data.validator import ValidationReport
         assert isinstance(builder._last_validation_report, ValidationReport)
         assert builder._last_validation_report.passed
+
+    def test_builder_passes_frequency_to_validator(self):
+        """SeriesBuilder threads ForecastConfig.frequency to DataValidator."""
+        from src.series.builder import SeriesBuilder
+
+        cfg = PlatformConfig()
+        cfg.forecast.frequency = "D"
+        cfg.data_quality.validation.enabled = True
+        cfg.data_quality.validation.check_frequency = True
+        cfg.data_quality.min_series_length_weeks = 0
+
+        builder = SeriesBuilder(cfg)
+
+        # Daily data should pass when frequency='D'
+        rows = [
+            {"series_id": "a", "week": date(2023, 1, 1) + timedelta(days=d), "quantity": float(d)}
+            for d in range(30)
+        ]
+        df = pl.DataFrame(rows).with_columns(
+            pl.col("week").cast(pl.Date),
+            pl.col("quantity").cast(pl.Float64),
+        )
+        builder.build(df)
+        assert builder._last_validation_report.frequency_violations == 0

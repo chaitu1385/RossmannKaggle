@@ -83,7 +83,7 @@ class SeriesBuilder:
         self._last_validation_report = None
         if dq.validation.enabled:
             from ..data.validator import DataValidator
-            validator = DataValidator(dq.validation)
+            validator = DataValidator(dq.validation, frequency=fc.frequency)
             self._last_validation_report = validator.validate(
                 actuals, value_col, time_col, sid_col
             )

@@ -332,7 +332,7 @@ class ValidationConfig:
     enabled: bool = False                    # opt-in
     require_columns: List[str] = field(default_factory=list)  # extra required beyond time/target/id
     check_duplicates: bool = True            # flag duplicate (series_id, time_col) pairs
-    check_frequency: bool = True             # validate consistent weekly intervals
+    check_frequency: bool = True             # validate consistent intervals per configured frequency
     check_non_negative: bool = True          # demand values >= 0
     min_value: Optional[float] = None        # custom floor (overrides non_negative if set)
     max_value: Optional[float] = None        # custom ceiling
