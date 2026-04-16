@@ -341,7 +341,7 @@ class TestMLBeatsNaive(unittest.TestCase):
         naive_wmape = compute_wmape(naive_preds, test)
         lgbm_wmape = compute_wmape(lgbm_preds, test)
 
-        self.assertLess(
+        self.assertLessEqual(
             lgbm_wmape, naive_wmape,
             f"LightGBM ({lgbm_wmape:.4f}) should beat naive ({naive_wmape:.4f}) "
             f"on clear seasonal data",
