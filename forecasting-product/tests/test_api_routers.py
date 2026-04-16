@@ -72,20 +72,22 @@ def _make_metrics(metrics_dir: Path, lob="retail", n_series=5, n_weeks=30):
     base = date(2023, 6, 1)
     for model in ("auto_arima", "lgbm_direct", "seasonal_naive"):
         for i in range(n_series):
-            for w in range(n_weeks):
-                actual = float(max(1, rng.normal(100, 20)))
-                forecast = actual * (1 + rng.normal(0, 0.15))
-                rows.append({
-                    "series_id": f"sku_{i}",
-                    "model_id": model,
-                    "target_week": base + timedelta(weeks=w),
-                    "actual": actual,
-                    "forecast": forecast,
-                    "wmape": abs(actual - forecast) / max(abs(actual), 1e-9),
-                    "normalized_bias": (forecast - actual) / max(abs(actual), 1e-9),
-                    "lob": lob,
-                    "run_type": "backtest",
-                })
+            for fold in range(2):
+                for w in range(n_weeks):
+                    actual = float(max(1, rng.normal(100, 20)))
+                    forecast = actual * (1 + rng.normal(0, 0.15))
+                    rows.append({
+                        "series_id": f"sku_{i}",
+                        "model_id": model,
+                        "fold": fold,
+                        "target_week": base + timedelta(weeks=w),
+                        "actual": actual,
+                        "forecast": forecast,
+                        "wmape": abs(actual - forecast) / max(abs(actual), 1e-9),
+                        "normalized_bias": (forecast - actual) / max(abs(actual), 1e-9),
+                        "lob": lob,
+                        "run_type": "backtest",
+                    })
     df = pl.DataFrame(rows)
     out_dir = metrics_dir / "backtest" / f"lob={lob}"
     out_dir.mkdir(parents=True, exist_ok=True)

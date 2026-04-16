@@ -1418,7 +1418,10 @@ class TestRestApi:
     def test_health_endpoint_returns_ok(self):
         """GET /health should return status='ok' and a version string."""
         from fastapi.testclient import TestClient
-        app = self._make_app("/tmp/test_api_health")
+        import tempfile
+        tmpdir = tempfile.mkdtemp()
+        os.makedirs(os.path.join(tmpdir, "metrics"), exist_ok=True)
+        app = self._make_app(tmpdir)
         client = TestClient(app)
         resp = client.get("/health")
         assert resp.status_code == 200

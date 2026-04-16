@@ -78,7 +78,7 @@ class TestValidateUploadSize:
 
         content = b"hello world"
         file = UploadFile(file=io.BytesIO(content), filename="test.csv")
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             validate_upload_size(file, max_bytes=1024)
         )
         assert result == content
@@ -91,7 +91,7 @@ class TestValidateUploadSize:
         content = b"x" * 2000
         file = UploadFile(file=io.BytesIO(content), filename="big.csv")
         with pytest.raises(HTTPException) as exc_info:
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 validate_upload_size(file, max_bytes=1000)
             )
         assert exc_info.value.status_code == 413

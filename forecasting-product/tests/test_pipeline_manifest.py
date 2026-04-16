@@ -329,7 +329,7 @@ class TestForecastPipelineIntegration:
         forecast = pipeline.run(actuals, champion_model="naive_seasonal")
 
         # Check manifest was written
-        manifest_files = list(tmp_path.glob("*_manifest.json"))
+        manifest_files = list(tmp_path.glob("**/*_manifest.json"))
         assert len(manifest_files) == 1
 
         data = json.loads(manifest_files[0].read_text())
