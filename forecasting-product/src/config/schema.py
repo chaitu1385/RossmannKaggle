@@ -7,9 +7,12 @@ model selections, and reconciliation strategies are all configuration, never
 hard-coded to a specific LOB.
 """
 
+import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any, Dict, List, Optional
+
+_logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +246,17 @@ class ForecastConfig:
         """Default ML lag set for the configured frequency."""
         return list(get_frequency_profile(self.frequency)["default_lags"])
 
+    def __post_init__(self):
+        if self.frequency not in FREQUENCY_PROFILES:
+            raise ValueError(
+                f"Unsupported frequency {self.frequency!r}. "
+                f"Choose from: {sorted(FREQUENCY_PROFILES)}"
+            )
+        if self.horizon_weeks < 1:
+            raise ValueError(
+                f"horizon_weeks must be >= 1, got {self.horizon_weeks}"
+            )
+
 
 @dataclass
 class HorizonBucket:
@@ -280,14 +294,47 @@ class BacktestConfig:
         """Alias for ``gap_weeks`` (periods, frequency-agnostic)."""
         return self.gap_weeks
 
+    def __post_init__(self):
+        if self.n_folds < 1:
+            raise ValueError(f"n_folds must be >= 1, got {self.n_folds}")
+        if self.val_weeks < 1:
+            raise ValueError(f"val_weeks must be >= 1, got {self.val_weeks}")
+        if self.gap_weeks < 0:
+            raise ValueError(f"gap_weeks must be >= 0, got {self.gap_weeks}")
+
+
+VALID_RAMP_SHAPES = frozenset({"linear", "scurve", "step"})
+
 
 @dataclass
 class TransitionConfig:
-    """Product transition stitching settings."""
-    transition_window_weeks: int = 13    # 3-month overlap window
+    """Product transition stitching settings.
+
+    ``transition_window_weeks`` represents *periods* (not calendar weeks)
+    when the platform runs at non-weekly frequencies.  Name is kept for
+    backward-compatible YAML loading; use :pyattr:`transition_window_periods`
+    alias for clarity.
+    """
+    transition_window_weeks: int = 13    # periods (name kept for YAML compat)
     ramp_shape: str = "linear"           # "linear" | "scurve" | "step"
     enable_overrides: bool = True        # read planner overrides from store
     override_store_path: str = "data/overrides.duckdb"
+
+    @property
+    def transition_window_periods(self) -> int:
+        """Alias for ``transition_window_weeks`` (periods, frequency-agnostic)."""
+        return self.transition_window_weeks
+
+    def __post_init__(self):
+        if self.ramp_shape not in VALID_RAMP_SHAPES:
+            raise ValueError(
+                f"Unknown ramp_shape {self.ramp_shape!r}. "
+                f"Supported: {sorted(VALID_RAMP_SHAPES)}"
+            )
+        if self.transition_window_weeks < 1:
+            raise ValueError(
+                f"transition_window_weeks must be >= 1, got {self.transition_window_weeks}"
+            )
 
 
 @dataclass
@@ -365,6 +412,23 @@ class DataQualityConfig:
     @property
     def min_series_length(self) -> int:
         """Alias for ``min_series_length_weeks`` (periods, frequency-agnostic)."""
+        return self.min_series_length_weeks
+
+    def effective_min_series_length(self, frequency: str) -> int:
+        """Return frequency-aware minimum series length.
+
+        If ``min_series_length_weeks`` is the default (52), return the
+        profile-recommended value for the given frequency.  If the user
+        explicitly set a non-default value, respect it as-is.
+
+        Parameters
+        ----------
+        frequency : str
+            One of ``"D"``, ``"W"``, ``"M"``, ``"Q"``.
+        """
+        profile_min = get_frequency_profile(frequency)["min_series_length"]
+        if self.min_series_length_weeks == 52:
+            return profile_min
         return self.min_series_length_weeks
     validation: ValidationConfig = field(default_factory=ValidationConfig)
     cleansing: CleansingConfig = field(default_factory=CleansingConfig)

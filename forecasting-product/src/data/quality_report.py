@@ -132,7 +132,7 @@ class DataQualityAnalyzer:
             report.series_with_gaps = int(gaps.filter(pl.col("missing") > 0).height)
 
         # Short series
-        min_len = dq.min_series_length_weeks
+        min_len = dq.effective_min_series_length(self.config.forecast.frequency)
         if min_len > 0:
             report.short_series_count = int(
                 per_series_weeks.filter(pl.col("n_weeks") < min_len).height

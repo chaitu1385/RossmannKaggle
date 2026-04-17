@@ -35,7 +35,7 @@ class SeriesBuilder:
     def __init__(self, config: PlatformConfig):
         self.config = config
         self._frequency = config.forecast.frequency
-        self._transition_engine = TransitionEngine(config.transition)
+        self._transition_engine = TransitionEngine(config.transition, frequency=config.forecast.frequency)
         self._last_validation_report = None
         self._last_cleansing_report = None
         self._last_break_report = None
@@ -172,13 +172,14 @@ class SeriesBuilder:
                 logger.warning("Data quality: %s", w)
 
         # Step 3a: Drop short series
-        if dq.min_series_length_weeks > 0:
+        effective_min_len = dq.effective_min_series_length(fc.frequency)
+        if effective_min_len > 0:
             series_lengths = (
                 df.group_by(sid_col)
                 .agg(pl.col(time_col).count().alias("_len"))
             )
             valid_ids = series_lengths.filter(
-                pl.col("_len") >= dq.min_series_length_weeks
+                pl.col("_len") >= effective_min_len
             )[sid_col].to_list()
             df = df.filter(pl.col(sid_col).is_in(valid_ids))
 

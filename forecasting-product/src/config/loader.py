@@ -95,7 +95,10 @@ def _dict_to_config(d: Dict[str, Any]) -> PlatformConfig:
 
     tr_raw = d.get("transition", {})
     transition = TransitionConfig(
-        transition_window_weeks=tr_raw.get("transition_window_weeks", 13),
+        transition_window_weeks=tr_raw.get(
+            "transition_window_periods",
+            tr_raw.get("transition_window_weeks", 13),
+        ),
         ramp_shape=tr_raw.get("ramp_shape", "linear"),
         enable_overrides=tr_raw.get("enable_overrides", True),
         override_store_path=tr_raw.get(
