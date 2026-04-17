@@ -50,7 +50,6 @@ from __future__ import annotations
 import logging
 import os
 import time
-from collections import defaultdict
 from pathlib import Path
 from typing import Optional
 
@@ -93,24 +92,25 @@ class _RateLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.max_requests = max_requests
         self.window_seconds = window_seconds
-        self._hits: dict[str, list[float]] = defaultdict(list)
+        self._hits: dict[str, list[float]] = {}
 
     async def dispatch(self, request: Request, call_next):
         client_ip = request.client.host if request.client else "unknown"
         now = time.monotonic()
         cutoff = now - self.window_seconds
 
-        # Prune old entries
-        hits = self._hits[client_ip]
-        self._hits[client_ip] = hits = [t for t in hits if t > cutoff]
+        # Prune old entries and evict stale IPs to bound memory
+        hits = [t for t in self._hits.get(client_ip, []) if t > cutoff]
 
         if len(hits) >= self.max_requests:
+            self._hits[client_ip] = hits
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Rate limit exceeded. Try again later."},
             )
 
         hits.append(now)
+        self._hits[client_ip] = hits
         return await call_next(request)
 
 
