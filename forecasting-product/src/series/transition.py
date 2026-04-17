@@ -25,7 +25,7 @@ from typing import Dict, List, Optional, Tuple
 
 import polars as pl
 
-from ..config.schema import TransitionConfig
+from ..config.schema import TransitionConfig, freq_timedelta
 
 VALID_RAMP_SHAPES = frozenset({"linear", "scurve", "step"})
 
@@ -62,8 +62,9 @@ class TransitionEngine:
     >>> stitched = engine.stitch_series(actuals, plans)
     """
 
-    def __init__(self, config: TransitionConfig):
-        self.window_weeks = config.transition_window_weeks
+    def __init__(self, config: TransitionConfig, frequency: str = "W"):
+        self.window_periods = config.transition_window_periods
+        self.frequency = frequency
         self.ramp_shape = config.ramp_shape
         if self.ramp_shape not in VALID_RAMP_SHAPES:
             raise ValueError(
@@ -112,7 +113,7 @@ class TransitionEngine:
                 key = (row["old_sku"], row["new_sku"])
                 override_map[key] = row
 
-        horizon_end = forecast_origin + timedelta(weeks=horizon_weeks)
+        horizon_end = forecast_origin + freq_timedelta(self.frequency, horizon_weeks)
         plans: List[TransitionPlan] = []
 
         for row in mapping_table.iter_rows(named=True):
@@ -146,11 +147,11 @@ class TransitionEngine:
                 ))
             elif new_launch <= horizon_end:
                 # Scenario B — launches within horizon
-                ramp_start = new_launch - timedelta(
-                    weeks=self.window_weeks // 2
+                ramp_start = new_launch - freq_timedelta(
+                    self.frequency, self.window_periods // 2
                 )
-                ramp_end = new_launch + timedelta(
-                    weeks=self.window_weeks // 2
+                ramp_end = new_launch + freq_timedelta(
+                    self.frequency, self.window_periods // 2
                 )
                 plans.append(TransitionPlan(
                     old_sku=old_sku,
