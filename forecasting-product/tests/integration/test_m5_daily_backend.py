@@ -245,6 +245,64 @@ class TestBacktestPipeline(unittest.TestCase):
             self.assertGreater(data["best_wmape"], 0)
             self.assertLess(data["best_wmape"], 2.0)  # sanity — not absurdly high
 
+    def test_baseline_no_regression(self):
+        """Champion + per-model WMAPE must not regress against the blessed baseline.
+
+        Skipped if ``tests/integration/baselines/m5_daily_baseline.json`` is absent
+        (run ``python scripts/bless_m5_baseline.py --frequency daily`` to capture).
+        """
+        from tests.integration.baseline import (
+            assert_no_regression,
+            require_baseline,
+            verify_fixture_hash,
+        )
+
+        baseline = require_baseline("daily", self)
+        verify_fixture_hash(self, baseline, SAMPLE_CSV, CONFIG_YAML)
+
+        data = self._backtest_result
+        if data.get("best_wmape") is None:
+            self.skipTest("Pipeline did not return best_wmape; cannot check regression.")
+
+        per_model = {
+            entry["model_id"]: float(entry["wmape"])
+            for entry in data.get("leaderboard", [])
+            if entry.get("model_id") and entry.get("wmape") is not None
+        }
+        assert_no_regression(
+            self,
+            baseline,
+            observed_champion_wmape=float(data["best_wmape"]),
+            observed_per_model_wmape=per_model,
+        )
+
+    def test_baseline_fva_preserved(self):
+        """Champion must still beat naive by ≥ MIN_FVA_RATIO of the blessed margin."""
+        from tests.integration.baseline import assert_fva_preserved, require_baseline
+
+        baseline = require_baseline("daily", self)
+        data = self._backtest_result
+        leaderboard = data.get("leaderboard", [])
+
+        by_id = {
+            e["model_id"]: float(e["wmape"])
+            for e in leaderboard
+            if e.get("model_id") and e.get("wmape") is not None
+        }
+        naive_wmape = next(
+            (w for mid, w in by_id.items() if "naive" in mid.lower()),
+            None,
+        )
+        if naive_wmape is None or data.get("best_wmape") is None:
+            self.skipTest("Naive or champion WMAPE missing; cannot check FVA.")
+
+        assert_fva_preserved(
+            self,
+            baseline,
+            observed_naive_wmape=naive_wmape,
+            observed_champion_wmape=float(data["best_wmape"]),
+        )
+
     def test_leaderboard(self):
         """Leaderboard contains all 3 configured models ranked by WMAPE."""
         data = self._backtest_result
