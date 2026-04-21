@@ -26,23 +26,24 @@ src/
     sop/                # S&OP dashboard: FVA, comparison, constraints, AI commentary
     health/             # System health + audit log
   components/
+    ai/                 # AI panels (NL query, triage, config tuner, commentary, confidence badge)
     charts/             # Recharts + Plotly visualizations (fan-chart, sunburst, etc.)
+    data/               # File upload, data table, config viewer
     forecast/           # Decomposition, comparison, constrained forecast panels
     governance/         # Model cards, lineage, BI export
-    pipeline/           # Multi-file analysis, pipeline execution
-    sku/                # SKU mapping, override management
     layout/             # Sidebar, header
-    shared/             # DataTable, LoadingCard, ComingSoon
-    ui/                 # shadcn/ui primitives
+    pipeline/           # Multi-file analysis, pipeline execution
+    shared/             # workflow-nav, metric-card, loading-skeleton, error-boundary, no-data-guide, coming-soon
+    sku/                # SKU mapping, override management
   hooks/                # React Query hooks + useAsyncOperation
   lib/                  # API client, auth, types, constants
-  providers/            # AuthProvider (JWT + RBAC)
+  providers/            # QueryProvider, AuthProvider (JWT + RBAC), LobProvider
 ```
 
 ## Key Dependencies
 
 - **Next.js 15** (React 19, App Router, TypeScript)
-- **Tailwind CSS** + **shadcn/ui** (Radix primitives)
+- **Tailwind CSS** + Radix UI primitives (with `class-variance-authority` + `tailwind-merge`)
 - **Recharts** (line, bar, composed charts)
 - **Plotly.js** via `react-plotly.js` (fan charts, sunburst) with `next/dynamic` SSR-off
 - **@tanstack/react-query** (server state)

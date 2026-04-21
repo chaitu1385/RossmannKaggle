@@ -57,7 +57,7 @@ src/components/
     config-tuner-panel # AI-recommended config changes
     commentary-panel   # Executive S&OP commentary generation
     confidence-badge   # High/Medium/Low confidence indicator
-  charts/              # 11 components — Data visualization
+  charts/              # 12 components — Data visualization
     time-series-line   # Basic time series line chart (Recharts)
     fan-chart          # Forecast with prediction intervals
     leaderboard-bar    # Model accuracy comparison bars
