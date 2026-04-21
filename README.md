@@ -135,7 +135,7 @@ forecasting-product/
 │   ├── spark/              # PySpark distributed execution layer
 │   └── utils/              # Logger, config utilities
 ├── frontend/               # Next.js 15 frontend (TypeScript, Tailwind, Recharts)
-│   ├── src/app/            # App Router pages (login + 8 workflow pages)
+│   ├── src/app/            # App Router pages (login + 9 workflow pages)
 │   ├── src/components/     # Reusable components (charts, AI panels, layout, shared)
 │   │   ├── forecast/       # Decomposition, comparison, constrained forecast panels
 │   │   ├── governance/     # Model cards, lineage, BI export panels
@@ -1008,7 +1008,7 @@ python -m pytest forecasting-product/tests/ \
 
 ## Next.js Frontend
 
-A production-grade UI built with Next.js 15 (App Router), TypeScript, and Tailwind CSS. Provides an 8-page workflow and communicates with the FastAPI backend over REST.
+A production-grade UI built with Next.js 15 (App Router), TypeScript, and Tailwind CSS. Provides a 10-page workflow (login + 9 workflow pages) and communicates with the FastAPI backend over REST.
 
 | Feature | Details |
 |---------|---------|
@@ -1017,7 +1017,7 @@ A production-grade UI built with Next.js 15 (App Router), TypeScript, and Tailwi
 | **Charts** | Recharts (bar, line, pie, area), Plotly (fan chart, sunburst, SBC scatter) |
 | **Data fetching** | TanStack React Query with typed API client |
 | **Auth** | NextAuth.js wrapping existing JWT/RBAC (5 roles) |
-| **Pages** | Login + 8 workflow pages |
+| **Pages** | Login + 9 workflow pages |
 | **Dark mode** | Toggle with localStorage persistence |
 
 **Live features** (connected to existing API): file upload/analysis, model leaderboard, drift alerts, audit log, AI explain/triage/config-tuner/commentary.

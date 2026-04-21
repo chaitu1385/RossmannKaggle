@@ -65,7 +65,7 @@ graph TD
 
     subgraph Consumers["Consumers"]
         API["FastAPI REST<br/><small>auth-protected</small>"]
-        NX["Next.js Frontend<br/><small>8 pages, REST client</small>"]
+        NX["Next.js Frontend<br/><small>10 pages, REST client</small>"]
         AI["AI Features<br/><small>NL Query, Triage,<br/>Commentary, Config Tuner</small>"]
     end
 
@@ -605,19 +605,19 @@ graph TD
 
 ### Deep Dive: Next.js Frontend
 
-The Next.js frontend communicates with the FastAPI backend over REST. It provides the 8-page workflow UI and runs as a standalone Node.js application.
+The Next.js frontend communicates with the FastAPI backend over REST. It provides the 10-page workflow UI (login + 9 workflow pages) and runs as a standalone Node.js application.
 
 ```mermaid
 graph TB
     subgraph NextJS["Next.js Frontend (port 3000)"]
         direction TB
-        NL["Login"] --> NP["8 Workflow Pages"]
+        NL["Login"] --> NP["9 Workflow Pages"]
         NP --> NH["React Query Hooks"]
         NH --> NC["API Client<br/><small>typed fetch + JWT</small>"]
     end
 
     subgraph API["FastAPI Backend (port 8000)"]
-        EP["12 REST Endpoints"]
+        EP["41 REST Endpoints"]
     end
 
     NC -->|HTTP/JSON| EP
