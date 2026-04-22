@@ -17,7 +17,7 @@ import polars as pl
 
 # ── Metric functions ──────────────────────────────────────────────────────────
 
-def wmape(actual: pl.Series, forecast: pl.Series) -> float:
+def wmape(actual: pl.Series, forecast: pl.Series) -> Optional[float]:
     """
     Weighted Mean Absolute Percentage Error.
 
@@ -26,11 +26,15 @@ def wmape(actual: pl.Series, forecast: pl.Series) -> float:
     - Volume-weighted: high-movers naturally dominate.
     - Handles zeros better than MAPE (no per-row division).
     - Range: [0, ∞), lower is better.
+
+    Returns ``None`` when the actuals are entirely zero on the evaluation
+    window — WMAPE is undefined in that case (any forecast error divided by
+    zero volume is meaningless). Callers/aggregators skip nulls.
     """
     abs_error = (actual - forecast).abs().sum()
     abs_actual = actual.abs().sum()
     if abs_actual == 0:
-        return float("inf")
+        return None
     return float(abs_error / abs_actual)
 
 
@@ -51,17 +55,18 @@ def normalized_bias(actual: pl.Series, forecast: pl.Series) -> float:
     return float(signed_error / abs_actual)
 
 
-def mape(actual: pl.Series, forecast: pl.Series) -> float:
+def mape(actual: pl.Series, forecast: pl.Series) -> Optional[float]:
     """
     Mean Absolute Percentage Error.
 
     MAPE = mean(|actual - forecast| / |actual|)
 
     Excluded where actual == 0 to avoid division by zero.
+    Returns ``None`` if every row has actual == 0 (MAPE undefined).
     """
     mask = actual != 0
     if mask.sum() == 0:
-        return float("inf")
+        return None
     pct_errors = ((actual - forecast).abs() / actual.abs()).filter(mask)
     return float(pct_errors.mean())
 

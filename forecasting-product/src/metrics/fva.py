@@ -55,14 +55,19 @@ def compute_fva_between_layers(
     parent_metrics = compute_layer_metrics(actual, parent_forecast)
     child_metrics = compute_layer_metrics(actual, child_forecast)
 
+    # WMAPE can be None when actuals are all zero on the window.
+    p_w = parent_metrics["wmape"]
+    c_w = child_metrics["wmape"]
+    fva_val = (p_w - c_w) if (p_w is not None and c_w is not None) else None
+
     return {
-        "parent_wmape": parent_metrics["wmape"],
-        "child_wmape": child_metrics["wmape"],
-        "fva_wmape": parent_metrics["wmape"] - child_metrics["wmape"],
+        "parent_wmape": p_w,
+        "child_wmape": c_w,
+        "fva_wmape": fva_val,
         "parent_bias": parent_metrics["bias"],
         "child_bias": child_metrics["bias"],
         "fva_bias": abs(parent_metrics["bias"]) - abs(child_metrics["bias"]),
-        "fva_class": classify_fva(parent_metrics["wmape"] - child_metrics["wmape"]),
+        "fva_class": classify_fva(fva_val) if fva_val is not None else "undefined",
     }
 
 
@@ -146,5 +151,9 @@ def compute_total_fva(
 
     baseline_wmape = wmape(actual, forecasts[available[0]])
     final_wmape = wmape(actual, forecasts[available[-1]])
+
+    # WMAPE is undefined when actuals are all zero. Treat as "no value added".
+    if baseline_wmape is None or final_wmape is None:
+        return 0.0
 
     return baseline_wmape - final_wmape
