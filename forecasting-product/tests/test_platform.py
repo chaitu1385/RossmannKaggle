@@ -428,6 +428,52 @@ class TestMetrics:
         assert "wmape" in result
         assert "normalized_bias" in result
 
+    def test_wmape_none_when_actuals_all_zero(self):
+        """Regression: WMAPE must return None (not inf) when actuals are
+        entirely zero. Returning inf poisoned downstream .mean() aggregations
+        and caused the leaderboard to report null for every model that had
+        even one all-zero validation window (common in M5/retail)."""
+        from src.metrics.definitions import wmape
+        actual = pl.Series([0.0, 0.0, 0.0])
+        forecast = pl.Series([1.0, 2.0, 3.0])
+        assert wmape(actual, forecast) is None
+
+    def test_leaderboard_aggregate_ignores_undefined_wmape(self):
+        """Regression: a single all-zero-actuals series must not poison the
+        per-model WMAPE aggregate. Polars .mean() skips nulls, so as long as
+        wmape() returns None (not inf) the aggregate stays finite."""
+        from src.metrics.store import MetricStore, METRIC_SCHEMA
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = MetricStore(tmpdir)
+            n = 3
+            records = pl.DataFrame({
+                "run_id": ["r1"] * n,
+                "run_type": ["backtest"] * n,
+                "run_date": [date(2024, 1, 1)] * n,
+                "lob": ["retail"] * n,
+                "model_id": ["m1"] * n,
+                "fold": [0] * n,
+                "grain_level": ["series"] * n,
+                "series_id": ["s1", "s2", "s3"],
+                "channel": ["consumer"] * n,
+                "target_week": [date(2024, 1, 8)] * n,
+                "forecast_step": [1] * n,
+                "actual": [100.0, 200.0, 0.0],
+                "forecast": [110.0, 180.0, 5.0],
+                "wmape": [0.10, 0.20, None],  # None = undefined (zero-actual window)
+                "normalized_bias": [0.01, 0.02, 0.0],
+                "mape": [0.10, 0.10, None],
+                "mae": [10.0, 20.0, 5.0],
+                "rmse": [10.0, 20.0, 5.0],
+                "mase": [None, None, None],
+            }, schema=METRIC_SCHEMA)
+            store.write(records, run_type="backtest", lob="retail")
+            board = store.leaderboard(run_type="backtest", lob="retail")
+            assert not board.is_empty()
+            assert board["wmape"][0] is not None
+            # Mean of 0.10 and 0.20 = 0.15 (None skipped by Polars .mean())
+            assert abs(board["wmape"][0] - 0.15) < 1e-9
+
 
 class TestMetricStore:
     def test_write_and_read(self):
