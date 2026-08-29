@@ -7,13 +7,12 @@ before model training begins.
 """
 
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date
 from typing import Dict, List, Optional, Tuple
 
 import polars as pl
 
 from ..config.schema import PlatformConfig
-
 
 # --------------------------------------------------------------------------- #
 #  Report dataclass
@@ -268,7 +267,6 @@ class DataQualityAnalyzer:
 
         # Add demand class if classification was run
         if demand_classes:
-            from ..series.sparse_detector import SparseDetector
 
             # Re-classify per series to get per-row labels
             # (demand_classes dict only has totals)

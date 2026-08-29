@@ -6,13 +6,12 @@ thresholds and correction actions are driven by ``CleansingConfig``.
 """
 
 from dataclasses import dataclass
-from datetime import date, timedelta
-from typing import List, Tuple
+from datetime import date
+from typing import Tuple
 
 import polars as pl
 
 from ..config.schema import CleansingConfig, get_frequency_profile
-
 
 # --------------------------------------------------------------------------- #
 #  Result types
@@ -481,7 +480,7 @@ class DemandCleanser:
             stockout_weeks = cleaned.filter(pl.col("_stockout_flag")).height
             series_w_stockouts = cleaned.filter(pl.col("_stockout_flag"))[sid_col].n_unique()
             # Count distinct stockout periods (contiguous runs)
-            stockout_rows = cleaned.filter(pl.col("_stockout_flag")).sort([sid_col, "week"] if "week" in cleaned.columns else [sid_col])
+            cleaned.filter(pl.col("_stockout_flag")).sort([sid_col, "week"] if "week" in cleaned.columns else [sid_col])
             stockout_periods = series_w_stockouts  # approximate: at least 1 per series
         else:
             stockout_weeks = 0
@@ -500,7 +499,7 @@ class DemandCleanser:
         outlier_pct = round(outlier_count / total_rows * 100, 2)
 
         # Per-series breakdown
-        agg_exprs = [pl.col(sid_col)]
+        [pl.col(sid_col)]
         if "_outlier_flag" in cleaned.columns:
             agg_exprs_inner = [pl.col("_outlier_flag").sum().alias("outliers")]
         else:

@@ -23,8 +23,7 @@ Usage:
 
 from __future__ import annotations
 
-from datetime import timedelta
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence
 
 import polars as pl
 

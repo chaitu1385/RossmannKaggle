@@ -18,9 +18,8 @@ Usage:
 
 from __future__ import annotations
 
-import math
-from datetime import date, datetime
-from typing import Any, Dict, List, Optional, Sequence
+from datetime import date
+from typing import Any, Dict, Optional, Sequence
 
 import polars as pl
 

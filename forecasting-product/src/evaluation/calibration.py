@@ -8,11 +8,10 @@ Provides:
 """
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import polars as pl
-
 
 # --------------------------------------------------------------------------- #
 #  Result types
@@ -113,7 +112,7 @@ def compute_calibration_report(
     model_reports: Dict[str, List[IntervalCoverage]] = {}
     per_series_rows: List[dict] = []
 
-    available_q = {round(q, 4) for q in quantiles}
+    {round(q, 4) for q in quantiles}
     models = backtest_results["model_id"].unique().to_list()
 
     for model_id in models:

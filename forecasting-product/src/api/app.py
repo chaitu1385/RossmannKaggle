@@ -99,7 +99,13 @@ class _RateLimitMiddleware(BaseHTTPMiddleware):
         now = time.monotonic()
         cutoff = now - self.window_seconds
 
-        # Prune old entries and evict stale IPs to bound memory
+        # Prune all clients, not just the current one, to bound memory under
+        # high-cardinality traffic (proxies, scanners, rotating clients).
+        self._hits = {
+            ip: [t for t in timestamps if t > cutoff]
+            for ip, timestamps in self._hits.items()
+            if any(t > cutoff for t in timestamps)
+        }
         hits = [t for t in self._hits.get(client_ip, []) if t > cutoff]
 
         if len(hits) >= self.max_requests:
@@ -152,6 +158,9 @@ def create_app(
     title:
         Application title (appears in /docs).
     """
+    if auth_enabled and len(jwt_secret) < 32:
+        raise ValueError("auth_enabled requires a JWT secret of at least 32 characters")
+
     app = FastAPI(
         title=title,
         description=(
@@ -289,8 +298,22 @@ def create_app(
                     detail=f"series_id '{series_id}' not found in LOB '{lob}'.",
                 )
 
+        time_column = next(
+            (name for name in ("week", "date", "period", "timestamp") if name in df.columns),
+            None,
+        )
+        if time_column is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Forecast artifact has no supported time column.",
+            )
+
         if horizon:
-            df = df.sort("week").head(horizon * df["series_id"].n_unique())
+            df = (
+                df.sort(["series_id", time_column])
+                .group_by("series_id", maintain_order=True)
+                .head(horizon)
+            )
 
         has_p10 = "forecast_p10" in df.columns
         has_p50 = "forecast_p50" in df.columns
@@ -299,7 +322,7 @@ def create_app(
         points = [
             ForecastPoint(
                 series_id=row["series_id"],
-                week=row["week"],
+                week=row[time_column],
                 forecast=float(row["forecast"]),
                 model=row.get("model"),
                 lob=lob,
@@ -455,10 +478,10 @@ def create_app(
         hypotheses, and a ready-to-use PlatformConfig YAML.
         """
         import io
-        import yaml
         from dataclasses import asdict
 
         import polars as pl
+        import yaml
 
         from ..analytics.analyzer import DataAnalyzer
         from ..analytics.llm_analyzer import LLMAnalyzer
@@ -536,6 +559,7 @@ def create_app(
     ):
         """Answer a natural-language question about a specific series forecast."""
         import polars as pl
+
         from ..ai.nl_query import NaturalLanguageQueryEngine
 
         validate_path_param(request.lob, "lob")

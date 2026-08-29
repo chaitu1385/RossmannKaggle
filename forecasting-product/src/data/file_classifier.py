@@ -298,7 +298,7 @@ class FileClassifier:
                 reasoning.append(f"ID columns have repeating values (max cardinality {max_cardinality}) (+0.20)")
             elif max_cardinality < df.height:
                 score += 0.10
-                reasoning.append(f"ID columns have some repetition (+0.10)")
+                reasoning.append("ID columns have some repetition (+0.10)")
         elif not id_cols:
             reasoning.append("No ID columns detected (+0.00)")
 

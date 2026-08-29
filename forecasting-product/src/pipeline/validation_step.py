@@ -16,13 +16,12 @@ import polars as pl
 
 from ..config.schema import PostValidationConfig
 from ..validation import (
-    run_structural_checks,
-    run_logical_checks,
-    validate_business_rules,
     check_simpsons_multi_segment,
-    suggest_segments_to_check,
-    score_confidence,
     format_confidence_badge,
+    run_logical_checks,
+    run_structural_checks,
+    score_confidence,
+    validate_business_rules,
 )
 
 logger = logging.getLogger(__name__)

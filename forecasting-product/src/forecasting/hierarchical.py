@@ -43,13 +43,21 @@ logger = logging.getLogger(__name__)
 
 # Attempt to import hierarchicalforecast; fall back gracefully
 try:
-    from hierarchicalforecast.core import HierarchicalReconciliation
+    from hierarchicalforecast.core import HierarchicalReconciliation  # noqa: F401
     from hierarchicalforecast.methods import (
-        BottomUp as _BottomUp,
-        TopDown as _TopDown,
-        MiddleOut as _MiddleOut,
-        MinTrace as _MinTrace,
-        ERM as _ERM,
+        ERM as _ERM,  # noqa: F401
+    )
+    from hierarchicalforecast.methods import (
+        BottomUp as _BottomUp,  # noqa: F401
+    )
+    from hierarchicalforecast.methods import (
+        MiddleOut as _MiddleOut,  # noqa: F401
+    )
+    from hierarchicalforecast.methods import (
+        MinTrace as _MinTrace,  # noqa: F401
+    )
+    from hierarchicalforecast.methods import (
+        TopDown as _TopDown,  # noqa: F401
     )
     _HAS_HIERARCHICALFORECAST = True
 except ImportError:

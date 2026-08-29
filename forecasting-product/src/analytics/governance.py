@@ -28,8 +28,8 @@ ForecastLineage
 """
 
 import hashlib
-import logging
 import json
+import logging
 from dataclasses import asdict, dataclass, field
 from datetime import date
 from pathlib import Path

@@ -46,6 +46,7 @@ async def run_backtest(
     config = None
     if config_file:
         import yaml
+
         from ...config.loader import _dict_to_config
         from ...config.schema import PlatformConfig
         config_content = await validate_upload_size(config_file)
@@ -147,6 +148,7 @@ async def run_forecast(
     config = None
     if config_file:
         import yaml
+
         from ...config.loader import _dict_to_config
         from ...config.schema import PlatformConfig
         config_content = await validate_upload_size(config_file)
@@ -211,7 +213,7 @@ def list_manifests(
     user: User = Depends(require_permission(Permission.VIEW_METRICS)),
 ):
     """List recent pipeline run manifests."""
-    from ...pipeline.manifest import PipelineManifest, read_manifest
+    from ...pipeline.manifest import read_manifest
 
     if lob:
         validate_path_param(lob, "lob")

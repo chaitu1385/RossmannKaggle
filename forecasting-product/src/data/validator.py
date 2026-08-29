@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import polars as pl
 
-from ..config.schema import FREQUENCY_PROFILES, ValidationConfig, freq_timedelta
+from ..config.schema import ValidationConfig, freq_timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +130,7 @@ class DataValidator:
             issues.extend(range_issues)
 
             # 5. Completeness
-            comp_issues = self.check_completeness(df, time_col, id_col)
+            comp_issues = self.check_completeness(df, time_col, id_col, target_col)
             issues.extend(comp_issues)
 
         # Strict mode: promote warnings → errors
@@ -358,6 +358,7 @@ class DataValidator:
         df: pl.DataFrame,
         time_col: str,
         id_col: str,
+        target_col: Optional[str] = None,
     ) -> List[ValidationIssue]:
         """Check series count and per-series missing-week percentage."""
         issues: List[ValidationIssue] = []
@@ -375,22 +376,69 @@ class DataValidator:
                 ),
             ))
 
+        counts = df.group_by(id_col).agg(
+            pl.len().alias("_n_periods"),
+        )
+        if self.config.min_history_periods is not None:
+            short = counts.filter(
+                pl.col("_n_periods") < self.config.min_history_periods
+            )
+            if not short.is_empty():
+                issues.append(ValidationIssue(
+                    level="warning",
+                    check="completeness",
+                    message=(
+                        f"{len(short)} series have fewer than "
+                        f"{self.config.min_history_periods} history periods"
+                    ),
+                ))
+
+        if self.config.max_zero_pct < 100.0:
+            zero_limit = (
+                self.config.max_zero_pct * 100.0
+                if self.config.max_zero_pct <= 1.0
+                else self.config.max_zero_pct
+            )
+            zero_rates = df.group_by(id_col).agg(
+                (pl.col(target_col).eq(0).mean() * 100.0).alias("_zero_pct")
+            ) if target_col and target_col in df.columns else None
+            if zero_rates is not None:
+                zero_violators = zero_rates.filter(pl.col("_zero_pct") > zero_limit)
+                if not zero_violators.is_empty():
+                    issues.append(ValidationIssue(
+                        level="warning",
+                        check="completeness",
+                        message=f"{len(zero_violators)} series exceed {zero_limit}% zero values",
+                    ))
+
         # Per-series missing-week percentage
         if self.config.max_missing_pct < 100.0:
             min_date = df[time_col].min()
             max_date = df[time_col].max()
             if min_date is not None and max_date is not None:
-                total_weeks = (max_date - min_date).days // 7 + 1
-                if total_weeks > 0:
+                elapsed_days = (max_date - min_date).days
+                if self.frequency == "D":
+                    total_periods = elapsed_days + 1
+                elif self.frequency == "W":
+                    total_periods = elapsed_days // 7 + 1
+                elif self.frequency == "M":
+                    total_periods = (max_date.year - min_date.year) * 12 + max_date.month - min_date.month + 1
+                else:
+                    total_periods = ((max_date.year - min_date.year) * 12 + max_date.month - min_date.month) // 3 + 1
+                if total_periods > 0:
                     series_counts = df.group_by(id_col).agg(
                         pl.col(time_col).count().alias("_n_weeks")
                     )
                     series_counts = series_counts.with_columns(
-                        ((1.0 - pl.col("_n_weeks") / total_weeks) * 100.0)
+                        ((1.0 - pl.col("_n_weeks") / total_periods) * 100.0)
                         .alias("_missing_pct")
                     )
                     violators = series_counts.filter(
-                        pl.col("_missing_pct") > self.config.max_missing_pct
+                        pl.col("_missing_pct") > (
+                            self.config.max_missing_pct * 100.0
+                            if self.config.max_missing_pct <= 1.0
+                            else self.config.max_missing_pct
+                        )
                     )
                     if len(violators) > 0:
                         worst_pct = violators["_missing_pct"].max()

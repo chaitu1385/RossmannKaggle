@@ -7,7 +7,7 @@ Steps:
   3. Load champion model(s) from backtest results.
   4. Fit champion on all available data.
   5. Forecast the full horizon (39 weeks).
-  6. (Optionally) reconcile across hierarchy.
+  6. Emit leaf-level forecasts (bottom-up coherent by construction).
   7. Write frozen forecasts to output store.
 """
 
@@ -98,6 +98,15 @@ class ForecastPipeline:
         horizon = fc.horizon_weeks
         run_id = self.context.run_id
 
+        reconcilable = self.config.get_reconcilable_hierarchies()
+        if reconcilable and self.config.reconciliation.method != "bottom_up":
+            raise ValueError(
+                "ForecastPipeline produces one leaf-level forecast and therefore "
+                "supports bottom_up reconciliation only. Use the hierarchy API or "
+                "a hierarchical forecaster when independent aggregate forecasts "
+                f"must be reconciled with method={self.config.reconciliation.method!r}."
+            )
+
         # Step 1: Build series
         logger.info("[%s] Building model-ready series...", run_id)
         with self._emitter.timer("series_build"):
@@ -129,6 +138,11 @@ class ForecastPipeline:
             )
         else:
             forecaster = champion_model
+        base_model_name = forecaster.name
+        if fc.constraints.enabled:
+            from ..forecasting.constrained import ConstrainedDemandEstimator
+
+            forecaster = ConstrainedDemandEstimator(forecaster, fc.constraints)
         logger.info("Champion model: %s", forecaster.name)
 
         # Step 3: Fit on all data
@@ -142,12 +156,13 @@ class ForecastPipeline:
             )
 
         # Step 3b: Set future features for ML models (if external regressors configured)
-        if external_features is not None and hasattr(forecaster, 'set_future_features'):
+        feature_target = getattr(forecaster, "base", forecaster)
+        if external_features is not None and hasattr(feature_target, "set_future_features"):
             er_config = fc.external_regressors
             if er_config.enabled and er_config.future_features_path:
                 from ..data.regressors import load_external_features
                 future_feats = load_external_features(er_config.future_features_path)
-                forecaster.set_future_features(
+                feature_target.set_future_features(
                     future_feats,
                     id_col=fc.series_id_column,
                     time_col=fc.time_column,
@@ -163,7 +178,7 @@ class ForecastPipeline:
             )
         # Tag forecast rows with the model name
         if "model" not in forecast.columns:
-            forecast = forecast.with_columns(pl.lit(forecaster.name).alias("model"))
+            forecast = forecast.with_columns(pl.lit(base_model_name).alias("model"))
         self._emitter.gauge("forecast_rows", float(len(forecast)))
 
         # Step 4b: Quantile forecasts (if configured)
@@ -191,7 +206,7 @@ class ForecastPipeline:
                 fc.quantiles,
                 cal.coverage_targets,
                 fc.series_id_column,
-                model_id=forecaster.name if isinstance(champion_model, str) else None,
+                model_id=base_model_name if isinstance(champion_model, str) else None,
             )
             logger.info("Applied conformal prediction correction to intervals")
 
@@ -218,7 +233,7 @@ class ForecastPipeline:
         self._write_manifest(
             actuals=actuals,
             champion_model_id=(
-                forecaster.name if hasattr(forecaster, "name") else str(champion_model)
+                base_model_name
             ),
             forecast=forecast,
         )

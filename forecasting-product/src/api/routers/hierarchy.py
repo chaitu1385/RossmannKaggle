@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
 import polars as pl
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -40,8 +40,8 @@ async def build_hierarchy(
     except (ValueError, UnicodeDecodeError, OSError) as exc:
         raise HTTPException(status_code=400, detail=f"Failed to read file: {exc}")
 
-    level_list = [l.strip() for l in levels.split(",")]
-    missing = [l for l in level_list if l not in df.columns]
+    level_list = [level.strip() for level in levels.split(",")]
+    missing = [level for level in level_list if level not in df.columns]
     if missing:
         raise HTTPException(
             status_code=400,
@@ -114,7 +114,7 @@ async def aggregate_hierarchy(
     except (ValueError, UnicodeDecodeError, OSError) as exc:
         raise HTTPException(status_code=400, detail=f"Failed to read file: {exc}")
 
-    level_list = [l.strip() for l in levels.split(",")]
+    level_list = [level.strip() for level in levels.split(",")]
     val_cols = [c.strip() for c in value_columns.split(",")]
 
     config = HierarchyConfig(name="hierarchy", levels=level_list, id_column=id_column)
@@ -174,7 +174,7 @@ async def reconcile_hierarchy(
     except (ValueError, UnicodeDecodeError, OSError) as exc:
         raise HTTPException(status_code=400, detail=f"Failed to read file: {exc}")
 
-    level_list = [l.strip() for l in levels.split(",")]
+    level_list = [level.strip() for level in levels.split(",")]
     val_cols = [c.strip() for c in value_columns.split(",")]
 
     hier_config = HierarchyConfig(name="hierarchy", levels=level_list, id_column=id_column)

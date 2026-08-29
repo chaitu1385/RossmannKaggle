@@ -21,9 +21,7 @@ Usage::
 from __future__ import annotations
 
 import logging
-import math
-from datetime import timedelta
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Optional, Sequence
 
 import numpy as np
 import polars as pl

@@ -12,18 +12,29 @@ from typing import Any, Dict, Optional
 import yaml
 
 from .schema import (
+    AIConfig,
     AlertConfig,
+    AnalysisConfig,
     BacktestConfig,
+    CalibrationConfig,
+    CleansingConfig,
+    ConstraintConfig,
+    DataQualityConfig,
+    DataQualityReportConfig,
     ExternalRegressorConfig,
     ForecastConfig,
     HierarchyConfig,
+    HorizonBucket,
     ObservabilityConfig,
     OutputConfig,
     ParallelismConfig,
     PlatformConfig,
     PostValidationConfig,
     ReconciliationConfig,
+    RegressorScreenConfig,
+    StructuralBreakConfig,
     TransitionConfig,
+    ValidationConfig,
 )
 
 
@@ -66,6 +77,10 @@ def _dict_to_config(d: Dict[str, Any]) -> PlatformConfig:
     )
 
     fc_raw = d.get("forecast", {})
+    er_raw = fc_raw.get("external_regressors", {})
+    screen_raw = er_raw.get("screen", {})
+    cal_raw = fc_raw.get("calibration", {})
+    constraint_raw = fc_raw.get("constraints", {})
     forecast = ForecastConfig(
         horizon_weeks=fc_raw.get("horizon_periods",
                                  fc_raw.get("horizon_weeks", 39)),
@@ -74,11 +89,20 @@ def _dict_to_config(d: Dict[str, Any]) -> PlatformConfig:
         time_column=fc_raw.get("time_column", "week"),
         series_id_column=fc_raw.get("series_id_column", "series_id"),
         forecasters=fc_raw.get("forecasters", ["naive_seasonal"]),
+        quantiles=fc_raw.get("quantiles", []),
+        intermittent_forecasters=fc_raw.get("intermittent_forecasters", []),
+        sparse_detection=fc_raw.get("sparse_detection", True),
+        sparse_adi_threshold=fc_raw.get("sparse_adi_threshold", 1.32),
+        sparse_cv2_threshold=fc_raw.get("sparse_cv2_threshold", 0.49),
         external_regressors=ExternalRegressorConfig(
-            enabled=fc_raw.get("external_regressors", {}).get("enabled", False),
-            feature_columns=fc_raw.get("external_regressors", {}).get("feature_columns", []),
-            future_features_path=fc_raw.get("external_regressors", {}).get("future_features_path"),
+            enabled=er_raw.get("enabled", False),
+            feature_columns=er_raw.get("feature_columns", []),
+            future_features_path=er_raw.get("future_features_path"),
+            feature_types=er_raw.get("feature_types", {}),
+            screen=RegressorScreenConfig(**screen_raw),
         ),
+        calibration=CalibrationConfig(**cal_raw),
+        constraints=ConstraintConfig(**constraint_raw),
     )
 
     bt_raw = d.get("backtest", {})
@@ -91,6 +115,28 @@ def _dict_to_config(d: Dict[str, Any]) -> PlatformConfig:
         champion_granularity=bt_raw.get("champion_granularity", "lob"),
         primary_metric=bt_raw.get("primary_metric", "wmape"),
         secondary_metric=bt_raw.get("secondary_metric", "normalized_bias"),
+        selection_strategy=bt_raw.get("selection_strategy", "champion"),
+        horizon_buckets=[HorizonBucket(**b) for b in bt_raw.get("horizon_buckets", [])],
+    )
+
+    dq_raw = d.get("data_quality", {})
+    validation_raw = dq_raw.get("validation", {})
+    cleansing_raw = dq_raw.get("cleansing", {})
+    breaks_raw = dq_raw.get("structural_breaks", {})
+    report_raw = dq_raw.get("report", {})
+    data_quality = DataQualityConfig(
+        fill_gaps=dq_raw.get("fill_gaps", True),
+        fill_value=dq_raw.get("fill_value", 0.0),
+        min_series_length_weeks=dq_raw.get(
+            "min_series_length_periods",
+            dq_raw.get("min_series_length_weeks", 52),
+        ),
+        drop_zero_series=dq_raw.get("drop_zero_series", False),
+        validate_frequency=dq_raw.get("validate_frequency", False),
+        validation=ValidationConfig(**validation_raw),
+        cleansing=CleansingConfig(**cleansing_raw),
+        structural_breaks=StructuralBreakConfig(**breaks_raw),
+        report=DataQualityReportConfig(**report_raw),
     )
 
     tr_raw = d.get("transition", {})
@@ -161,6 +207,9 @@ def _dict_to_config(d: Dict[str, Any]) -> PlatformConfig:
         min_grade=pv_raw.get("min_grade", "D"),
     )
 
+    analysis = AnalysisConfig(**d.get("analysis", {}))
+    ai = AIConfig(**d.get("ai", {}))
+
     return PlatformConfig(
         lob=d.get("lob", "default"),
         description=d.get("description", ""),
@@ -169,9 +218,12 @@ def _dict_to_config(d: Dict[str, Any]) -> PlatformConfig:
         forecast=forecast,
         backtest=backtest,
         transition=transition,
+        data_quality=data_quality,
         output=output,
+        analysis=analysis,
         parallelism=parallelism,
         observability=observability,
+        ai=ai,
         post_validation=post_validation,
         metrics=d.get("metrics", ["wmape", "normalized_bias"]),
     )

@@ -14,7 +14,7 @@ Example with n_folds=3, val_weeks=13::
 """
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from typing import List, Tuple
 
 import polars as pl

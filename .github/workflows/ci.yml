@@ -74,9 +74,9 @@ jobs:
       - name: Build production image
         run: |
           docker build \
-            --target production \
+            --target api \
             -t forecasting-product:${{ github.sha }} \
-            forecasting-product/
+            .
 
       - name: Verify image runs
         run: |
@@ -87,3 +87,23 @@ jobs:
           sleep 5
           curl -sf http://localhost:8000/health || (docker logs fp-smoke && exit 1)
           docker stop fp-smoke
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: forecasting-product/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: forecasting-product/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:e2e
+      - run: npm run build

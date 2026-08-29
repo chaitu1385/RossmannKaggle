@@ -6,7 +6,7 @@ from a JWT token and check permissions before the endpoint executes.
 """
 
 import logging
-from typing import Callable, Coroutine, Any, Optional
+from typing import Any, Callable, Coroutine, Optional
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer

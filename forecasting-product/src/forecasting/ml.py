@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import polars as pl
 
-from ..config.schema import FREQUENCY_PROFILES, freq_timedelta, get_frequency_profile
+from ..config.schema import freq_timedelta, get_frequency_profile
 from .base import BaseForecaster
 from .feature_manager import MLForecastFeatureManager
 from .registry import registry

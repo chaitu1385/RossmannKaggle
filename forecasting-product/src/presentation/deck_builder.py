@@ -22,19 +22,19 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, Sequence
 
 from src.presentation.templates import (
     FRONTMATTER,
-    title_slide,
-    kpi_slide,
+    appendix_slide,
     chart_slide,
+    data_source_slide,
     finding_slide,
+    impact_slide,
+    kpi_slide,
     recommendation_slide,
     section_slide,
-    impact_slide,
-    appendix_slide,
-    data_source_slide,
+    title_slide,
 )
 
 # Max consecutive content slides before a breathing slide is inserted

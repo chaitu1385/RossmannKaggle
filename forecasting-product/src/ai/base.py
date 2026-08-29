@@ -115,12 +115,15 @@ class AIFeatureBase:
 
         import anthropic
 
+        retries = getattr(self, "_max_retries", 3)
+        default_max_tokens = getattr(self, "_max_tokens", 2000)
+        model = getattr(self, "_model", "claude-sonnet-4-20250514")
         last_exc: Optional[Exception] = None
-        for attempt in range(self._max_retries + 1):
+        for attempt in range(retries + 1):
             try:
                 response = self._client.messages.create(
-                    model=self._model,
-                    max_tokens=max_tokens or self._max_tokens,
+                    model=model,
+                    max_tokens=max_tokens or default_max_tokens,
                     system=system_prompt,
                     messages=[{"role": "user", "content": user_prompt}],
                 )
@@ -130,21 +133,21 @@ class AIFeatureBase:
                 wait = min(2 ** attempt, 30)
                 logger.warning(
                     "Claude rate limited (attempt %d/%d), retrying in %.1fs",
-                    attempt + 1, self._max_retries + 1, wait,
+                    attempt + 1, retries + 1, wait,
                 )
             except anthropic.InternalServerError as e:
                 last_exc = e
                 wait = min(2 ** attempt, 30)
                 logger.warning(
                     "Claude server error (attempt %d/%d), retrying in %.1fs: %s",
-                    attempt + 1, self._max_retries + 1, wait, e,
+                    attempt + 1, retries + 1, wait, e,
                 )
             except anthropic.APIConnectionError as e:
                 last_exc = e
                 wait = min(2 ** attempt, 30)
                 logger.warning(
                     "Claude connection error (attempt %d/%d), retrying in %.1fs: %s",
-                    attempt + 1, self._max_retries + 1, wait, e,
+                    attempt + 1, retries + 1, wait, e,
                 )
             except (anthropic.AuthenticationError, anthropic.BadRequestError):
                 raise  # non-retryable
@@ -154,12 +157,12 @@ class AIFeatureBase:
                     wait = min(2 ** attempt, 30)
                     logger.warning(
                         "Claude API error %d (attempt %d/%d), retrying in %.1fs",
-                        e.status_code, attempt + 1, self._max_retries + 1, wait,
+                        e.status_code, attempt + 1, retries + 1, wait,
                     )
                 else:
                     raise  # 4xx other than rate limit — non-retryable
 
-            if attempt < self._max_retries:
+            if attempt < retries:
                 time.sleep(wait)
 
         raise last_exc  # type: ignore[misc]

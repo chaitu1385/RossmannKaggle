@@ -25,7 +25,7 @@ from __future__ import annotations
 import difflib
 import logging
 import traceback
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, List, Optional, Tuple
 
 try:
     import polars as pl
