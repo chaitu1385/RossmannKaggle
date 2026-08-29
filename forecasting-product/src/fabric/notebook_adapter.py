@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 try:
-    from pyspark.sql import DataFrame as SparkDataFrame
+    from pyspark.sql import DataFrame as SparkDataFrame  # noqa: F401
     _HAS_SPARK = True
 except ImportError:
     _HAS_SPARK = False

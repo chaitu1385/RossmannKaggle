@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import io
 import logging
-from typing import List, Optional
+from typing import Optional
 
 import polars as pl
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 
-from ...auth.models import Permission, User
-from ...auth.rbac import get_current_user, require_permission
+from ...auth.models import User
+from ...auth.rbac import get_current_user
 from ..deps import validate_path_param, validate_upload_size
 
 logger = logging.getLogger(__name__)

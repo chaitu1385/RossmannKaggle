@@ -15,7 +15,7 @@ from typing import Optional
 
 import polars as pl
 
-from ..config.schema import PlatformConfig, get_frequency_profile
+from ..config.schema import PlatformConfig
 from ..utils.gap_fill import fill_gaps as _shared_fill_gaps
 from .transition import TransitionEngine
 

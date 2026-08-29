@@ -13,8 +13,8 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
 
-from src.visualization.chart_palette import COLORS, CATEGORICAL_PALETTE
 from src.visualization.annotations import action_title
+from src.visualization.chart_palette import CATEGORICAL_PALETTE, COLORS
 
 
 def highlight_bar(

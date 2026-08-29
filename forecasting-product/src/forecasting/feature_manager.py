@@ -12,8 +12,9 @@ Handles:
 
 import datetime
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
+import pandas as pd  # noqa: F401 — required for .to_pandas() and type hints
 import polars as pl
 
 logger = logging.getLogger(__name__)
@@ -21,9 +22,6 @@ logger = logging.getLogger(__name__)
 # pandas is used at the boundary with mlforecast (which requires pandas DataFrames).
 # All internal processing uses Polars; .to_pandas() is called only when returning
 # DataFrames to the external library.
-import pandas as pd  # noqa: F401 — required for .to_pandas() and type hints
-
-
 class MLForecastFeatureManager:
     """
     Manages external features for mlforecast models.

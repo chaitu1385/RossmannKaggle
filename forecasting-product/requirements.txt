@@ -32,17 +32,18 @@ pytest>=7.0.0
 httpx>=0.23.0
 
 # ── REST API server ──────────────────────────────────────────────────────────
-fastapi>=0.100.0
+fastapi>=0.100.0,<0.116.0
 uvicorn>=0.20.0
 python-multipart>=0.0.7
+anthropic>=0.40.0,<1.0.0
 
 # ── Spark / Microsoft Fabric layer ──────────────────────────────────────────
 # PySpark (use the version that matches your Fabric Spark runtime)
-pyspark>=3.4.0
+# pyspark>=3.4.0  # install via the [spark] extra when needed
 
 # Delta Lake (open-source; Fabric uses the managed Delta runtime automatically)
 # Install only for local development / testing outside Fabric.
-delta-spark>=2.4.0
+# delta-spark>=2.4.0  # install via the [spark] extra when needed
 
 # Microsoft Fabric / Azure SDK (optional — needed only for REST API calls,
 # token-based auth, or notebookutils alternatives outside Fabric notebooks)

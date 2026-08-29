@@ -2,7 +2,6 @@
 
 from typing import Dict, List
 
-import numpy as np
 import polars as pl
 
 from ..models.base import BaseForecaster

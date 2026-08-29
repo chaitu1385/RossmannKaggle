@@ -232,7 +232,7 @@ class ChampionSelector:
         )
 
         # Add start_step / end_step from bucket config
-        bucket_map = {b.name: b for b in horizon_buckets}
+        {b.name: b for b in horizon_buckets}
         champions = champions.with_columns([
             pl.col("horizon_bucket").replace_strict(
                 {b.name: b.start_step for b in horizon_buckets}

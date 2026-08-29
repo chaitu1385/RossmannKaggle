@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from typing import List, Optional
+from typing import List
 
 import polars as pl
 

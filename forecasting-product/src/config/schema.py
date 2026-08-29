@@ -385,6 +385,8 @@ class ValidationConfig:
     max_value: Optional[float] = None        # custom ceiling
     max_missing_pct: float = 100.0           # fail if any series exceeds this % missing weeks
     min_series_count: int = 1                # minimum number of series required
+    min_history_periods: Optional[int] = None  # minimum observations per series
+    max_zero_pct: float = 100.0              # fail if a series exceeds this % zeros
     strict: bool = False                     # if True, warnings become errors
 
 

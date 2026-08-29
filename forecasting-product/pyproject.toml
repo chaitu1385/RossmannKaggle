@@ -20,7 +20,7 @@ dependencies = [
     "xgboost>=1.5.0",
     "scikit-learn>=1.0.0",
     "duckdb>=0.9.0",
-    "fastapi>=0.100.0",
+    "fastapi>=0.100.0,<0.116.0",
     "uvicorn>=0.20.0",
     "python-multipart>=0.0.7",
 ]
@@ -45,6 +45,9 @@ explainability = [
 holidays = [
     "holidays>=0.40",
 ]
+ai = [
+    "anthropic>=0.40.0,<1.0.0",
+]
 spark = [
     "pyspark>=3.4.0",
     "delta-spark>=2.4.0",
@@ -54,7 +57,7 @@ azure = [
     "azure-storage-file-datalake>=12.14.0",
 ]
 all = [
-    "forecasting-product[dev,auth,sku-mapping,explainability,holidays,spark,azure]",
+    "forecasting-product[dev,auth,sku-mapping,explainability,holidays,ai,spark,azure]",
 ]
 
 [tool.setuptools.packages.find]

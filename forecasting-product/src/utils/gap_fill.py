@@ -12,7 +12,6 @@ from typing import Literal
 
 import polars as pl
 
-
 _INTERVAL_MAP = {"D": "1d", "W": "1w", "M": "1mo", "Q": "1q"}
 
 

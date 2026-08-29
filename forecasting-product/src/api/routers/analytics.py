@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 import logging
-from typing import Dict, List, Optional
+from typing import Optional
 
 import polars as pl
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile

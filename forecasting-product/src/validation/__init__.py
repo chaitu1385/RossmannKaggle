@@ -38,54 +38,50 @@ Quick start::
     result = run_full_validation(df, config={...})
 """
 
-from src.validation.structural_validator import (
-    validate_schema,
-    validate_primary_key,
-    validate_completeness,
-    validate_date_range,
-    validate_referential_integrity,
-    validate_row_count,
-    run_structural_checks,
-)
-
-from src.validation.logical_validator import (
-    validate_aggregation_consistency,
-    validate_percentages_sum,
-    validate_monotonic,
-    validate_trend_consistency,
-    validate_ratio_bounds,
-    validate_group_balance,
-    validate_no_future_dates,
-    validate_forecast_vs_actual_alignment,
-    run_logical_checks,
-)
+from typing import Any, Dict, Optional
 
 from src.validation.business_rules import (
-    validate_ranges,
-    validate_metric_relationships,
-    validate_temporal_consistency,
-    validate_segment_coverage,
-    validate_no_negative,
-    validate_cardinality,
-    validate_business_rules,
     get_default_rules,
+    validate_business_rules,
+    validate_cardinality,
+    validate_metric_relationships,
+    validate_no_negative,
+    validate_ranges,
+    validate_segment_coverage,
+    validate_temporal_consistency,
 )
-
-from src.validation.simpsons_paradox import (
-    check_simpsons_paradox,
-    check_simpsons_multi_segment,
-    weighted_vs_unweighted,
-    suggest_segments_to_check,
-    generate_paradox_report,
-)
-
 from src.validation.confidence_scoring import (
-    score_confidence,
     format_confidence_badge,
     merge_confidence_scores,
+    score_confidence,
 )
-
-from typing import Any, Dict, Optional
+from src.validation.logical_validator import (
+    run_logical_checks,
+    validate_aggregation_consistency,
+    validate_forecast_vs_actual_alignment,
+    validate_group_balance,
+    validate_monotonic,
+    validate_no_future_dates,
+    validate_percentages_sum,
+    validate_ratio_bounds,
+    validate_trend_consistency,
+)
+from src.validation.simpsons_paradox import (
+    check_simpsons_multi_segment,
+    check_simpsons_paradox,
+    generate_paradox_report,
+    suggest_segments_to_check,
+    weighted_vs_unweighted,
+)
+from src.validation.structural_validator import (
+    run_structural_checks,
+    validate_completeness,
+    validate_date_range,
+    validate_primary_key,
+    validate_referential_integrity,
+    validate_row_count,
+    validate_schema,
+)
 
 
 def run_full_validation(

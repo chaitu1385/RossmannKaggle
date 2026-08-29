@@ -26,7 +26,6 @@ from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from uuid import uuid4
 
 import polars as pl
 

@@ -12,9 +12,9 @@ from typing import Any, Sequence, Tuple
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 
+from src.visualization.annotations import action_title
 from src.visualization.chart_palette import COLORS, FVA_COLORS
 from src.visualization.style import CHART_FIGSIZE, swd_style
-from src.visualization.annotations import action_title
 
 
 def fva_cascade_chart(
@@ -89,7 +89,7 @@ def fva_cascade_chart(
     action_title(
         ax,
         "Forecast Value Added by layer",
-        subtitle=f"WMAPE at each forecasting stage",
+        subtitle="WMAPE at each forecasting stage",
     )
 
     return fig, ax

@@ -28,17 +28,17 @@ Usage::
 """
 
 from src.presentation.deck_builder import DeckBuilder
-from src.presentation.marp_export import export_pdf, export_html, export_both, check_ready
-from src.presentation.marp_linter import lint_deck, format_lint_report
+from src.presentation.marp_export import check_ready, export_both, export_html, export_pdf
+from src.presentation.marp_linter import format_lint_report, lint_deck
 from src.presentation.templates import (
     FRONTMATTER,
-    title_slide,
-    kpi_slide,
     chart_slide,
     finding_slide,
+    impact_slide,
+    kpi_slide,
     recommendation_slide,
     section_slide,
-    impact_slide,
+    title_slide,
 )
 
 __all__ = [

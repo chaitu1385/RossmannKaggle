@@ -11,10 +11,10 @@ from typing import Any, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 
-from src.visualization.chart_palette import COLORS
-from src.visualization.style import CHART_FIGSIZE, swd_style
 from src.visualization.annotations import action_title
 from src.visualization.basic_charts import highlight_bar
+from src.visualization.chart_palette import COLORS
+from src.visualization.style import CHART_FIGSIZE, swd_style
 
 
 def forecast_plot(

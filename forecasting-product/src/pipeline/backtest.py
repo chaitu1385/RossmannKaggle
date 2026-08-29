@@ -24,7 +24,7 @@ from ..metrics.store import MetricStore
 from ..observability.context import PipelineContext
 from ..observability.metrics import MetricsEmitter
 from ..series.builder import SeriesBuilder
-from .validation_step import run_post_validation, ValidationError
+from .validation_step import ValidationError, run_post_validation
 
 logger = logging.getLogger(__name__)
 

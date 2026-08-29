@@ -38,13 +38,13 @@ Usage::
 """
 
 from src.tieout.tieout_helpers import (
-    read_source_direct,
-    profile_dataframe,
+    check_null_concentration,
+    check_outliers,
     compare_profiles,
     format_tieout_table,
     overall_status,
-    check_null_concentration,
-    check_outliers,
+    profile_dataframe,
+    read_source_direct,
     run_full_tieout,
 )
 

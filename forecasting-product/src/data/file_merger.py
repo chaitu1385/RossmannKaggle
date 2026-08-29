@@ -24,12 +24,11 @@ Usage
 
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 import polars as pl
 
 from .file_classifier import ClassificationResult, FileProfile
-
 
 # --------------------------------------------------------------------------- #
 #  Result dataclasses
@@ -302,7 +301,6 @@ class MultiFileMerger:
         null_fill_cols: List[str] = []
         all_warnings: List[str] = []
 
-        original_height = merged.height
 
         for sec in secondaries:
             spec = self.detect_join_keys(primary, sec)
@@ -370,7 +368,6 @@ class MultiFileMerger:
 
         # Compute stats
         # Count rows where at least one joined column has a non-null value
-        matched_rows = merged.height  # left join preserves all primary rows
         # Unmatched = rows where ALL joined columns are null
         joined_cols = [
             c for c in merged.columns if c not in primary.df.columns

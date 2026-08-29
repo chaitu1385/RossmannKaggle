@@ -19,7 +19,7 @@ planner overrides when available.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
 

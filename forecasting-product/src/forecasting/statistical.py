@@ -19,11 +19,11 @@ from .registry import registry
 # Attempt to import statsforecast; fall back gracefully
 try:
     from statsforecast import StatsForecast
+    from statsforecast.models import MSTL as _MSTL
     from statsforecast.models import AutoARIMA as _AutoARIMA
     from statsforecast.models import AutoETS as _AutoETS
     from statsforecast.models import AutoTheta as _AutoTheta
-    from statsforecast.models import MSTL as _MSTL
-    from statsforecast.models import SeasonalNaive as _SeasonalNaive
+    from statsforecast.models import SeasonalNaive as _SeasonalNaive  # noqa: F401
     _HAS_STATSFORECAST = True
 except ImportError:
     _HAS_STATSFORECAST = False

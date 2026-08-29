@@ -22,7 +22,8 @@ Usage:
 from __future__ import annotations
 
 from src.visualization.chart_palette import (
-    COLORS, CATEGORICAL_PALETTE,
+    CATEGORICAL_PALETTE,
+    COLORS,
 )
 
 SWD_PLOTLY_TEMPLATE = "swd_forecasting"

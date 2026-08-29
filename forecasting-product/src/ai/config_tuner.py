@@ -9,8 +9,8 @@ Gracefully degrades to empty recommendations when Claude is unavailable.
 
 import json
 import logging
-from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass, field
+from typing import Any, List, Optional
 
 import polars as pl
 

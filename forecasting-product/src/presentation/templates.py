@@ -10,8 +10,7 @@ kpi-row, kpi-card, so-what, finding, chart-container, rec-row, etc.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Sequence
-
+from typing import Any, Dict, Sequence
 
 # ---------------------------------------------------------------------------
 # Frontmatter
@@ -117,7 +116,7 @@ def kpi_slide(
 
     for m in metrics[:4]:
         direction = m.get("direction", "flat")
-        parts.append(f'<div class="kpi-card">')
+        parts.append('<div class="kpi-card">')
         parts.append(f'  <div class="kpi-label">{m["label"]}</div>')
         parts.append(f'  <div class="kpi-value">{m["value"]}</div>')
         if "delta" in m:
@@ -222,7 +221,7 @@ def recommendation_slide(
 
     for i, rec in enumerate(sorted_recs, 1):
         conf = rec.get("confidence", "medium")
-        parts.append(f'<div class="rec-row">')
+        parts.append('<div class="rec-row">')
         parts.append(f'  <div class="rec-number">{i}</div>')
         parts.append(f'  <div class="rec-action">{rec["action"]}</div>')
         if "rationale" in rec:

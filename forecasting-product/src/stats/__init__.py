@@ -24,7 +24,7 @@ Usage::
 from __future__ import annotations
 
 import math
-from typing import Any, Callable, Dict, List, Optional, Sequence, Union
+from typing import Callable, Optional, Sequence
 
 import numpy as np
 

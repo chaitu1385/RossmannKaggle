@@ -14,11 +14,11 @@ Usage
 >>> print(report.hypotheses)
 """
 
+import logging
 from dataclasses import dataclass, field
-from datetime import date, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import date
+from typing import Dict, List, Tuple
 
-import numpy as np
 import polars as pl
 
 from ..config.schema import (
@@ -33,10 +33,10 @@ from ..config.schema import (
     PlatformConfig,
     ReconciliationConfig,
     StructuralBreakConfig,
-    TransitionConfig,
 )
 from .forecastability import ForecastabilityAnalyzer, ForecastabilityReport
 
+logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------- #
 #  Result dataclasses

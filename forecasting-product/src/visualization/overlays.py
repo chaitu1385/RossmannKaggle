@@ -12,9 +12,9 @@ from typing import Any, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 
+from src.visualization.annotations import action_title
 from src.visualization.chart_palette import COLORS
 from src.visualization.style import CHART_FIGSIZE, swd_style
-from src.visualization.annotations import action_title
 
 
 def control_chart_plot(

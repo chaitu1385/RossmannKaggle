@@ -76,6 +76,14 @@ export function setupApiMocks() {
 
       // Series
       listSeries: vi.fn().mockResolvedValue(mockSeriesList),
+      getSeriesHistory: vi.fn().mockResolvedValue({
+        series_id: "sku_001",
+        lob: "retail",
+        points: [
+          { week: "2025-01-01", value: 100 },
+          { week: "2025-01-08", value: 112 },
+        ],
+      }),
       detectBreaks: vi.fn().mockResolvedValue(mockBreakDetection),
       detectBreaksFromLob: vi.fn().mockResolvedValue(mockBreakDetection),
       cleansingAudit: vi.fn().mockResolvedValue(mockCleansingAudit),
